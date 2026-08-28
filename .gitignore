@@ -39,3 +39,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local artifacts
+.playwright-mcp/
+*.local.png
+
+# agent scaffolding (local only)
+.claude/
+CLAUDE.md
+AGENTS.md

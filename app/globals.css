@@ -1,26 +1,398 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:is(.dark *));
+
+/* ==========================================================================
+   Stockpile — "Industrial Slate" design system
+   Desktop-primary enterprise operations console.
+   Rules: semantic tokens only, no gradients, two elevation levels,
+   status is always dot-glyph + text (never color alone).
+   ========================================================================== */
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+
+  /* Surfaces */
+  --color-surface: var(--surface);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-surface-hover: var(--surface-hover);
+
+  /* Typography */
+  --font-sans: var(--font-inter);
+  --font-heading: var(--font-jakarta);
+  --font-mono: var(--font-jetbrains);
+
+  /* Brand accent. Distinct from shadcn --accent, which is a hover wash. */
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-brand-subtle: var(--brand-subtle);
+
+  /* Status tones — the six-tone language every entity status maps into */
+  --color-status-neutral: var(--status-neutral);
+  --color-status-neutral-bg: var(--status-neutral-bg);
+  --color-status-neutral-border: var(--status-neutral-border);
+  --color-status-info: var(--status-info);
+  --color-status-info-bg: var(--status-info-bg);
+  --color-status-info-border: var(--status-info-border);
+  --color-status-success: var(--status-success);
+  --color-status-success-bg: var(--status-success-bg);
+  --color-status-success-border: var(--status-success-border);
+  --color-status-warning: var(--status-warning);
+  --color-status-warning-bg: var(--status-warning-bg);
+  --color-status-warning-border: var(--status-warning-border);
+  --color-status-danger: var(--status-danger);
+  --color-status-danger-bg: var(--status-danger-bg);
+  --color-status-danger-border: var(--status-danger-border);
+  --color-status-purple: var(--status-purple);
+  --color-status-purple-bg: var(--status-purple-bg);
+  --color-status-purple-border: var(--status-purple-border);
+
+  /* shadcn surface roles */
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+
+  /* Radius — restrained. No pills, nothing above 8px. */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 8px;
+  --radius-2xl: 8px;
+  --radius-3xl: 8px;
+  --radius-4xl: 8px;
+
+  /* Elevation — exactly two levels. */
+  --shadow-2xs: 0 1px 2px 0 rgb(15 23 42 / 0.06);
+  --shadow-xs: 0 1px 2px 0 rgb(15 23 42 / 0.06);
+  --shadow-sm: 0 1px 2px 0 rgb(15 23 42 / 0.06);
+  --shadow-md: 0 4px 12px -2px rgb(15 23 42 / 0.10), 0 2px 4px -2px rgb(15 23 42 / 0.06);
+  --shadow-lg: 0 4px 12px -2px rgb(15 23 42 / 0.10), 0 2px 4px -2px rgb(15 23 42 / 0.06);
+  --shadow-xl: 0 4px 12px -2px rgb(15 23 42 / 0.10), 0 2px 4px -2px rgb(15 23 42 / 0.06);
+
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+:root {
+  color-scheme: light;
+
+  --background: #f8fafc;
+  --foreground: #0f172a;
+
+  --surface: #ffffff;
+  --surface-sunken: #f1f5f9;
+  --surface-hover: #f8fafc;
+
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+
+  --primary: #1e293b;
+  --primary-foreground: #ffffff;
+  --secondary: #f1f5f9;
+  --secondary-foreground: #1e293b;
+  --muted: #f1f5f9;
+  /* Slate-500 (#64748b) measured 4.34:1 against --surface-sunken, and muted
+     text sits on sunken in every table header and toolbar. Darkened until it
+     clears 4.5:1 there (4.96) without losing the slate cast. */
+  --muted-foreground: #5c6b7f;
+  --accent: #f1f5f9;
+  --accent-foreground: #0f172a;
+
+  --brand: #047857;
+  --brand-foreground: #ffffff;
+  --brand-subtle: #ecfdf5;
+
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --input: #cbd5e1;
+  --ring: #1e293b;
+
+  --status-neutral: #475569;
+  --status-neutral-bg: #f1f5f9;
+  --status-neutral-border: #cbd5e1;
+  --status-info: #1d4ed8;
+  --status-info-bg: #eff6ff;
+  --status-info-border: #bfdbfe;
+  --status-success: #047857;
+  --status-success-bg: #ecfdf5;
+  --status-success-border: #a7f3d0;
+  --status-warning: #b45309;
+  --status-warning-bg: #fffbeb;
+  --status-warning-border: #fde68a;
+  --status-danger: #b91c1c;
+  --status-danger-bg: #fef2f2;
+  --status-danger-border: #fecaca;
+  --status-purple: #6d28d9;
+  --status-purple-bg: #f5f3ff;
+  --status-purple-border: #ddd6fe;
+
+  --chart-1: #1e293b;
+  --chart-2: #047857;
+  --chart-3: #2563eb;
+  --chart-4: #d97706;
+  --chart-5: #7c3aed;
+  --chart-6: #0891b2;
+
+  --sidebar: #ffffff;
+  --sidebar-foreground: #334155;
+  --sidebar-primary: #1e293b;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f1f5f9;
+  --sidebar-accent-foreground: #0f172a;
+  --sidebar-border: #e2e8f0;
+  --sidebar-ring: #1e293b;
+
+  --radius: 6px;
+
+  /* Table row density */
+  --row-h: 44px;
+}
+
+.dark {
+  color-scheme: dark;
+
+  --background: #0a0f1a;
+  --foreground: #e2e8f0;
+
+  --surface: #0f172a;
+  --surface-sunken: #16202f;
+  --surface-hover: #1a2437;
+
+  --card: #0f172a;
+  --card-foreground: #e2e8f0;
+  --popover: #131c2e;
+  --popover-foreground: #e2e8f0;
+
+  --primary: #e2e8f0;
+  --primary-foreground: #0f172a;
+  --secondary: #1e293b;
+  --secondary-foreground: #e2e8f0;
+  --muted: #1e293b;
+  --muted-foreground: #94a3b8;
+  --accent: #1e293b;
+  --accent-foreground: #f1f5f9;
+
+  --brand: #34d399;
+  --brand-foreground: #052e23;
+  --brand-subtle: #06291f;
+
+  --destructive: #f87171;
+  --destructive-foreground: #1a0a0a;
+
+  --border: #1e293b;
+  --border-strong: #334155;
+  --input: #334155;
+  --ring: #94a3b8;
+
+  --status-neutral: #94a3b8;
+  --status-neutral-bg: #1e293b;
+  --status-neutral-border: #334155;
+  --status-info: #7dabfa;
+  --status-info-bg: #16233f;
+  --status-info-border: #1e40af;
+  --status-success: #34d399;
+  --status-success-bg: #06291f;
+  --status-success-border: #065f46;
+  --status-warning: #fbbf24;
+  --status-warning-bg: #2c2008;
+  --status-warning-border: #92400e;
+  --status-danger: #fca5a5;
+  --status-danger-bg: #2e1416;
+  --status-danger-border: #991b1b;
+  --status-purple: #c4b5fd;
+  --status-purple-bg: #221a3d;
+  --status-purple-border: #5b21b6;
+
+  --chart-1: #94a3b8;
+  --chart-2: #34d399;
+  --chart-3: #60a5fa;
+  --chart-4: #fbbf24;
+  --chart-5: #a78bfa;
+  --chart-6: #22d3ee;
+
+  --sidebar: #0f172a;
+  --sidebar-foreground: #cbd5e1;
+  --sidebar-primary: #e2e8f0;
+  --sidebar-primary-foreground: #0f172a;
+  --sidebar-accent: #1e293b;
+  --sidebar-accent-foreground: #f1f5f9;
+  --sidebar-border: #1e293b;
+  --sidebar-ring: #94a3b8;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    @apply font-sans;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-size: 14px;
+    line-height: 20px;
+  }
+
+  /* Numeric columns must never jitter between renders. */
+  table,
+  [data-numeric],
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  :focus-visible {
+    @apply outline-ring outline-2 outline-offset-2;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--brand) 22%, transparent);
+  }
+
+  /* Restrained scrollbars — this app scrolls a lot. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--border-strong);
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--muted-foreground);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer components {
+  /* Type scale — semantic names so 60+ screens stay in step. */
+  .text-display {
+    font-family: var(--font-heading);
+    font-size: 30px;
+    line-height: 36px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .text-page-title {
+    font-family: var(--font-heading);
+    font-size: 22px;
+    line-height: 30px;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+  }
+  .text-section {
+    font-family: var(--font-heading);
+    font-size: 16px;
+    line-height: 24px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .text-card-title {
+    font-family: var(--font-heading);
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 600;
+  }
+  .text-metric {
+    font-family: var(--font-heading);
+    font-size: 26px;
+    line-height: 32px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+  .text-label {
+    font-size: 13px;
+    line-height: 18px;
+    font-weight: 500;
+  }
+  .text-caption {
+    font-size: 12px;
+    line-height: 16px;
+  }
+  .text-table {
+    font-size: 13px;
+    line-height: 18px;
+  }
+  .text-overline {
+    font-size: 11px;
+    line-height: 14px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  /* Identifiers: SKU, lot, serial, PO/SO/TR numbers. */
+  .text-code {
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    line-height: 18px;
+    font-variant-ligatures: none;
+  }
+}
+
+@layer utilities {
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Operators reading a stock table should never wait on an animation. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
