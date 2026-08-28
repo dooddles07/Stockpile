@@ -13,11 +13,11 @@ import { Button } from "@/components/ui/button";
 import { MeterBar, capacityTone } from "@/components/status/meter-bar";
 import { db } from "@/lib/data/store";
 import {
-  locationById,
-  productById,
-  stockLevelRows,
-  userById,
-  warehouseRollups,
+  locationByIdSync,
+  productByIdSync,
+  stockLevelRowsSync,
+  userByIdSync,
+  warehouseRollupsSync,
 } from "@/lib/repo/inventory";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
@@ -52,12 +52,12 @@ export default async function WarehouseDetailPage({
   if (!can(role, "warehouses")) return <PermissionDenied module="warehouses" role={role} />;
 
   const { id } = await params;
-  const rollup = warehouseRollups().find((w) => w.id === id);
+  const rollup = warehouseRollupsSync().find((w) => w.id === id);
   if (!rollup) notFound();
 
   const showValue = can(role, "valuation") || can(role, "warehouses", "export");
   const locations = db.locations.filter((l) => l.warehouseId === rollup.id);
-  const stock = stockLevelRows().filter((r) => r.warehouseId === rollup.id);
+  const stock = stockLevelRowsSync().filter((r) => r.warehouseId === rollup.id);
   const movements = db.movements.filter((m) => m.warehouseId === rollup.id).slice(0, 25);
 
   const transfers = db.transfers
@@ -397,7 +397,7 @@ export default async function WarehouseDetailPage({
               <Link href={`/inventory/products/${m.sku}`} className="grid gap-0.5 hover:underline">
                 <span className="text-code font-medium">{m.sku}</span>
                 <span className="truncate text-[11px] text-muted-foreground">
-                  {productById.get(m.productId)?.shortName}
+                  {productByIdSync.get(m.productId)?.shortName}
                 </span>
               </Link>
             ),
@@ -408,7 +408,7 @@ export default async function WarehouseDetailPage({
             hideOnMobile: true,
             cell: (m) => (
               <span className="text-code text-muted-foreground">
-                {locationById.get(m.locationId)?.code ?? "—"}
+                {locationByIdSync.get(m.locationId)?.code ?? "—"}
               </span>
             ),
           },
@@ -438,7 +438,7 @@ export default async function WarehouseDetailPage({
             key: "user",
             header: "User",
             hideOnMobile: true,
-            cell: (m) => userById.get(m.userId)?.name ?? "—",
+            cell: (m) => userByIdSync.get(m.userId)?.name ?? "—",
           },
         ]}
         empty={

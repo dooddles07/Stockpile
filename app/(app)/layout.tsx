@@ -6,12 +6,12 @@ import { AppSidebar } from "@/components/shell/app-sidebar";
 import { TopBar } from "@/components/shell/top-bar";
 import { OfflineBanner } from "@/components/states/offline-banner";
 import { getCurrentUser, getRole } from "@/lib/auth/session";
-import { navCounts } from "@/lib/repo/metrics";
+import { navCountsSync } from "@/lib/repo/metrics";
 import { db } from "@/lib/data/store";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const [role, user, cookieStore] = await Promise.all([getRole(), getCurrentUser(), cookies()]);
-  const counts = navCounts();
+  const counts = navCountsSync();
   const unread = db.notifications.filter((n) => !n.read).length;
   const sidebarOpen = cookieStore.get("sidebar_state")?.value !== "false";
 

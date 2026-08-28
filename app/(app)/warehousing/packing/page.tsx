@@ -9,7 +9,7 @@ import { SimpleTable } from "@/components/record/simple-table";
 import { StatusBadge } from "@/components/status/status-badge";
 import { Button } from "@/components/ui/button";
 import { db } from "@/lib/data/store";
-import { customerById, warehouseById } from "@/lib/repo/inventory";
+import { customerByIdSync, warehouseByIdSync } from "@/lib/repo/inventory";
 import { NOW } from "@/lib/data/rng";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
@@ -39,8 +39,8 @@ export default async function PackingPage() {
       return {
         id: o.id,
         number: o.number,
-        customer: customerById.get(o.customerId)?.name ?? "—",
-        warehouse: warehouseById.get(o.warehouseId)?.code ?? "—",
+        customer: customerByIdSync.get(o.customerId)?.name ?? "—",
+        warehouse: warehouseByIdSync.get(o.warehouseId)?.code ?? "—",
         shipToCity: o.shipToCity,
         channel: humanize(o.channel),
         promisedAt: o.promisedAt,

@@ -9,8 +9,8 @@ import { SimpleTable } from "@/components/record/simple-table";
 import { RankedBarChart, TrendAreaChart } from "@/components/charts";
 import { MeterBar } from "@/components/status/meter-bar";
 import { StatusBadge } from "@/components/status/status-badge";
-import { spendByCategory, supplierScorecards } from "@/lib/repo/analytics";
-import { purchasesVsSales } from "@/lib/repo/metrics";
+import { spendByCategorySync, supplierScorecardsSync } from "@/lib/repo/analytics";
+import { purchasesVsSalesSync } from "@/lib/repo/metrics";
 import { db } from "@/lib/data/store";
 import { NOW } from "@/lib/data/rng";
 import { getRole } from "@/lib/auth/session";
@@ -28,8 +28,8 @@ export default async function PurchasingAnalyticsPage() {
   const role = await getRole();
   if (!can(role, "analytics")) return <PermissionDenied module="analytics" role={role} />;
 
-  const scorecards = supplierScorecards();
-  const spend = spendByCategory();
+  const scorecards = supplierScorecardsSync();
+  const spend = spendByCategorySync();
 
   const placed = db.purchaseOrders.filter((p) => !["cancelled", "draft"].includes(p.status));
   const totalSpend = placed.reduce((s, p) => s + p.total, 0);
@@ -52,7 +52,7 @@ export default async function PurchasingAnalyticsPage() {
   const topThreeSpend = scorecards.slice(0, 3).reduce((s, x) => s + x.spend, 0);
   const concentration = totalSpend > 0 ? topThreeSpend / totalSpend : 0;
 
-  const monthlySpend = purchasesVsSales().map((p) => ({
+  const monthlySpend = purchasesVsSalesSync().map((p) => ({
     label: p.label,
     value: p.purchases,
   }));

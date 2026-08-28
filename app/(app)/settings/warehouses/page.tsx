@@ -6,7 +6,7 @@ import { SimpleTable } from "@/components/record/simple-table";
 import { SettingRow, SettingSelect, SettingToggle } from "@/components/settings/setting-row";
 import { StatusBadge } from "@/components/status/status-badge";
 import { Button } from "@/components/ui/button";
-import { warehouseRollups } from "@/lib/repo/inventory";
+import { warehouseRollupsSync } from "@/lib/repo/inventory";
 import { getRole } from "@/lib/auth/session";
 import { can, isReadOnly } from "@/lib/auth/permissions";
 import { percent, qty } from "@/lib/format";
@@ -19,7 +19,7 @@ export const metadata: Metadata = {
 export default async function WarehouseSettingsPage() {
   const role = await getRole();
   const readOnly = isReadOnly(role, "settings");
-  const sites = warehouseRollups();
+  const sites = warehouseRollupsSync();
 
   const defaultSites = Object.fromEntries(sites.map((w) => [w.id, `${w.code} · ${w.name}`]));
 

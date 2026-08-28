@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 
 import { ApproveClient, type ApprovalItem } from "./approve-client";
 import { PermissionDenied } from "@/components/states";
-import { userById } from "@/lib/repo/inventory";
-import { pendingApprovals } from "@/lib/repo/metrics";
+import { userByIdSync } from "@/lib/repo/inventory";
+import { pendingApprovalsSync } from "@/lib/repo/metrics";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 
@@ -25,7 +25,7 @@ export default async function OperatorApprovePage() {
 
   // Only what this role can actually decide. Showing an item the operator can
   // read but not action is a queue that never empties.
-  const items: ApprovalItem[] = pendingApprovals()
+  const items: ApprovalItem[] = pendingApprovalsSync()
     .filter((item) => can(role, item.module, "approve"))
     .map((item) => ({
       id: item.id,
@@ -35,7 +35,7 @@ export default async function OperatorApprovePage() {
       title: item.title,
       subtitle: item.subtitle,
       amount: item.amount,
-      requestedBy: userById.get(item.requestedBy)?.name ?? "—",
+      requestedBy: userByIdSync.get(item.requestedBy)?.name ?? "—",
       createdAt: item.createdAt,
       href: item.href,
     }));

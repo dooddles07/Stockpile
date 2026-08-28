@@ -4,7 +4,7 @@ import { Download } from "lucide-react";
 import { PageHeader } from "@/components/shell/page-header";
 import { PermissionDenied } from "@/components/states";
 import { ValuationView } from "./valuation-view";
-import { valuationRows } from "@/lib/repo/analytics";
+import { valuationRowsSync } from "@/lib/repo/analytics";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { ActionButton } from "@/components/actions/action-button";
@@ -39,7 +39,7 @@ export default async function ValuationPage() {
       />
 
       <div className="p-4 sm:p-6">
-        <ValuationView rows={valuationRows()} />
+        <ValuationView rows={valuationRowsSync()} />
       </div>
     </>
   );

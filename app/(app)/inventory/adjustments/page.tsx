@@ -8,7 +8,7 @@ import { StatTile } from "@/components/record/field-grid";
 import { Button } from "@/components/ui/button";
 import { AdjustmentsTable, type AdjustmentTableRow } from "./adjustments-table";
 import { db } from "@/lib/data/store";
-import { userById, warehouseById } from "@/lib/repo/inventory";
+import { userByIdSync, warehouseByIdSync } from "@/lib/repo/inventory";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { humanize } from "@/lib/status";
@@ -26,7 +26,7 @@ export default async function AdjustmentsPage() {
   const rows: AdjustmentTableRow[] = db.adjustments.map((a) => ({
     id: a.id,
     number: a.number,
-    warehouseCode: warehouseById.get(a.warehouseId)?.code ?? "—",
+    warehouseCode: warehouseByIdSync.get(a.warehouseId)?.code ?? "—",
     reason: a.reason,
     reasonLabel: humanize(a.reason),
     status: a.status,
@@ -35,8 +35,8 @@ export default async function AdjustmentsPage() {
     lineCount: a.lines.length,
     totalDelta: a.totalDelta,
     totalValueImpact: a.totalValueImpact,
-    createdBy: userById.get(a.createdBy)?.name ?? "—",
-    approvedBy: a.approvedBy ? (userById.get(a.approvedBy)?.name ?? null) : null,
+    createdBy: userByIdSync.get(a.createdBy)?.name ?? "—",
+    approvedBy: a.approvedBy ? (userByIdSync.get(a.approvedBy)?.name ?? null) : null,
     requiresApproval: a.requiresApproval,
   }));
 

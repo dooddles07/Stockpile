@@ -6,7 +6,7 @@ import { PermissionDenied } from "@/components/states";
 import { StatTile } from "@/components/record/field-grid";
 import { AuditTable, type AuditTableRow } from "./audit-table";
 import { db } from "@/lib/data/store";
-import { userById } from "@/lib/repo/inventory";
+import { userByIdSync } from "@/lib/repo/inventory";
 import { NOW } from "@/lib/data/rng";
 import { DAY_MS } from "@/lib/data/rng";
 import { getRole } from "@/lib/auth/session";
@@ -31,7 +31,7 @@ export default async function AuditLogsPage({
   const { q } = await searchParams;
 
   const rows: AuditTableRow[] = db.auditEntries.map((e) => {
-    const user = userById.get(e.userId);
+    const user = userByIdSync.get(e.userId);
     return {
       id: e.id,
       ts: e.ts,

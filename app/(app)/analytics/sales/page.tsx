@@ -9,11 +9,11 @@ import { SimpleTable } from "@/components/record/simple-table";
 import { ComparisonLineChart, RankedBarChart } from "@/components/charts";
 import { MeterBar } from "@/components/status/meter-bar";
 import {
-  categoryPerformance,
-  productPerformance,
-  topCustomers,
+  categoryPerformanceSync,
+  productPerformanceSync,
+  topCustomersSync,
 } from "@/lib/repo/analytics";
-import { purchasesVsSales } from "@/lib/repo/metrics";
+import { purchasesVsSalesSync } from "@/lib/repo/metrics";
 import { db } from "@/lib/data/store";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
@@ -30,9 +30,9 @@ export default async function SalesAnalyticsPage() {
   const role = await getRole();
   if (!can(role, "analytics")) return <PermissionDenied module="analytics" role={role} />;
 
-  const products = productPerformance();
-  const categories = categoryPerformance();
-  const customers = topCustomers(12);
+  const products = productPerformanceSync();
+  const categories = categoryPerformanceSync();
+  const customers = topCustomersSync(12);
 
   const booked = db.salesOrders.filter((o) => !["cancelled", "draft"].includes(o.status));
   const revenue = booked.reduce((s, o) => s + o.total, 0);
@@ -104,7 +104,7 @@ export default async function SalesAnalyticsPage() {
             className="lg:col-span-2"
             title="Purchases vs sales"
             description="Committed spend against booked revenue, by month."
-            data={purchasesVsSales()}
+            data={purchasesVsSalesSync()}
             seriesA={{ key: "purchases", label: "Purchases" }}
             seriesB={{ key: "sales", label: "Sales" }}
           />

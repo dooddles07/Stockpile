@@ -8,7 +8,7 @@ import Link from "next/link";
 import { Lock } from "lucide-react";
 import { AdjustmentForm } from "../../new/adjustment-form";
 import { db } from "@/lib/data/store";
-import { summaryFor } from "@/lib/repo/inventory";
+import { summaryForSync } from "@/lib/repo/inventory";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { humanize } from "@/lib/status";
@@ -70,7 +70,7 @@ export default async function EditAdjustmentPage({ params }: { params: Promise<{
   const products = db.products
     .filter((p) => p.status === "active" || adjustment.lines.some((l) => l.productId === p.id))
     .map((p) => {
-      const stock = summaryFor(p.id);
+      const stock = summaryForSync(p.id);
       return {
         id: p.id,
         sku: p.sku,

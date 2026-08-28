@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/shell/page-header";
 import { EmptyState, PermissionDenied } from "@/components/states";
 import { StatTile } from "@/components/record/field-grid";
 import { StatusBadge } from "@/components/status/status-badge";
-import { REPORTS, reportGroups, reportSize } from "@/lib/repo/reports";
+import { REPORTS, reportGroupsSync, reportSizeSync } from "@/lib/repo/reports";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { plural, qty } from "@/lib/format";
@@ -21,7 +21,7 @@ export default async function ReportsPage() {
   if (!can(role, "reports")) return <PermissionDenied module="reports" role={role} />;
 
   const available = REPORTS.filter((r) => can(role, r.module));
-  const groups = reportGroups().filter((g) => available.some((r) => r.group === g));
+  const groups = reportGroupsSync().filter((g) => available.some((r) => r.group === g));
 
   return (
     <>
@@ -74,7 +74,7 @@ export default async function ReportsPage() {
 
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                   {reports.map((report) => {
-                    const size = reportSize(report);
+                    const size = reportSizeSync(report);
                     return (
                       <Link
                         key={report.slug}

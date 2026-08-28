@@ -5,7 +5,7 @@ import { PermissionDenied } from "@/components/states";
 import { StatTile } from "@/components/record/field-grid";
 import { LocationsTable, type LocationTableRow } from "./locations-table";
 import { db } from "@/lib/data/store";
-import { warehouseById } from "@/lib/repo/inventory";
+import { warehouseByIdSync } from "@/lib/repo/inventory";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { humanize } from "@/lib/status";
@@ -29,7 +29,7 @@ export default async function LocationsPage() {
   }
 
   const rows: LocationTableRow[] = db.locations.map((l) => {
-    const warehouse = warehouseById.get(l.warehouseId);
+    const warehouse = warehouseByIdSync.get(l.warehouseId);
     return {
       id: l.id,
       code: l.code,

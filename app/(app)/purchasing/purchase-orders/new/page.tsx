@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/shell/page-header";
 import { PermissionDenied } from "@/components/states";
 import { PoForm, type PoProduct } from "./po-form";
 import { db } from "@/lib/data/store";
-import { summaryFor } from "@/lib/repo/inventory";
+import { summaryForSync } from "@/lib/repo/inventory";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 
@@ -39,7 +39,7 @@ export default async function NewPurchaseOrderPage() {
   const products: PoProduct[] = db.products
     .filter((p) => p.status === "active")
     .map((p) => {
-      const stock = summaryFor(p.id);
+      const stock = summaryForSync(p.id);
       const belowReorder = stock.available < p.reorderPoint;
       // Bring the SKU back to its reorder point plus its standard order
       // quantity, less whatever is already on its way.

@@ -8,7 +8,7 @@ import { StatTile } from "@/components/record/field-grid";
 import { Button } from "@/components/ui/button";
 import { UsersTable, type UserTableRow } from "./users-table";
 import { db } from "@/lib/data/store";
-import { warehouseById } from "@/lib/repo/inventory";
+import { warehouseByIdSync } from "@/lib/repo/inventory";
 import { ROLE_BY_ID } from "@/lib/auth/permissions";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
@@ -31,7 +31,7 @@ export default async function UsersPage() {
     roleLabel: ROLE_BY_ID.get(u.role)?.label ?? u.role,
     department: u.department,
     status: u.status,
-    warehouseCode: u.warehouseId ? (warehouseById.get(u.warehouseId)?.code ?? null) : null,
+    warehouseCode: u.warehouseId ? (warehouseByIdSync.get(u.warehouseId)?.code ?? null) : null,
     lastLoginAt: u.lastLoginAt,
     createdAt: u.createdAt,
     twoFactor: u.twoFactor,

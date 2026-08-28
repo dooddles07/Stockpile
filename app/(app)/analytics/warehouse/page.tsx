@@ -9,8 +9,8 @@ import { SimpleTable } from "@/components/record/simple-table";
 import { RankedBarChart, StackedBarChart } from "@/components/charts";
 import { MeterBar, capacityTone } from "@/components/status/meter-bar";
 import { StatusBadge } from "@/components/status/status-badge";
-import { warehousePerformance } from "@/lib/repo/analytics";
-import { warehouseComposition } from "@/lib/repo/metrics";
+import { warehousePerformanceSync } from "@/lib/repo/analytics";
+import { warehouseCompositionSync } from "@/lib/repo/metrics";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { money, percent, plural, qty } from "@/lib/format";
@@ -26,7 +26,7 @@ export default async function WarehouseAnalyticsPage() {
   const role = await getRole();
   if (!can(role, "analytics")) return <PermissionDenied module="analytics" role={role} />;
 
-  const sites = warehousePerformance();
+  const sites = warehousePerformanceSync();
 
   const capacity = sites.reduce((s, w) => s + w.capacityPallets, 0);
   const used = sites.reduce((s, w) => s + w.usedPallets, 0);
@@ -116,7 +116,7 @@ export default async function WarehouseAnalyticsPage() {
             className="lg:col-span-2"
             title="Stock composition by site"
             description="Available, reserved, in transit and damaged."
-            data={warehouseComposition()}
+            data={warehouseCompositionSync()}
             series={[
               { key: "available", label: "Available", color: "var(--chart-2)" },
               { key: "reserved", label: "Reserved", color: "var(--chart-5)" },

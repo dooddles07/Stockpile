@@ -10,7 +10,7 @@ import { Section } from "@/components/record/field-grid";
 import { StatusBadge } from "@/components/status/status-badge";
 import { Button } from "@/components/ui/button";
 import { db } from "@/lib/data/store";
-import { productById, supplierById, warehouseById } from "@/lib/repo/inventory";
+import { productByIdSync, supplierByIdSync, warehouseByIdSync } from "@/lib/repo/inventory";
 import { NOW } from "@/lib/data/rng";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
@@ -36,8 +36,8 @@ export default async function ReceivingPage() {
       return {
         id: p.id,
         number: p.number,
-        source: supplierById.get(p.supplierId)?.name ?? "—",
-        warehouse: warehouseById.get(p.warehouseId)?.code ?? "—",
+        source: supplierByIdSync.get(p.supplierId)?.name ?? "—",
+        warehouse: warehouseByIdSync.get(p.warehouseId)?.code ?? "—",
         status: p.status,
         expectedAt: p.expectedAt,
         overdue: new Date(p.expectedAt).getTime() < now,
@@ -59,8 +59,8 @@ export default async function ReceivingPage() {
       return {
         id: t.id,
         number: t.number,
-        source: `${warehouseById.get(t.fromWarehouseId)?.code} · ${warehouseById.get(t.fromWarehouseId)?.name}`,
-        warehouse: warehouseById.get(t.toWarehouseId)?.code ?? "—",
+        source: `${warehouseByIdSync.get(t.fromWarehouseId)?.code} · ${warehouseByIdSync.get(t.fromWarehouseId)?.name}`,
+        warehouse: warehouseByIdSync.get(t.toWarehouseId)?.code ?? "—",
         status: t.status,
         expectedAt: t.expectedAt,
         overdue: new Date(t.expectedAt).getTime() < now,
@@ -69,7 +69,7 @@ export default async function ReceivingPage() {
         received,
         outstanding: shipped - received,
         value: Math.round(
-          t.lines.reduce((s, l) => s + l.quantity * (productById.get(l.productId)?.unitCost ?? 0), 0),
+          t.lines.reduce((s, l) => s + l.quantity * (productByIdSync.get(l.productId)?.unitCost ?? 0), 0),
         ),
         href: `/warehousing/transfers/${t.id}?tab=receive`,
       };

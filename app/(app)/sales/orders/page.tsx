@@ -8,7 +8,7 @@ import { StatTile } from "@/components/record/field-grid";
 import { Button } from "@/components/ui/button";
 import { OrdersTable, type OrderTableRow } from "./orders-table";
 import { db } from "@/lib/data/store";
-import { customerById, warehouseById } from "@/lib/repo/inventory";
+import { customerByIdSync, warehouseByIdSync } from "@/lib/repo/inventory";
 import { NOW } from "@/lib/data/rng";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
@@ -34,7 +34,7 @@ export default async function SalesOrdersPage({
   const now = NOW.getTime();
 
   const rows: OrderTableRow[] = db.salesOrders.map((o) => {
-    const customer = customerById.get(o.customerId);
+    const customer = customerByIdSync.get(o.customerId);
     const units = o.lines.reduce((s, l) => s + l.quantity, 0);
     const fulfilledUnits = o.lines.reduce((s, l) => s + l.fulfilled, 0);
 
@@ -43,7 +43,7 @@ export default async function SalesOrdersPage({
       number: o.number,
       customer: customer?.name ?? "—",
       customerCode: customer?.code ?? "—",
-      warehouseCode: warehouseById.get(o.warehouseId)?.code ?? "—",
+      warehouseCode: warehouseByIdSync.get(o.warehouseId)?.code ?? "—",
       status: o.status,
       paymentStatus: o.paymentStatus,
       fulfillmentStatus: o.fulfillmentStatus,

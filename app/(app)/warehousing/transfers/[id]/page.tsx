@@ -14,7 +14,7 @@ import { WorkflowStepper } from "@/components/status/workflow-stepper";
 import { StatusBadge } from "@/components/status/status-badge";
 import { EmptyState, PermissionDenied } from "@/components/states";
 import { db } from "@/lib/data/store";
-import { locationById, productById, userById, warehouseById } from "@/lib/repo/inventory";
+import { locationByIdSync, productByIdSync, userByIdSync, warehouseByIdSync } from "@/lib/repo/inventory";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { date, dateTime, dueLabel, money, plural, qty } from "@/lib/format";
@@ -54,8 +54,8 @@ export default async function TransferDetailPage({
   const transfer = db.transfers.find((t) => t.id === id);
   if (!transfer) notFound();
 
-  const from = warehouseById.get(transfer.fromWarehouseId);
-  const to = warehouseById.get(transfer.toWarehouseId);
+  const from = warehouseByIdSync.get(transfer.fromWarehouseId);
+  const to = warehouseByIdSync.get(transfer.toWarehouseId);
   const canApprove = can(role, "transfers", "approve");
   const awaitingDecision = transfer.status === "pending-approval";
   const receivable = ["in-transit", "partially-received"].includes(transfer.status);
@@ -64,7 +64,7 @@ export default async function TransferDetailPage({
   const shipped = transfer.lines.reduce((s, l) => s + l.shipped, 0);
   const received = transfer.lines.reduce((s, l) => s + l.received, 0);
   const value = transfer.lines.reduce(
-    (s, l) => s + l.quantity * (productById.get(l.productId)?.unitCost ?? 0),
+    (s, l) => s + l.quantity * (productByIdSync.get(l.productId)?.unitCost ?? 0),
     0,
   );
 
@@ -72,7 +72,7 @@ export default async function TransferDetailPage({
     id: event.id,
     ts: event.ts,
     tone: ACTION_TONE[event.action] ?? "neutral",
-    title: `${humanize(event.action)} by ${userById.get(event.userId)?.name ?? "—"}`,
+    title: `${humanize(event.action)} by ${userByIdSync.get(event.userId)?.name ?? "—"}`,
     detail: event.note,
   }));
 
@@ -116,7 +116,7 @@ export default async function TransferDetailPage({
             header: "Product",
             cell: (l) => (
               <Link href={`/inventory/products/${l.sku}`} className="grid gap-0.5 hover:underline">
-                <span className="font-medium">{productById.get(l.productId)?.shortName ?? l.name}</span>
+                <span className="font-medium">{productByIdSync.get(l.productId)?.shortName ?? l.name}</span>
                 <span className="text-code text-[11px] text-muted-foreground">{l.sku}</span>
               </Link>
             ),
@@ -127,7 +127,7 @@ export default async function TransferDetailPage({
             hideOnMobile: true,
             cell: (l) => (
               <span className="text-code text-muted-foreground">
-                {locationById.get(l.fromLocationId)?.code ?? "—"}
+                {locationByIdSync.get(l.fromLocationId)?.code ?? "—"}
               </span>
             ),
           },
@@ -138,7 +138,7 @@ export default async function TransferDetailPage({
             cell: (l) =>
               l.toLocationId ? (
                 <span className="text-code text-muted-foreground">
-                  {locationById.get(l.toLocationId)?.code}
+                  {locationByIdSync.get(l.toLocationId)?.code}
                 </span>
               ) : (
                 <span className="text-muted-foreground">not put away</span>
@@ -189,7 +189,7 @@ export default async function TransferDetailPage({
             header: "Value",
             align: "right",
             hideOnMobile: true,
-            cell: (l) => money(l.quantity * (productById.get(l.productId)?.unitCost ?? 0)),
+            cell: (l) => money(l.quantity * (productByIdSync.get(l.productId)?.unitCost ?? 0)),
           },
         ]}
         footer={
@@ -256,11 +256,11 @@ export default async function TransferDetailPage({
             fields={[
               { label: "Transfer", value: transfer.number, mono: true },
               { label: "Status", value: <StatusBadge status={transfer.status} /> },
-              { label: "Requested by", value: userById.get(transfer.requestedBy)?.name ?? "—" },
+              { label: "Requested by", value: userByIdSync.get(transfer.requestedBy)?.name ?? "—" },
               {
                 label: "Approved by",
                 value: transfer.approvedBy
-                  ? (userById.get(transfer.approvedBy)?.name ?? "—")
+                  ? (userByIdSync.get(transfer.approvedBy)?.name ?? "—")
                   : "Not approved",
               },
               { label: "Raised", value: date(transfer.createdAt) },
@@ -294,7 +294,7 @@ export default async function TransferDetailPage({
       lines={transfer.lines.map((l) => ({
         id: l.id,
         sku: l.sku,
-        name: productById.get(l.productId)?.shortName ?? l.name,
+        name: productByIdSync.get(l.productId)?.shortName ?? l.name,
         shipped: l.shipped,
         alreadyReceived: l.received,
       }))}

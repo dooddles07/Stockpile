@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/shell/page-header";
 import { PermissionDenied } from "@/components/states";
 import { CountForm, type CountScope } from "./count-form";
 import { db } from "@/lib/data/store";
-import { locationById, productById } from "@/lib/repo/inventory";
+import { locationByIdSync, productByIdSync } from "@/lib/repo/inventory";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 
@@ -31,8 +31,8 @@ export default async function NewCountPage() {
   // a count before anyone commits a shift to it.
   const buckets = new Map<string, CountScope>();
   for (const row of db.stockRows) {
-    const product = productById.get(row.productId);
-    const location = locationById.get(row.locationId);
+    const product = productByIdSync.get(row.productId);
+    const location = locationByIdSync.get(row.locationId);
     if (!product || !location || product.status !== "active") continue;
 
     const key = `${row.warehouseId}:${location.zone}:${product.categoryId}`;

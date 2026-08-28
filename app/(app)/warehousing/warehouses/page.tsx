@@ -8,7 +8,7 @@ import { StatTile } from "@/components/record/field-grid";
 import { StatusBadge } from "@/components/status/status-badge";
 import { Button } from "@/components/ui/button";
 import { MeterBar, capacityTone } from "@/components/status/meter-bar";
-import { warehouseRollups } from "@/lib/repo/inventory";
+import { warehouseRollupsSync } from "@/lib/repo/inventory";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { money, percent, qty } from "@/lib/format";
@@ -30,7 +30,7 @@ export default async function WarehousesPage() {
   const role = await getRole();
   if (!can(role, "warehouses")) return <PermissionDenied module="warehouses" role={role} />;
 
-  const sites = warehouseRollups().sort((a, b) => b.inventoryValue - a.inventoryValue);
+  const sites = warehouseRollupsSync().sort((a, b) => b.inventoryValue - a.inventoryValue);
   const showValue = can(role, "valuation") || can(role, "warehouses", "export");
 
   const totalValue = sites.reduce((s, w) => s + w.inventoryValue, 0);

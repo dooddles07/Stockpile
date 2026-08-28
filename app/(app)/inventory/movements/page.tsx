@@ -6,7 +6,7 @@ import { PermissionDenied } from "@/components/states";
 import { StatTile } from "@/components/record/field-grid";
 import { MovementsTable, type MovementTableRow } from "./movements-table";
 import { db } from "@/lib/data/store";
-import { locationById, productById, userById, warehouseById } from "@/lib/repo/inventory";
+import { locationByIdSync, productByIdSync, userByIdSync, warehouseByIdSync } from "@/lib/repo/inventory";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { humanize } from "@/lib/status";
@@ -50,7 +50,7 @@ export default async function MovementsPage({
   const { q } = await searchParams;
 
   const rows: MovementTableRow[] = db.movements.map((m) => {
-    const product = productById.get(m.productId);
+    const product = productByIdSync.get(m.productId);
     return {
       id: m.id,
       ts: m.ts,
@@ -59,8 +59,8 @@ export default async function MovementsPage({
       sku: m.sku,
       productName: product?.shortName ?? "—",
       productHref: `/inventory/products/${m.sku}`,
-      warehouseCode: warehouseById.get(m.warehouseId)?.code ?? "—",
-      locationCode: locationById.get(m.locationId)?.code ?? "—",
+      warehouseCode: warehouseByIdSync.get(m.warehouseId)?.code ?? "—",
+      locationCode: locationByIdSync.get(m.locationId)?.code ?? "—",
       qtyBefore: m.qtyBefore,
       qtyChange: m.qtyChange,
       qtyAfter: m.qtyAfter,
@@ -68,7 +68,7 @@ export default async function MovementsPage({
       valueChange: m.valueChange,
       refNumber: m.refNumber,
       refHref: refHref(m.refType, m.refId),
-      user: userById.get(m.userId)?.name ?? "—",
+      user: userByIdSync.get(m.userId)?.name ?? "—",
       reason: m.reason,
     };
   });

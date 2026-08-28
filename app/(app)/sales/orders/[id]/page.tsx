@@ -15,13 +15,13 @@ import { EmptyState, PermissionDenied } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { db } from "@/lib/data/store";
 import {
-  customerById,
-  locationById,
-  productById,
-  stockRowsFor,
-  summaryFor,
-  userById,
-  warehouseById,
+  customerByIdSync,
+  locationByIdSync,
+  productByIdSync,
+  stockRowsForSync,
+  summaryForSync,
+  userByIdSync,
+  warehouseByIdSync,
 } from "@/lib/repo/inventory";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
@@ -55,8 +55,8 @@ export default async function SalesOrderDetailPage({
   const order = db.salesOrders.find((o) => o.id === id);
   if (!order) notFound();
 
-  const customer = customerById.get(order.customerId);
-  const warehouse = warehouseById.get(order.warehouseId);
+  const customer = customerByIdSync.get(order.customerId);
+  const warehouse = warehouseByIdSync.get(order.warehouseId);
 
   const units = order.lines.reduce((s, l) => s + l.quantity, 0);
   const fulfilledUnits = order.lines.reduce((s, l) => s + l.fulfilled, 0);
@@ -71,15 +71,15 @@ export default async function SalesOrderDetailPage({
   // line is fine when the stock is in the wrong building.
   const lineAvailability = new Map<string, { atSite: number; global: number; bin: string }>();
   for (const line of order.lines) {
-    const rows = stockRowsFor(line.productId).filter((r) => r.warehouseId === order.warehouseId);
+    const rows = stockRowsForSync(line.productId).filter((r) => r.warehouseId === order.warehouseId);
     const atSite = rows.reduce(
       (s, r) => s + Math.max(0, r.onHand - r.reserved - r.damaged),
       0,
     );
     lineAvailability.set(line.id, {
       atSite,
-      global: summaryFor(line.productId).available,
-      bin: rows[0] ? (locationById.get(rows[0].locationId)?.code ?? "—") : "—",
+      global: summaryForSync(line.productId).available,
+      bin: rows[0] ? (locationByIdSync.get(rows[0].locationId)?.code ?? "—") : "—",
     });
   }
 
@@ -94,7 +94,7 @@ export default async function SalesOrderDetailPage({
       tone: "neutral",
       title: `Placed via ${humanize(order.channel)}`,
       detail: `${plural(order.lines.length, "line")} · ${money(order.total, { cents: true })}`,
-      actor: userById.get(order.createdBy)?.name,
+      actor: userByIdSync.get(order.createdBy)?.name,
     },
   ];
 
@@ -138,7 +138,7 @@ export default async function SalesOrderDetailPage({
             header: "Product",
             cell: (l) => (
               <Link href={`/inventory/products/${l.sku}`} className="grid gap-0.5 hover:underline">
-                <span className="font-medium">{productById.get(l.productId)?.shortName ?? l.name}</span>
+                <span className="font-medium">{productByIdSync.get(l.productId)?.shortName ?? l.name}</span>
                 <span className="text-code text-[11px] text-muted-foreground">{l.sku}</span>
               </Link>
             ),
@@ -391,7 +391,7 @@ export default async function SalesOrderDetailPage({
         return {
           id: l.id,
           sku: l.sku,
-          name: productById.get(l.productId)?.shortName ?? l.name,
+          name: productByIdSync.get(l.productId)?.shortName ?? l.name,
           locationCode: a?.bin ?? "—",
           ordered: l.quantity,
           alreadyPicked: l.fulfilled,

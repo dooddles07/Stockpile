@@ -7,7 +7,7 @@ import { PermissionDenied } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { ProductsTable, type ProductTableRow } from "./products-table";
 import { db } from "@/lib/data/store";
-import { productRows } from "@/lib/repo/inventory";
+import { productRowsSync } from "@/lib/repo/inventory";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { money, qty } from "@/lib/format";
@@ -22,7 +22,7 @@ export default async function ProductsPage() {
   const role = await getRole();
   if (!can(role, "products")) return <PermissionDenied module="products" role={role} />;
 
-  const rows: ProductTableRow[] = productRows().map((p) => ({
+  const rows: ProductTableRow[] = productRowsSync().map((p) => ({
     id: p.id,
     sku: p.sku,
     name: p.name,

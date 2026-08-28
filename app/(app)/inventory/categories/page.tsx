@@ -9,7 +9,7 @@ import { MeterBar } from "@/components/status/meter-bar";
 import { StatusBadge } from "@/components/status/status-badge";
 import { ProductThumb } from "@/components/product/product-thumb";
 import { db } from "@/lib/data/store";
-import { healthOf, productRows } from "@/lib/repo/inventory";
+import { healthOf, productRowsSync } from "@/lib/repo/inventory";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { money, percent, qty } from "@/lib/format";
@@ -23,7 +23,7 @@ export default async function CategoriesPage() {
   const role = await getRole();
   if (!can(role, "categories")) return <PermissionDenied module="categories" role={role} />;
 
-  const products = productRows();
+  const products = productRowsSync();
   const totalValue = products.reduce((s, p) => s + p.stock.value, 0);
 
   const categories = db.categories

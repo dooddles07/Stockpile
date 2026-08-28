@@ -8,7 +8,7 @@ import { StatTile } from "@/components/record/field-grid";
 import { Button } from "@/components/ui/button";
 import { CountsTable, type CountTableRow } from "./counts-table";
 import { db } from "@/lib/data/store";
-import { userById, warehouseById } from "@/lib/repo/inventory";
+import { userByIdSync, warehouseByIdSync } from "@/lib/repo/inventory";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { humanize } from "@/lib/status";
@@ -30,7 +30,7 @@ export default async function CountsPage() {
       number: c.number,
       type: c.type,
       typeLabel: humanize(c.type),
-      warehouseCode: warehouseById.get(c.warehouseId)?.code ?? "—",
+      warehouseCode: warehouseByIdSync.get(c.warehouseId)?.code ?? "—",
       scopeLabel: c.scopeLabel,
       status: c.status,
       scheduledFor: c.scheduledFor,
@@ -40,8 +40,8 @@ export default async function CountsPage() {
       varianceLines: counted.filter((l) => l.variance !== 0).length,
       accuracyPct: c.accuracyPct,
       totalVarianceValue: c.totalVarianceValue,
-      assignedTo: c.assignedTo.map((id) => userById.get(id)?.name ?? "—"),
-      createdBy: userById.get(c.createdBy)?.name ?? "—",
+      assignedTo: c.assignedTo.map((id) => userByIdSync.get(id)?.name ?? "—"),
+      createdBy: userByIdSync.get(c.createdBy)?.name ?? "—",
     };
   });
 

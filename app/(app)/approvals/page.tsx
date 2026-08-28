@@ -12,8 +12,8 @@ import { EmptyState, PermissionDenied } from "@/components/states";
 import { StatTile } from "@/components/record/field-grid";
 import { WidgetCard, WidgetList, WidgetRow } from "@/components/widgets/widget-card";
 import { StatusBadge } from "@/components/status/status-badge";
-import { userById } from "@/lib/repo/inventory";
-import { pendingApprovals } from "@/lib/repo/metrics";
+import { userByIdSync } from "@/lib/repo/inventory";
+import { pendingApprovalsSync } from "@/lib/repo/metrics";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { daysUntil, money, qty, relative } from "@/lib/format";
@@ -70,7 +70,7 @@ export default async function ApprovalsPage() {
   const role = await getRole();
   if (!can(role, "approvals")) return <PermissionDenied module="approvals" role={role} />;
 
-  const all = pendingApprovals();
+  const all = pendingApprovalsSync();
   const visible = all.filter((item) => can(role, item.module));
   const canDecide = visible.filter((item) => can(role, item.module, "approve"));
 
@@ -149,7 +149,7 @@ export default async function ApprovalsPage() {
                             key={item.id}
                             href={item.href}
                             title={item.title}
-                            subtitle={`${item.subtitle} · raised by ${userById.get(item.requestedBy)?.name ?? "—"}`}
+                            subtitle={`${item.subtitle} · raised by ${userByIdSync.get(item.requestedBy)?.name ?? "—"}`}
                             trailing={money(Math.abs(item.amount))}
                             trailingSub={
                               <span className="flex items-center justify-end gap-1.5">

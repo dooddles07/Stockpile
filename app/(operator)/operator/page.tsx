@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { LookupClient, type OperatorProduct } from "./lookup-client";
 import { PermissionDenied } from "@/components/states";
 import { db } from "@/lib/data/store";
-import { locationById, summaryFor, warehouseById } from "@/lib/repo/inventory";
+import { locationByIdSync, summaryForSync, warehouseByIdSync } from "@/lib/repo/inventory";
 import { getCurrentUser, getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 
@@ -25,12 +25,12 @@ export function operatorCatalogue(siteId: string): OperatorProduct[] {
     .map((product) => {
       const rows = db.stockRows.filter((s) => s.productId === product.id);
       const here = rows.filter((s) => s.warehouseId === siteId);
-      const summary = summaryFor(product.id);
+      const summary = summaryForSync(product.id);
 
       const bins = here
         .filter((s) => s.onHand > 0)
         .map((s) => {
-          const location = locationById.get(s.locationId);
+          const location = locationByIdSync.get(s.locationId);
           return {
             code: location?.code ?? "—",
             zone: location?.zone ?? "—",
@@ -43,7 +43,7 @@ export function operatorCatalogue(siteId: string): OperatorProduct[] {
       const otherSites = [...new Set(rows.map((s) => s.warehouseId))]
         .filter((id) => id !== siteId)
         .map((id) => {
-          const warehouse = warehouseById.get(id);
+          const warehouse = warehouseByIdSync.get(id);
           const available = rows
             .filter((s) => s.warehouseId === id)
             .reduce((sum, s) => sum + Math.max(0, s.onHand - s.reserved - s.damaged), 0);
@@ -77,7 +77,7 @@ export default async function OperatorLookupPage() {
   const [role, user] = await Promise.all([getRole(), getCurrentUser()]);
   if (!can(role, "products")) return <PermissionDenied module="products" role={role} />;
 
-  const site = warehouseById.get(user.warehouseId ?? "") ?? db.warehouses[0];
+  const site = warehouseByIdSync.get(user.warehouseId ?? "") ?? db.warehouses[0];
 
   return <LookupClient products={operatorCatalogue(site.id)} siteCode={site.code} />;
 }

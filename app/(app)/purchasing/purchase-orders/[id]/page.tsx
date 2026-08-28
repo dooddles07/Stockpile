@@ -14,7 +14,7 @@ import { WorkflowStepper } from "@/components/status/workflow-stepper";
 import { StatusBadge } from "@/components/status/status-badge";
 import { EmptyState, PermissionDenied } from "@/components/states";
 import { db } from "@/lib/data/store";
-import { productById, supplierById, userById, warehouseById } from "@/lib/repo/inventory";
+import { productByIdSync, supplierByIdSync, userByIdSync, warehouseByIdSync } from "@/lib/repo/inventory";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { date, dateTime, deliveryLabel, money, percent, plural, qty } from "@/lib/format";
@@ -59,8 +59,8 @@ export default async function PurchaseOrderDetailPage({
   const po = db.purchaseOrders.find((p) => p.id === id);
   if (!po) notFound();
 
-  const supplier = supplierById.get(po.supplierId);
-  const warehouse = warehouseById.get(po.warehouseId);
+  const supplier = supplierByIdSync.get(po.supplierId);
+  const warehouse = warehouseByIdSync.get(po.warehouseId);
   const canApprove = can(role, "purchase-orders", "approve");
   const awaitingDecision = po.status === "submitted";
   const receivable = ["ordered", "partially-received"].includes(po.status);
@@ -74,7 +74,7 @@ export default async function PurchaseOrderDetailPage({
     id: event.id,
     ts: event.ts,
     tone: ACTION_TONE[event.action] ?? "neutral",
-    title: `${humanize(event.action)} by ${userById.get(event.userId)?.name ?? "—"}`,
+    title: `${humanize(event.action)} by ${userByIdSync.get(event.userId)?.name ?? "—"}`,
     detail: event.note,
   }));
 
@@ -117,7 +117,7 @@ export default async function PurchaseOrderDetailPage({
             header: "Product",
             cell: (l) => (
               <Link href={`/inventory/products/${l.sku}`} className="grid gap-0.5 hover:underline">
-                <span className="font-medium">{productById.get(l.productId)?.shortName ?? l.name}</span>
+                <span className="font-medium">{productByIdSync.get(l.productId)?.shortName ?? l.name}</span>
                 <span className="text-code text-[11px] text-muted-foreground">{l.sku}</span>
               </Link>
             ),
@@ -293,10 +293,10 @@ export default async function PurchaseOrderDetailPage({
                 value: `${date(po.expectedAt)} · ${deliveryLabel(po.expectedAt, po.receivedAt)}`,
               },
               { label: "Received", value: po.receivedAt ? dateTime(po.receivedAt) : "Not received" },
-              { label: "Raised by", value: userById.get(po.createdBy)?.name ?? "—" },
+              { label: "Raised by", value: userByIdSync.get(po.createdBy)?.name ?? "—" },
               {
                 label: "Approved by",
-                value: po.approvedBy ? (userById.get(po.approvedBy)?.name ?? "—") : "Not approved",
+                value: po.approvedBy ? (userByIdSync.get(po.approvedBy)?.name ?? "—") : "Not approved",
               },
             ]}
           />
@@ -365,7 +365,7 @@ export default async function PurchaseOrderDetailPage({
       destination={warehouse?.code ?? "—"}
       locations={receiptLocations}
       lines={po.lines.map((l) => {
-        const product = productById.get(l.productId);
+        const product = productByIdSync.get(l.productId);
         return {
           id: l.id,
           sku: l.sku,

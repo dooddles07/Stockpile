@@ -27,15 +27,15 @@ import { Button } from "@/components/ui/button";
 import { MeterBar } from "@/components/status/meter-bar";
 import { db } from "@/lib/data/store";
 import {
-  categoryById,
-  locationById,
-  movementsFor,
-  productBySku,
-  stockRowsFor,
-  summaryFor,
-  supplierById,
-  userById,
-  warehouseById,
+  categoryByIdSync,
+  locationByIdSync,
+  movementsForSync,
+  productBySkuSync,
+  stockRowsForSync,
+  summaryForSync,
+  supplierByIdSync,
+  userByIdSync,
+  warehouseByIdSync,
 } from "@/lib/repo/inventory";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
@@ -59,7 +59,7 @@ export async function generateMetadata({
   params: Promise<{ sku: string }>;
 }): Promise<Metadata> {
   const { sku } = await params;
-  const product = productBySku.get(decodeURIComponent(sku));
+  const product = productBySkuSync.get(decodeURIComponent(sku));
   return product
     ? { title: product.shortName, description: `${product.sku} — stock, pricing, suppliers and movement history.` }
     : { title: "Product not found" };
@@ -98,14 +98,14 @@ export default async function ProductDetailPage({
   if (!can(role, "products")) return <PermissionDenied module="products" role={role} />;
 
   const { sku } = await params;
-  const product = productBySku.get(decodeURIComponent(sku));
+  const product = productBySkuSync.get(decodeURIComponent(sku));
   if (!product) notFound();
 
-  const stock = summaryFor(product.id);
-  const rows = stockRowsFor(product.id);
-  const category = categoryById.get(product.categoryId);
-  const primarySupplier = supplierById.get(product.primarySupplierId);
-  const movements = movementsFor(product.id);
+  const stock = summaryForSync(product.id);
+  const rows = stockRowsForSync(product.id);
+  const category = categoryByIdSync.get(product.categoryId);
+  const primarySupplier = supplierByIdSync.get(product.primarySupplierId);
+  const movements = movementsForSync(product.id);
   const canEdit = can(role, "products", "edit");
   const showCost = can(role, "valuation") || can(role, "products");
 
@@ -180,7 +180,7 @@ export default async function ProductDetailPage({
                 key: "warehouse",
                 header: "Warehouse",
                 cell: (r) => {
-                  const wh = warehouseById.get(r.warehouseId);
+                  const wh = warehouseByIdSync.get(r.warehouseId);
                   return (
                     <Link href={`/warehousing/warehouses/${r.warehouseId}`} className="grid gap-0.5 hover:underline">
                       <span className="font-medium">{wh?.code}</span>
@@ -195,7 +195,7 @@ export default async function ProductDetailPage({
                 hideOnMobile: true,
                 cell: (r) => (
                   <span className="text-code text-muted-foreground">
-                    {locationById.get(r.locationId)?.code ?? "—"}
+                    {locationByIdSync.get(r.locationId)?.code ?? "—"}
                   </span>
                 ),
               },
@@ -340,7 +340,7 @@ export default async function ProductDetailPage({
                       <span className="grid min-w-0 gap-0.5">
                         <span className="text-code font-medium">{po.number}</span>
                         <span className="truncate text-caption text-muted-foreground">
-                          {supplierById.get(po.supplierId)?.name}
+                          {supplierByIdSync.get(po.supplierId)?.name}
                         </span>
                       </span>
                       <span className="grid shrink-0 justify-items-end gap-1">
@@ -411,7 +411,7 @@ export default async function ProductDetailPage({
             .slice()
             .sort((a, b) => b.onHand - a.onHand)
             .map((r, i) => {
-              const wh = warehouseById.get(r.warehouseId);
+              const wh = warehouseByIdSync.get(r.warehouseId);
               const share = stock.onHand > 0 ? (r.onHand / stock.onHand) * 100 : 0;
               return (
                 <li key={`${r.warehouseId}-${i}`} className="grid gap-1.5">
@@ -492,7 +492,7 @@ export default async function ProductDetailPage({
               header: "Supplier",
               hideOnMobile: true,
               cell: ({ po }) => (
-                <span className="truncate">{supplierById.get(po.supplierId)?.name}</span>
+                <span className="truncate">{supplierByIdSync.get(po.supplierId)?.name}</span>
               ),
             },
             { key: "date", header: "Ordered", cell: ({ po }) => date(po.orderedAt ?? po.createdAt) },
@@ -534,7 +534,7 @@ export default async function ProductDetailPage({
   /* ----------------------------------------------------------- suppliers -- */
 
   const suppliers = product.supplierIds
-    .map((sid) => supplierById.get(sid))
+    .map((sid) => supplierByIdSync.get(sid))
     .filter((s): s is NonNullable<typeof s> => Boolean(s));
 
   const suppliersTab = (
@@ -628,9 +628,9 @@ export default async function ProductDetailPage({
       <span className="flex flex-wrap items-center gap-x-2">
         <span className="text-code">{m.refNumber}</span>
         <span>·</span>
-        <span>{warehouseById.get(m.warehouseId)?.code}</span>
+        <span>{warehouseByIdSync.get(m.warehouseId)?.code}</span>
         <span>·</span>
-        <span>{locationById.get(m.locationId)?.code}</span>
+        <span>{locationByIdSync.get(m.locationId)?.code}</span>
         {showCost && (
           <>
             <span>·</span>
@@ -645,7 +645,7 @@ export default async function ProductDetailPage({
         )}
       </span>
     ),
-    actor: userById.get(m.userId)?.name,
+    actor: userByIdSync.get(m.userId)?.name,
   }));
 
   const history = (

@@ -9,7 +9,7 @@ import { db } from "@/lib/data/store";
 import {
   STOCK_VIEWS,
   applyStockView,
-  stockLevelRows,
+  stockLevelRowsSync,
   type StockViewKey,
 } from "@/lib/repo/inventory";
 import { getRole } from "@/lib/auth/session";
@@ -34,7 +34,7 @@ export default async function StockLevelsPage({
   const view: StockViewKey = rawView && rawView in STOCK_VIEWS ? (rawView as StockViewKey) : "all";
   const meta = STOCK_VIEWS[view];
 
-  const all = stockLevelRows();
+  const all = stockLevelRowsSync();
   const filtered = applyStockView(all, view);
 
   const rows: StockTableRow[] = filtered.map((r) => ({

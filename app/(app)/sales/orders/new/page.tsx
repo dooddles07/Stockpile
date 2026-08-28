@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/shell/page-header";
 import { PermissionDenied } from "@/components/states";
 import { OrderForm, type OrderStockRow } from "./order-form";
 import { db } from "@/lib/data/store";
-import { productById, stockLevelRows } from "@/lib/repo/inventory";
+import { productByIdSync, stockLevelRowsSync } from "@/lib/repo/inventory";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 
@@ -42,9 +42,9 @@ export default async function NewSalesOrderPage() {
 
   // Availability per product per site, since a sales order ships from one site.
   const byKey = new Map<string, OrderStockRow>();
-  for (const row of stockLevelRows()) {
+  for (const row of stockLevelRowsSync()) {
     if (row.available <= 0) continue;
-    const product = productById.get(row.productId);
+    const product = productByIdSync.get(row.productId);
     if (!product || product.status !== "active") continue;
 
     const key = `${row.productId}:${row.warehouseId}`;

@@ -10,7 +10,7 @@ import { WorkflowStepper } from "@/components/status/workflow-stepper";
 import { StatusBadge } from "@/components/status/status-badge";
 import { PermissionDenied } from "@/components/states";
 import { db } from "@/lib/data/store";
-import { customerById, productById, supplierById, userById, warehouseById } from "@/lib/repo/inventory";
+import { customerByIdSync, productByIdSync, supplierByIdSync, userByIdSync, warehouseByIdSync } from "@/lib/repo/inventory";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { date, dateTime, money, plural, qty } from "@/lib/format";
@@ -44,9 +44,9 @@ export default async function ReturnDetailPage({
 
   const isPurchase = doc.kind === "purchase";
   const partner = isPurchase
-    ? supplierById.get(doc.partnerId)
-    : customerById.get(doc.partnerId);
-  const warehouse = warehouseById.get(doc.warehouseId);
+    ? supplierByIdSync.get(doc.partnerId)
+    : customerByIdSync.get(doc.partnerId);
+  const warehouse = warehouseByIdSync.get(doc.warehouseId);
 
   const units = doc.lines.reduce((s, l) => s + l.quantity, 0);
   const restockLines = doc.lines.filter((l) => l.restock);
@@ -160,7 +160,7 @@ export default async function ReturnDetailPage({
                   cell: (l) => (
                     <Link href={`/inventory/products/${l.sku}`} className="grid gap-0.5 hover:underline">
                       <span className="font-medium">
-                        {productById.get(l.productId)?.shortName ?? l.name}
+                        {productByIdSync.get(l.productId)?.shortName ?? l.name}
                       </span>
                       <span className="text-code text-[11px] text-muted-foreground">{l.sku}</span>
                     </Link>
@@ -251,7 +251,7 @@ export default async function ReturnDetailPage({
                   label: "Resolved",
                   value: doc.resolvedAt ? dateTime(doc.resolvedAt) : "Not resolved",
                 },
-                { label: "Raised by", value: userById.get(doc.createdBy)?.name ?? "—" },
+                { label: "Raised by", value: userByIdSync.get(doc.createdBy)?.name ?? "—" },
                 { label: "Reason", value: doc.reason, span: 2 },
               ]}
             />

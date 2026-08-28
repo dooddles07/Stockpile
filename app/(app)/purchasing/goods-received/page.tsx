@@ -9,7 +9,7 @@ import { SimpleTable } from "@/components/record/simple-table";
 import { StatusBadge } from "@/components/status/status-badge";
 import { Button } from "@/components/ui/button";
 import { db } from "@/lib/data/store";
-import { supplierById, userById, warehouseById } from "@/lib/repo/inventory";
+import { supplierByIdSync, userByIdSync, warehouseByIdSync } from "@/lib/repo/inventory";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { date, money, plural, qty, relative } from "@/lib/format";
@@ -37,9 +37,9 @@ export default async function GoodsReceivedPage() {
       return {
         id: p.id,
         number: p.number,
-        supplier: supplierById.get(p.supplierId)?.name ?? "—",
+        supplier: supplierByIdSync.get(p.supplierId)?.name ?? "—",
         supplierId: p.supplierId,
-        warehouse: warehouseById.get(p.warehouseId)?.code ?? "—",
+        warehouse: warehouseByIdSync.get(p.warehouseId)?.code ?? "—",
         status: p.status,
         receivedAt: p.receivedAt,
         expectedAt: p.expectedAt,
@@ -49,7 +49,7 @@ export default async function GoodsReceivedPage() {
         received,
         receivedValue: Math.round(receivedValue),
         complete: received >= ordered,
-        bookedBy: userById.get(p.createdBy)?.name ?? "—",
+        bookedBy: userByIdSync.get(p.createdBy)?.name ?? "—",
       };
     })
     .sort((a, b) => (b.receivedAt ?? "").localeCompare(a.receivedAt ?? ""));

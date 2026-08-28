@@ -13,7 +13,7 @@ import { ProductThumb } from "@/components/product/product-thumb";
 import { EmptyState, PermissionDenied } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { db } from "@/lib/data/store";
-import { categoryById, productById, warehouseById } from "@/lib/repo/inventory";
+import { categoryByIdSync, productByIdSync, warehouseByIdSync } from "@/lib/repo/inventory";
 import { NOW } from "@/lib/data/rng";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
@@ -75,7 +75,7 @@ export default async function CustomerDetailPage({
     }
   }
   const topProducts = [...byProduct.entries()]
-    .map(([productId, v]) => ({ product: productById.get(productId), ...v }))
+    .map(([productId, v]) => ({ product: productByIdSync.get(productId), ...v }))
     .filter((p) => p.product)
     .sort((a, b) => b.value - a.value)
     .slice(0, 10);
@@ -173,7 +173,7 @@ export default async function CustomerDetailPage({
                 key: "warehouse",
                 header: "From",
                 hideOnMobile: true,
-                cell: (o) => warehouseById.get(o.warehouseId)?.code ?? "—",
+                cell: (o) => warehouseByIdSync.get(o.warehouseId)?.code ?? "—",
               },
               { key: "lines", header: "Lines", align: "right", cell: (o) => qty(o.lines.length) },
               { key: "total", header: "Total", align: "right", cell: (o) => money(o.total) },
@@ -296,7 +296,7 @@ export default async function CustomerDetailPage({
                 className="flex min-w-0 items-center gap-2.5"
               >
                 <ProductThumb
-                  category={categoryById.get(p.product!.categoryId)?.name ?? ""}
+                  category={categoryByIdSync.get(p.product!.categoryId)?.name ?? ""}
                   sku={p.product!.sku}
                 />
                 <span className="grid min-w-0 gap-0.5">
@@ -312,7 +312,7 @@ export default async function CustomerDetailPage({
             key: "category",
             header: "Category",
             hideOnMobile: true,
-            cell: (p) => categoryById.get(p.product!.categoryId)?.name ?? "—",
+            cell: (p) => categoryByIdSync.get(p.product!.categoryId)?.name ?? "—",
           },
           { key: "units", header: "Units bought", align: "right", cell: (p) => qty(p.units) },
           {

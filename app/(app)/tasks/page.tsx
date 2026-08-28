@@ -16,7 +16,7 @@ import { Section, StatTile } from "@/components/record/field-grid";
 import { StatusBadge } from "@/components/status/status-badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { db } from "@/lib/data/store";
-import { userById } from "@/lib/repo/inventory";
+import { userByIdSync } from "@/lib/repo/inventory";
 import { dueLabel, initials, plural, qty } from "@/lib/format";
 import { humanize, priorityMeta } from "@/lib/status";
 import { cn } from "@/lib/utils";
@@ -97,7 +97,7 @@ export default async function TasksPage() {
               {tasks.map((task) => {
                 const Icon = TYPE_ICON[task.type];
                 const tone = priorityMeta(task.priority);
-                const assignee = userById.get(task.assignedTo);
+                const assignee = userByIdSync.get(task.assignedTo);
 
                 return (
                   <li key={task.id}>

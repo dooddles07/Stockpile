@@ -26,19 +26,19 @@ import { StatusBadge } from "@/components/status/status-badge";
 import { EmptyState } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import {
-  dashboardKpis,
-  expiringLots,
-  inventoryValueTrend,
-  lowStockAlerts,
-  movementTrend,
-  pendingApprovals,
-  purchasesVsSales,
-  recentMovements,
-  recentReceipts,
-  transfersInFlight,
-  warehouseComposition,
+  dashboardKpisSync,
+  expiringLotsSync,
+  inventoryValueTrendSync,
+  lowStockAlertsSync,
+  movementTrendSync,
+  pendingApprovalsSync,
+  purchasesVsSalesSync,
+  recentMovementsSync,
+  recentReceiptsSync,
+  transfersInFlightSync,
+  warehouseCompositionSync,
 } from "@/lib/repo/metrics";
-import { supplierById, userById, valueByCategory, warehouseById } from "@/lib/repo/inventory";
+import { supplierByIdSync, userByIdSync, valueByCategorySync, warehouseByIdSync } from "@/lib/repo/inventory";
 import { db } from "@/lib/data/store";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
@@ -64,17 +64,17 @@ function kpiValue(key: string, raw: number): string {
 
 export default async function DashboardPage() {
   const role = await getRole();
-  const kpis = dashboardKpis().filter(
+  const kpis = dashboardKpisSync().filter(
     (k) => k.key !== "inventory-value" || can(role, "valuation") || can(role, "stock"),
   );
 
-  const approvals = pendingApprovals();
-  const lowStock = lowStockAlerts(6);
-  const lowStockTotal = lowStockAlerts(9999).length;
-  const expiring = expiringLots(30, 6);
-  const inTransit = transfersInFlight(5);
-  const receipts = recentReceipts(5);
-  const activity = recentMovements(8);
+  const approvals = pendingApprovalsSync();
+  const lowStock = lowStockAlertsSync(6);
+  const lowStockTotal = lowStockAlertsSync(9999).length;
+  const expiring = expiringLotsSync(30, 6);
+  const inTransit = transfersInFlightSync(5);
+  const receipts = recentReceiptsSync(5);
+  const activity = recentMovementsSync(8);
   const openTasks = db.tasks.filter((t) => t.status !== "done").slice(0, 6);
 
   const panels: GridPanel[] = [];
@@ -105,7 +105,7 @@ export default async function DashboardPage() {
                   key={item.id}
                   href={item.href}
                   title={item.title}
-                  subtitle={`${item.subtitle} · raised by ${userById.get(item.requestedBy)?.name ?? "—"}`}
+                  subtitle={`${item.subtitle} · raised by ${userByIdSync.get(item.requestedBy)?.name ?? "—"}`}
                   trailing={money(Math.abs(item.amount))}
                   trailingSub={relative(item.createdAt)}
                 />
@@ -180,7 +180,7 @@ export default async function DashboardPage() {
                   key={t.id}
                   href={`/warehousing/transfers/${t.id}`}
                   title={t.number}
-                  subtitle={`${warehouseById.get(t.fromWarehouseId)?.code} → ${warehouseById.get(t.toWarehouseId)?.code} · ${plural(t.lines.length, "line")}`}
+                  subtitle={`${warehouseByIdSync.get(t.fromWarehouseId)?.code} → ${warehouseByIdSync.get(t.toWarehouseId)?.code} · ${plural(t.lines.length, "line")}`}
                   trailing={<StatusBadge status={t.status} />}
                   trailingSub={dueLabel(t.expectedAt)}
                 />
@@ -210,7 +210,7 @@ export default async function DashboardPage() {
                 href={`/purchasing/purchase-orders/${po.id}`}
                 leading={<PackageCheck className="size-4 text-status-success" aria-hidden />}
                 title={po.number}
-                subtitle={`${supplierById.get(po.supplierId)?.name} · ${plural(po.lines.length, "line")}`}
+                subtitle={`${supplierByIdSync.get(po.supplierId)?.name} · ${plural(po.lines.length, "line")}`}
                 trailing={money(po.total)}
                 trailingSub={relative(po.receivedAt)}
               />
@@ -253,7 +253,7 @@ export default async function DashboardPage() {
                     />
                   }
                   title={product.shortName}
-                  subtitle={`${row.lotNumber ?? product.sku} · ${warehouseById.get(row.warehouseId)?.code}`}
+                  subtitle={`${row.lotNumber ?? product.sku} · ${warehouseByIdSync.get(row.warehouseId)?.code}`}
                   trailing={money(value)}
                   trailingSub={daysLeft < 0 ? `${Math.abs(daysLeft)}d overdue` : `${daysLeft}d left`}
                 />
@@ -326,7 +326,7 @@ export default async function DashboardPage() {
                   </span>
                 }
                 title={`${humanize(m.type)} · ${m.sku}`}
-                subtitle={`${warehouseById.get(m.warehouseId)?.code} · ${m.refNumber} · ${userById.get(m.userId)?.name ?? "—"}`}
+                subtitle={`${warehouseByIdSync.get(m.warehouseId)?.code} · ${m.refNumber} · ${userByIdSync.get(m.userId)?.name ?? "—"}`}
                 trailing={money(Math.abs(m.valueChange), { cents: true })}
                 trailingSub={relative(m.ts)}
               />
@@ -391,14 +391,14 @@ export default async function DashboardPage() {
             className="lg:col-span-2"
             title="Inventory value"
             description="On-hand value across all warehouses, reconstructed from the movement ledger."
-            data={inventoryValueTrend()}
+            data={inventoryValueTrendSync()}
             dataKey="value"
             label="Inventory value"
           />
           <StackedBarChart
             title="Stock composition by site"
             description="Available, reserved, damaged and in transit."
-            data={warehouseComposition()}
+            data={warehouseCompositionSync()}
             series={[
               { key: "available", label: "Available", color: "var(--chart-2)" },
               { key: "reserved", label: "Reserved", color: "var(--chart-5)" },
@@ -412,7 +412,7 @@ export default async function DashboardPage() {
           <GroupedBarChart
             title="Units in vs units out"
             description="Weekly receipts and despatches."
-            data={movementTrend()}
+            data={movementTrendSync()}
             series={[
               { key: "inbound", label: "Received", color: "var(--chart-2)" },
               { key: "outbound", label: "Shipped", color: "var(--chart-4)" },
@@ -422,14 +422,14 @@ export default async function DashboardPage() {
           <ComparisonLineChart
             title="Purchases vs sales"
             description="Committed spend against booked revenue, by month."
-            data={purchasesVsSales()}
+            data={purchasesVsSalesSync()}
             seriesA={{ key: "purchases", label: "Purchases" }}
             seriesB={{ key: "sales", label: "Sales" }}
           />
           <RankedBarChart
             title="Inventory value by category"
             description="Where the capital is sitting."
-            data={valueByCategory().map((c) => ({ label: c.name, value: c.value }))}
+            data={valueByCategorySync().map((c) => ({ label: c.name, value: c.value }))}
             dataKey="value"
             label="Value"
           />

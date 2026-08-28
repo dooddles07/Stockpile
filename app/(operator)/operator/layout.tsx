@@ -6,9 +6,9 @@ import { OfflineBanner } from "@/components/states/offline-banner";
 import { OperatorTabs } from "./operator-tabs";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser, getRole } from "@/lib/auth/session";
-import { warehouseById } from "@/lib/repo/inventory";
+import { warehouseByIdSync } from "@/lib/repo/inventory";
 import { db } from "@/lib/data/store";
-import { pendingApprovals } from "@/lib/repo/metrics";
+import { pendingApprovalsSync } from "@/lib/repo/metrics";
 import { can } from "@/lib/auth/permissions";
 import { ROLE_BY_ID } from "@/lib/auth/permissions";
 
@@ -24,10 +24,10 @@ export default async function OperatorLayout({ children }: { children: React.Rea
   const [role, user] = await Promise.all([getRole(), getCurrentUser()]);
 
   // A site is assumed rather than asked for: the handheld belongs to a building.
-  const site = warehouseById.get(user.warehouseId ?? "") ?? db.warehouses[0];
+  const site = warehouseByIdSync.get(user.warehouseId ?? "") ?? db.warehouses[0];
 
   const approvals = can(role, "approvals")
-    ? pendingApprovals().filter((a) => can(role, a.module, "approve")).length
+    ? pendingApprovalsSync().filter((a) => can(role, a.module, "approve")).length
     : 0;
   const receiving = can(role, "receiving")
     ? db.purchaseOrders.filter(

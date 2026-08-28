@@ -11,7 +11,7 @@ import { MeterBar } from "@/components/status/meter-bar";
 import { EmptyState, PermissionDenied } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { db } from "@/lib/data/store";
-import { userById } from "@/lib/repo/inventory";
+import { userByIdSync } from "@/lib/repo/inventory";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { dateTime, percent, plural, qty, relative } from "@/lib/format";
@@ -280,7 +280,7 @@ export default async function AutomationRulePage({
               fields={[
                 { label: "Status", value: rule.enabled ? "Enabled" : "Disabled" },
                 { label: "Scope", value: rule.scope },
-                { label: "Created by", value: userById.get(rule.createdBy)?.name ?? "—" },
+                { label: "Created by", value: userByIdSync.get(rule.createdBy)?.name ?? "—" },
                 { label: "Total runs", value: qty(rule.runCount) },
                 {
                   label: "Last run",

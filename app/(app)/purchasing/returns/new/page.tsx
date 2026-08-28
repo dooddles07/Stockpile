@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/shell/page-header";
 import { PermissionDenied } from "@/components/states";
 import { ReturnForm, type ReturnableOrder } from "@/components/record/return-form";
 import { db } from "@/lib/data/store";
-import { supplierById, warehouseById } from "@/lib/repo/inventory";
+import { supplierByIdSync, warehouseByIdSync } from "@/lib/repo/inventory";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { date } from "@/lib/format";
@@ -45,8 +45,8 @@ export default async function NewPurchaseReturnPage({
     .map((p) => ({
       id: p.id,
       number: p.number,
-      partner: supplierById.get(p.supplierId)?.name ?? "—",
-      siteCode: warehouseById.get(p.warehouseId)?.code ?? "—",
+      partner: supplierByIdSync.get(p.supplierId)?.name ?? "—",
+      siteCode: warehouseByIdSync.get(p.warehouseId)?.code ?? "—",
       dated: p.receivedAt ? `Received ${date(p.receivedAt)}` : "Part received",
       lines: p.lines
         .filter((l) => l.fulfilled > 0)

@@ -10,13 +10,13 @@ import { GroupedBarChart, RankedBarChart, TrendAreaChart } from "@/components/ch
 import { StatusBadge } from "@/components/status/status-badge";
 import { Button } from "@/components/ui/button";
 import {
-  agingBuckets,
-  deadStockRows,
-  inventoryHeadline,
-  turnoverRows,
+  agingBucketsSync,
+  deadStockRowsSync,
+  inventoryHeadlineSync,
+  turnoverRowsSync,
 } from "@/lib/repo/analytics";
-import { healthCounts, valueByCategory } from "@/lib/repo/inventory";
-import { inventoryValueTrend, movementTrend } from "@/lib/repo/metrics";
+import { healthCountsSync, valueByCategorySync } from "@/lib/repo/inventory";
+import { inventoryValueTrendSync, movementTrendSync } from "@/lib/repo/metrics";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { compact, money, percent, plural, qty, relative } from "@/lib/format";
@@ -32,11 +32,11 @@ export default async function InventoryAnalyticsPage() {
   const role = await getRole();
   if (!can(role, "analytics")) return <PermissionDenied module="analytics" role={role} />;
 
-  const headline = inventoryHeadline();
-  const health = healthCounts();
-  const aging = agingBuckets();
-  const dead = deadStockRows();
-  const turnover = turnoverRows();
+  const headline = inventoryHeadlineSync();
+  const health = healthCountsSync();
+  const aging = agingBucketsSync();
+  const dead = deadStockRowsSync();
+  const turnover = turnoverRowsSync();
 
   const slowest = turnover
     .filter((r) => r.stockValue > 500)
@@ -98,14 +98,14 @@ export default async function InventoryAnalyticsPage() {
             className="lg:col-span-2"
             title="Inventory value"
             description="Reconstructed from the movement ledger, week by week."
-            data={inventoryValueTrend()}
+            data={inventoryValueTrendSync()}
             dataKey="value"
             label="Inventory value"
           />
           <RankedBarChart
             title="Value by category"
             description="Where the capital is concentrated."
-            data={valueByCategory().map((c) => ({ label: c.name, value: c.value }))}
+            data={valueByCategorySync().map((c) => ({ label: c.name, value: c.value }))}
             dataKey="value"
             label="Value"
           />
@@ -116,7 +116,7 @@ export default async function InventoryAnalyticsPage() {
             className="lg:col-span-2"
             title="Units in vs units out"
             description="Weekly receipts against despatches."
-            data={movementTrend()}
+            data={movementTrendSync()}
             series={[
               { key: "inbound", label: "Received", color: "var(--chart-2)" },
               { key: "outbound", label: "Shipped", color: "var(--chart-4)" },

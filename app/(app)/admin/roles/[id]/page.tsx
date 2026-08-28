@@ -30,7 +30,7 @@ import {
   levelFor,
 } from "@/lib/auth/permissions";
 import { db } from "@/lib/data/store";
-import { warehouseById } from "@/lib/repo/inventory";
+import { warehouseByIdSync } from "@/lib/repo/inventory";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { humanize } from "@/lib/status";
@@ -277,7 +277,7 @@ export default async function RoleDetailPage({
                   header: "Site",
                   cell: (u) =>
                     u.warehouseId ? (
-                      <span className="font-medium">{warehouseById.get(u.warehouseId)?.code}</span>
+                      <span className="font-medium">{warehouseByIdSync.get(u.warehouseId)?.code}</span>
                     ) : (
                       <span className="text-muted-foreground">all</span>
                     ),

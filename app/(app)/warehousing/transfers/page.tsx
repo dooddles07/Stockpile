@@ -8,7 +8,7 @@ import { StatTile } from "@/components/record/field-grid";
 import { Button } from "@/components/ui/button";
 import { TransfersTable, type TransferTableRow } from "./transfers-table";
 import { db } from "@/lib/data/store";
-import { productById, userById, warehouseById } from "@/lib/repo/inventory";
+import { productByIdSync, userByIdSync, warehouseByIdSync } from "@/lib/repo/inventory";
 import { NOW } from "@/lib/data/rng";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
@@ -27,7 +27,7 @@ export default async function TransfersPage() {
     const units = t.lines.reduce((s, l) => s + l.quantity, 0);
     const receivedUnits = t.lines.reduce((s, l) => s + l.received, 0);
     const value = t.lines.reduce(
-      (s, l) => s + l.quantity * (productById.get(l.productId)?.unitCost ?? 0),
+      (s, l) => s + l.quantity * (productByIdSync.get(l.productId)?.unitCost ?? 0),
       0,
     );
     const open = !["received", "cancelled"].includes(t.status);
@@ -35,8 +35,8 @@ export default async function TransfersPage() {
     return {
       id: t.id,
       number: t.number,
-      fromCode: warehouseById.get(t.fromWarehouseId)?.code ?? "—",
-      toCode: warehouseById.get(t.toWarehouseId)?.code ?? "—",
+      fromCode: warehouseByIdSync.get(t.fromWarehouseId)?.code ?? "—",
+      toCode: warehouseByIdSync.get(t.toWarehouseId)?.code ?? "—",
       status: t.status,
       createdAt: t.createdAt,
       expectedAt: t.expectedAt,
@@ -45,8 +45,8 @@ export default async function TransfersPage() {
       units,
       receivedUnits,
       value: Math.round(value),
-      requestedBy: userById.get(t.requestedBy)?.name ?? "—",
-      approvedBy: t.approvedBy ? (userById.get(t.approvedBy)?.name ?? null) : null,
+      requestedBy: userByIdSync.get(t.requestedBy)?.name ?? "—",
+      approvedBy: t.approvedBy ? (userByIdSync.get(t.approvedBy)?.name ?? null) : null,
       carrier: t.carrier,
       reason: t.reason,
       overdue: open && new Date(t.expectedAt).getTime() < NOW.getTime(),

@@ -6,7 +6,7 @@ import { StatTile } from "@/components/record/field-grid";
 import { StatusBadge } from "@/components/status/status-badge";
 import { PermissionDenied } from "@/components/states";
 import { ReportTable } from "./report-table";
-import { REPORTS, reportBySlug } from "@/lib/repo/reports";
+import { REPORTS, reportBySlugSync } from "@/lib/repo/reports";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { dateTime, qty } from "@/lib/format";
@@ -22,7 +22,7 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const report = reportBySlug(slug);
+  const report = reportBySlugSync(slug);
   return report
     ? { title: report.name, description: report.description }
     : { title: "Report not found" };
@@ -35,7 +35,7 @@ export default async function ReportPage({
 }) {
   const role = await getRole();
   const { slug } = await params;
-  const report = reportBySlug(slug);
+  const report = reportBySlugSync(slug);
   if (!report) notFound();
 
   if (!can(role, "reports") || !can(role, report.module)) {

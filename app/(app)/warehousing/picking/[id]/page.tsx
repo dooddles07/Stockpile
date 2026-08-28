@@ -11,7 +11,7 @@ import { StatusBadge } from "@/components/status/status-badge";
 import { EmptyState, PermissionDenied } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { db } from "@/lib/data/store";
-import { customerById, locationById, productById, warehouseById } from "@/lib/repo/inventory";
+import { customerByIdSync, locationByIdSync, productByIdSync, warehouseByIdSync } from "@/lib/repo/inventory";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { date, dueLabel, plural, qty } from "@/lib/format";
@@ -64,8 +64,8 @@ export default async function PickListPage({ params }: { params: Promise<{ id: s
   const order = db.salesOrders.find((o) => o.id === id);
   if (!order) notFound();
 
-  const customer = customerById.get(order.customerId);
-  const warehouse = warehouseById.get(order.warehouseId);
+  const customer = customerByIdSync.get(order.customerId);
+  const warehouse = warehouseByIdSync.get(order.warehouseId);
   const pickable = ["reserved", "picking"].includes(order.status);
 
   // Allocate first, sequence second. Which lot to take is a stock decision
@@ -78,10 +78,10 @@ export default async function PickListPage({ params }: { params: Promise<{ id: s
     const outstanding = line.quantity - line.fulfilled;
     if (outstanding <= 0) continue;
 
-    const product = productById.get(line.productId);
+    const product = productByIdSync.get(line.productId);
     const bins = db.stockRows
       .filter((s) => s.productId === line.productId && s.warehouseId === order.warehouseId)
-      .map((s) => ({ row: s, location: locationById.get(s.locationId) }))
+      .map((s) => ({ row: s, location: locationByIdSync.get(s.locationId) }))
       .filter(
         (b): b is { row: (typeof db.stockRows)[number]; location: StockLocation } =>
           Boolean(b.location) && b.row.onHand - b.row.damaged > 0,

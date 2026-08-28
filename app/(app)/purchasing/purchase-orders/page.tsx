@@ -8,7 +8,7 @@ import { StatTile } from "@/components/record/field-grid";
 import { Button } from "@/components/ui/button";
 import { PoTable, type PoTableRow } from "./po-table";
 import { db } from "@/lib/data/store";
-import { supplierById, userById, warehouseById } from "@/lib/repo/inventory";
+import { supplierByIdSync, userByIdSync, warehouseByIdSync } from "@/lib/repo/inventory";
 import { NOW } from "@/lib/data/rng";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
@@ -33,7 +33,7 @@ export default async function PurchaseOrdersPage({
   const now = NOW.getTime();
 
   const rows: PoTableRow[] = db.purchaseOrders.map((p) => {
-    const supplier = supplierById.get(p.supplierId);
+    const supplier = supplierByIdSync.get(p.supplierId);
     const units = p.lines.reduce((s, l) => s + l.quantity, 0);
     const receivedUnits = p.lines.reduce((s, l) => s + l.fulfilled, 0);
     const open = ["submitted", "approved", "ordered", "partially-received"].includes(p.status);
@@ -43,7 +43,7 @@ export default async function PurchaseOrdersPage({
       number: p.number,
       supplier: supplier?.name ?? "—",
       supplierCode: supplier?.code ?? "—",
-      warehouseCode: warehouseById.get(p.warehouseId)?.code ?? "—",
+      warehouseCode: warehouseByIdSync.get(p.warehouseId)?.code ?? "—",
       status: p.status,
       createdAt: p.createdAt,
       orderedAt: p.orderedAt,
@@ -53,8 +53,8 @@ export default async function PurchaseOrdersPage({
       units,
       receivedUnits,
       total: p.total,
-      createdBy: userById.get(p.createdBy)?.name ?? "—",
-      approvedBy: p.approvedBy ? (userById.get(p.approvedBy)?.name ?? null) : null,
+      createdBy: userByIdSync.get(p.createdBy)?.name ?? "—",
+      approvedBy: p.approvedBy ? (userByIdSync.get(p.approvedBy)?.name ?? null) : null,
       paymentTerms: p.paymentTerms,
       overdue: open && new Date(p.expectedAt).getTime() < now,
     };

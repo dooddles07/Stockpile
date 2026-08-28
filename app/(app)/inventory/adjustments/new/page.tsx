@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/shell/page-header";
 import { PermissionDenied } from "@/components/states";
 import { AdjustmentForm } from "./adjustment-form";
 import { db } from "@/lib/data/store";
-import { summaryFor } from "@/lib/repo/inventory";
+import { summaryForSync } from "@/lib/repo/inventory";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 
@@ -24,7 +24,7 @@ export default async function NewAdjustmentPage() {
   const products = db.products
     .filter((p) => p.status === "active")
     .map((p) => {
-      const stock = summaryFor(p.id);
+      const stock = summaryForSync(p.id);
       return {
         id: p.id,
         sku: p.sku,

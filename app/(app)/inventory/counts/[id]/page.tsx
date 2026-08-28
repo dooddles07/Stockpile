@@ -14,7 +14,7 @@ import { StatusBadge } from "@/components/status/status-badge";
 import { EmptyState, PermissionDenied } from "@/components/states";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { db } from "@/lib/data/store";
-import { locationById, productById, userById, warehouseById } from "@/lib/repo/inventory";
+import { locationByIdSync, productByIdSync, userByIdSync, warehouseByIdSync } from "@/lib/repo/inventory";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { date, dateTime, initials, plural, qty, relative, signed, signedMoney } from "@/lib/format";
@@ -47,7 +47,7 @@ export default async function CountDetailPage({
   const count = db.stockCounts.find((c) => c.id === id);
   if (!count) notFound();
 
-  const warehouse = warehouseById.get(count.warehouseId);
+  const warehouse = warehouseByIdSync.get(count.warehouseId);
   const canApprove = can(role, "counts", "approve");
   const canCount = can(role, "counts", "edit");
   const awaitingReview = count.status === "review";
@@ -119,7 +119,7 @@ export default async function CountDetailPage({
               header: "Product",
               cell: (l) => (
                 <Link href={`/inventory/products/${l.sku}`} className="grid gap-0.5 hover:underline">
-                  <span className="font-medium">{productById.get(l.productId)?.shortName ?? l.name}</span>
+                  <span className="font-medium">{productByIdSync.get(l.productId)?.shortName ?? l.name}</span>
                   <span className="text-code text-[11px] text-muted-foreground">{l.sku}</span>
                 </Link>
               ),
@@ -130,7 +130,7 @@ export default async function CountDetailPage({
               hideOnMobile: true,
               cell: (l) => (
                 <span className="text-code text-muted-foreground">
-                  {locationById.get(l.locationId)?.code ?? "—"}
+                  {locationByIdSync.get(l.locationId)?.code ?? "—"}
                 </span>
               ),
             },
@@ -181,7 +181,7 @@ export default async function CountDetailPage({
               key: "countedBy",
               header: "Counted by",
               hideOnMobile: true,
-              cell: (l) => (l.countedBy ? (userById.get(l.countedBy)?.name ?? "—") : "—"),
+              cell: (l) => (l.countedBy ? (userByIdSync.get(l.countedBy)?.name ?? "—") : "—"),
             },
           ]}
           footer={
@@ -229,11 +229,11 @@ export default async function CountDetailPage({
   const sheetLines = count.lines.map((l) => ({
     id: l.id,
     sku: l.sku,
-    name: productById.get(l.productId)?.shortName ?? l.name,
-    locationCode: locationById.get(l.locationId)?.code ?? "—",
+    name: productByIdSync.get(l.productId)?.shortName ?? l.name,
+    locationCode: locationByIdSync.get(l.locationId)?.code ?? "—",
     expected: l.expected,
     counted: l.counted,
-    unitCost: productById.get(l.productId)?.unitCost ?? 0,
+    unitCost: productByIdSync.get(l.productId)?.unitCost ?? 0,
   }));
 
   const sheetTab =
@@ -268,7 +268,7 @@ export default async function CountDetailPage({
                 header: "Product",
                 cell: (l) => (
                   <Link href={`/inventory/products/${l.sku}`} className="grid gap-0.5 hover:underline">
-                    <span className="font-medium">{productById.get(l.productId)?.shortName ?? l.name}</span>
+                    <span className="font-medium">{productByIdSync.get(l.productId)?.shortName ?? l.name}</span>
                     <span className="text-code text-[11px] text-muted-foreground">{l.sku}</span>
                   </Link>
                 ),
@@ -279,7 +279,7 @@ export default async function CountDetailPage({
                 hideOnMobile: true,
                 cell: (l) => (
                   <span className="text-code text-muted-foreground">
-                    {locationById.get(l.locationId)?.code ?? "—"}
+                    {locationByIdSync.get(l.locationId)?.code ?? "—"}
                   </span>
                 ),
               },
@@ -345,10 +345,10 @@ export default async function CountDetailPage({
                 label: "Completed",
                 value: count.completedAt ? dateTime(count.completedAt) : "Not completed",
               },
-              { label: "Raised by", value: userById.get(count.createdBy)?.name ?? "—" },
+              { label: "Raised by", value: userByIdSync.get(count.createdBy)?.name ?? "—" },
               {
                 label: "Approved by",
-                value: count.approvedBy ? (userById.get(count.approvedBy)?.name ?? "—") : "Not approved",
+                value: count.approvedBy ? (userByIdSync.get(count.approvedBy)?.name ?? "—") : "Not approved",
               },
             ]}
           />
@@ -361,7 +361,7 @@ export default async function CountDetailPage({
         >
           <ul className="grid gap-2.5">
             {count.assignedTo.map((userId) => {
-              const user = userById.get(userId);
+              const user = userByIdSync.get(userId);
               const lines = counted.filter((l) => l.countedBy === userId);
               return (
                 <li key={userId} className="flex items-center gap-2.5">
@@ -373,7 +373,7 @@ export default async function CountDetailPage({
                   <span className="grid min-w-0 flex-1 gap-0.5">
                     <span className="truncate text-[13px] font-medium">{user?.name}</span>
                     <span className="text-[11px] text-muted-foreground">
-                      {warehouseById.get(user?.warehouseId ?? "")?.code ?? "roaming"}
+                      {warehouseByIdSync.get(user?.warehouseId ?? "")?.code ?? "roaming"}
                     </span>
                   </span>
                   <span className="tabular shrink-0 text-caption text-muted-foreground" data-numeric>

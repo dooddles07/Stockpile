@@ -13,7 +13,7 @@ import { ProductThumb } from "@/components/product/product-thumb";
 import { EmptyState, PermissionDenied } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { db } from "@/lib/data/store";
-import { categoryById, summaryFor, warehouseById } from "@/lib/repo/inventory";
+import { categoryByIdSync, summaryForSync, warehouseByIdSync } from "@/lib/repo/inventory";
 import { NOW } from "@/lib/data/rng";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
@@ -171,7 +171,7 @@ export default async function SupplierDetailPage({
                 key: "warehouse",
                 header: "Into",
                 hideOnMobile: true,
-                cell: (p) => warehouseById.get(p.warehouseId)?.code ?? "—",
+                cell: (p) => warehouseByIdSync.get(p.warehouseId)?.code ?? "—",
               },
               { key: "lines", header: "Lines", align: "right", hideOnMobile: true, cell: (p) => qty(p.lines.length) },
               {
@@ -337,7 +337,7 @@ export default async function SupplierDetailPage({
             header: "Product",
             cell: (p) => (
               <Link href={`/inventory/products/${p.sku}`} className="flex min-w-0 items-center gap-2.5">
-                <ProductThumb category={categoryById.get(p.categoryId)?.name ?? ""} sku={p.sku} />
+                <ProductThumb category={categoryByIdSync.get(p.categoryId)?.name ?? ""} sku={p.sku} />
                 <span className="grid min-w-0 gap-0.5">
                   <span className="truncate font-medium hover:underline">{p.shortName}</span>
                   <span className="text-code truncate text-[11px] text-muted-foreground">{p.sku}</span>
@@ -349,7 +349,7 @@ export default async function SupplierDetailPage({
             key: "category",
             header: "Category",
             hideOnMobile: true,
-            cell: (p) => categoryById.get(p.categoryId)?.name ?? "—",
+            cell: (p) => categoryByIdSync.get(p.categoryId)?.name ?? "—",
           },
           {
             key: "role",
@@ -371,12 +371,12 @@ export default async function SupplierDetailPage({
             key: "available",
             header: "Available",
             align: "right",
-            cell: (p) => qty(summaryFor(p.id).available),
+            cell: (p) => qty(summaryForSync(p.id).available),
           },
           {
             key: "health",
             header: "Health",
-            cell: (p) => <StatusBadge status={summaryFor(p.id).health} />,
+            cell: (p) => <StatusBadge status={summaryForSync(p.id).health} />,
           },
           { key: "status", header: "Status", hideOnMobile: true, cell: (p) => <StatusBadge status={p.status} /> },
         ]}
