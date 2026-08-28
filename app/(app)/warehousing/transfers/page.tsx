@@ -7,7 +7,7 @@ import { PermissionDenied } from "@/components/states";
 import { StatTile } from "@/components/record/field-grid";
 import { Button } from "@/components/ui/button";
 import { TransfersTable, type TransferTableRow } from "./transfers-table";
-import { transfers as allTransfers } from "@/lib/repo/documents";
+import { transferRows as allTransferRows } from "@/lib/repo/documents";
 import {
   indexById,
   products as allProducts,
@@ -32,9 +32,8 @@ export default async function TransfersPage() {
   const userById = await indexById(allUsers);
   const warehouseById = await indexById(allWarehouses);
 
-  const rows: TransferTableRow[] = (await allTransfers()).map((t) => {
-    const units = t.lines.reduce((s, l) => s + l.quantity, 0);
-    const receivedUnits = t.lines.reduce((s, l) => s + l.received, 0);
+  const rows: TransferTableRow[] = (await allTransferRows()).map((t) => {
+    const { units, receivedUnits } = t;
     const value = t.lines.reduce(
       (s, l) => s + l.quantity * (productById.get(l.productId)?.unitCost ?? 0),
       0,

@@ -67,7 +67,7 @@ export default async function WarehouseDetailPage({
   const supplierById = await indexById(allSuppliers);
 
   const showValue = can(role, "valuation") || can(role, "warehouses", "export");
-  const locations = (await allLocations()).filter((l) => l.warehouseId === rollup.id);
+  const locations = [...locationById.values()].filter((l) => l.warehouseId === rollup.id);
   const stock = (await stockLevelRows()).filter((r) => r.warehouseId === rollup.id);
   const movements = (await allMovements()).filter((m) => m.warehouseId === rollup.id).slice(0, 25);
 

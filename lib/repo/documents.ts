@@ -42,6 +42,30 @@ export async function transfers(): Promise<Transfer[]> {
   return transfersSync();
 }
 
+export interface TransferRow extends Transfer {
+  /** Requested quantity across every line. */
+  units: number;
+  /** Despatched-so-far quantity across every line — what has actually left the source. */
+  shippedUnits: number;
+  /** Booked-in-so-far quantity across every line. */
+  receivedUnits: number;
+}
+
+/**
+ * Transfers joined with their own line totals. A transfer's in-transit
+ * quantity — shipped but not yet received — is derived from this open
+ * document state, so screens read it here rather than re-summing
+ * `t.lines` themselves.
+ */
+export async function transferRows(): Promise<TransferRow[]> {
+  return (await transfers()).map((t) => ({
+    ...t,
+    units: t.lines.reduce((s, l) => s + l.quantity, 0),
+    shippedUnits: t.lines.reduce((s, l) => s + l.shipped, 0),
+    receivedUnits: t.lines.reduce((s, l) => s + l.received, 0),
+  }));
+}
+
 export function adjustmentsSync(): Adjustment[] {
   return db.adjustments;
 }

@@ -9,7 +9,7 @@ import { SimpleTable } from "@/components/record/simple-table";
 import { Section } from "@/components/record/field-grid";
 import { StatusBadge } from "@/components/status/status-badge";
 import { Button } from "@/components/ui/button";
-import { purchaseOrders as allPurchaseOrders, transfers as allTransfers } from "@/lib/repo/documents";
+import { purchaseOrders as allPurchaseOrders, transferRows as allTransferRows } from "@/lib/repo/documents";
 import {
   indexById,
   products as allProducts,
@@ -60,11 +60,10 @@ export default async function ReceivingPage() {
     })
     .sort((a, b) => a.expectedAt.localeCompare(b.expectedAt));
 
-  const transferReceipts = (await allTransfers())
+  const transferReceipts = (await allTransferRows())
     .filter((t) => ["in-transit", "partially-received"].includes(t.status))
     .map((t) => {
-      const shipped = t.lines.reduce((s, l) => s + l.shipped, 0);
-      const received = t.lines.reduce((s, l) => s + l.received, 0);
+      const { shippedUnits: shipped, receivedUnits: received } = t;
       return {
         id: t.id,
         number: t.number,
