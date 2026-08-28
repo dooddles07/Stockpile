@@ -70,3 +70,14 @@ export function usersSync(): User[] {
 export async function users(): Promise<User[]> {
   return usersSync();
 }
+
+/**
+ * Index a list accessor by `id`. A screen doing many lookups against one
+ * collection builds this once instead of awaiting a single-key accessor in a
+ * loop or hand-rolling the same `new Map(...)` each time.
+ */
+export async function indexById<T extends { id: string }>(
+  list: () => Promise<T[]>,
+): Promise<Map<string, T>> {
+  return new Map((await list()).map((item) => [item.id, item]));
+}

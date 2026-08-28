@@ -145,6 +145,14 @@ export async function stockRowsFor(productId: string): Promise<StockRow[]> {
   return stockRowsForSync(productId);
 }
 
+export function allStockRowsSync(): StockRow[] {
+  return db.stockRows;
+}
+
+export async function allStockRows(): Promise<StockRow[]> {
+  return allStockRowsSync();
+}
+
 export function allSummariesSync(): StockSummary[] {
   return [...index.summaries.values()];
 }
