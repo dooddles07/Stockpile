@@ -7,8 +7,13 @@ import { PermissionDenied } from "@/components/states";
 import { StatTile } from "@/components/record/field-grid";
 import { Button } from "@/components/ui/button";
 import { TransfersTable, type TransferTableRow } from "./transfers-table";
-import { db } from "@/lib/data/store";
-import { productByIdSync, userByIdSync, warehouseByIdSync } from "@/lib/repo/inventory";
+import { transfers as allTransfers } from "@/lib/repo/documents";
+import {
+  indexById,
+  products as allProducts,
+  users as allUsers,
+  warehouses as allWarehouses,
+} from "@/lib/repo/reference";
 import { NOW } from "@/lib/data/rng";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
@@ -23,11 +28,15 @@ export default async function TransfersPage() {
   const role = await getRole();
   if (!can(role, "transfers")) return <PermissionDenied module="transfers" role={role} />;
 
-  const rows: TransferTableRow[] = db.transfers.map((t) => {
+  const productById = await indexById(allProducts);
+  const userById = await indexById(allUsers);
+  const warehouseById = await indexById(allWarehouses);
+
+  const rows: TransferTableRow[] = (await allTransfers()).map((t) => {
     const units = t.lines.reduce((s, l) => s + l.quantity, 0);
     const receivedUnits = t.lines.reduce((s, l) => s + l.received, 0);
     const value = t.lines.reduce(
-      (s, l) => s + l.quantity * (productByIdSync.get(l.productId)?.unitCost ?? 0),
+      (s, l) => s + l.quantity * (productById.get(l.productId)?.unitCost ?? 0),
       0,
     );
     const open = !["received", "cancelled"].includes(t.status);
@@ -35,8 +44,8 @@ export default async function TransfersPage() {
     return {
       id: t.id,
       number: t.number,
-      fromCode: warehouseByIdSync.get(t.fromWarehouseId)?.code ?? "—",
-      toCode: warehouseByIdSync.get(t.toWarehouseId)?.code ?? "—",
+      fromCode: warehouseById.get(t.fromWarehouseId)?.code ?? "—",
+      toCode: warehouseById.get(t.toWarehouseId)?.code ?? "—",
       status: t.status,
       createdAt: t.createdAt,
       expectedAt: t.expectedAt,
@@ -45,8 +54,8 @@ export default async function TransfersPage() {
       units,
       receivedUnits,
       value: Math.round(value),
-      requestedBy: userByIdSync.get(t.requestedBy)?.name ?? "—",
-      approvedBy: t.approvedBy ? (userByIdSync.get(t.approvedBy)?.name ?? null) : null,
+      requestedBy: userById.get(t.requestedBy)?.name ?? "—",
+      approvedBy: t.approvedBy ? (userById.get(t.approvedBy)?.name ?? null) : null,
       carrier: t.carrier,
       reason: t.reason,
       overdue: open && new Date(t.expectedAt).getTime() < NOW.getTime(),
@@ -56,7 +65,7 @@ export default async function TransfersPage() {
   const pending = rows.filter((r) => r.status === "pending-approval");
   const inFlight = rows.filter((r) => ["in-transit", "partially-received"].includes(r.status));
   const overdue = rows.filter((r) => r.overdue);
-  const warehouses = [...new Set(db.warehouses.map((w) => w.code))].sort();
+  const warehouses = [...new Set([...warehouseById.values()].map((w) => w.code))].sort();
 
   return (
     <>
