@@ -9,9 +9,9 @@ import { SimpleTable } from "@/components/record/simple-table";
 import { RankedBarChart, TrendAreaChart } from "@/components/charts";
 import { MeterBar } from "@/components/status/meter-bar";
 import { StatusBadge } from "@/components/status/status-badge";
-import { spendByCategorySync, supplierScorecardsSync } from "@/lib/repo/analytics";
-import { purchasesVsSalesSync } from "@/lib/repo/metrics";
-import { db } from "@/lib/data/store";
+import { spendByCategory, supplierScorecards } from "@/lib/repo/analytics";
+import { purchasesVsSales } from "@/lib/repo/metrics";
+import { purchaseOrders } from "@/lib/repo/documents";
 import { NOW } from "@/lib/data/rng";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
@@ -28,12 +28,16 @@ export default async function PurchasingAnalyticsPage() {
   const role = await getRole();
   if (!can(role, "analytics")) return <PermissionDenied module="analytics" role={role} />;
 
-  const scorecards = supplierScorecardsSync();
-  const spend = spendByCategorySync();
+  const [scorecards, spend, allPurchaseOrders, monthly] = await Promise.all([
+    supplierScorecards(),
+    spendByCategory(),
+    purchaseOrders(),
+    purchasesVsSales(),
+  ]);
 
-  const placed = db.purchaseOrders.filter((p) => !["cancelled", "draft"].includes(p.status));
+  const placed = allPurchaseOrders.filter((p) => !["cancelled", "draft"].includes(p.status));
   const totalSpend = placed.reduce((s, p) => s + p.total, 0);
-  const open = db.purchaseOrders.filter((p) =>
+  const open = allPurchaseOrders.filter((p) =>
     ["submitted", "approved", "ordered", "partially-received"].includes(p.status),
   );
   const overdue = open.filter((p) => new Date(p.expectedAt).getTime() < NOW.getTime());
@@ -52,7 +56,7 @@ export default async function PurchasingAnalyticsPage() {
   const topThreeSpend = scorecards.slice(0, 3).reduce((s, x) => s + x.spend, 0);
   const concentration = totalSpend > 0 ? topThreeSpend / totalSpend : 0;
 
-  const monthlySpend = purchasesVsSalesSync().map((p) => ({
+  const monthlySpend = monthly.map((p) => ({
     label: p.label,
     value: p.purchases,
   }));

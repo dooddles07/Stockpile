@@ -9,12 +9,12 @@ import { SimpleTable } from "@/components/record/simple-table";
 import { ComparisonLineChart, RankedBarChart } from "@/components/charts";
 import { MeterBar } from "@/components/status/meter-bar";
 import {
-  categoryPerformanceSync,
-  productPerformanceSync,
-  topCustomersSync,
+  categoryPerformance,
+  productPerformance,
+  topCustomers,
 } from "@/lib/repo/analytics";
-import { purchasesVsSalesSync } from "@/lib/repo/metrics";
-import { db } from "@/lib/data/store";
+import { purchasesVsSales } from "@/lib/repo/metrics";
+import { salesOrders } from "@/lib/repo/documents";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { money, percent, plural, qty } from "@/lib/format";
@@ -30,11 +30,15 @@ export default async function SalesAnalyticsPage() {
   const role = await getRole();
   if (!can(role, "analytics")) return <PermissionDenied module="analytics" role={role} />;
 
-  const products = productPerformanceSync();
-  const categories = categoryPerformanceSync();
-  const customers = topCustomersSync(12);
+  const [products, categories, customers, allSalesOrders, purchasesSales] = await Promise.all([
+    productPerformance(),
+    categoryPerformance(),
+    topCustomers(12),
+    salesOrders(),
+    purchasesVsSales(),
+  ]);
 
-  const booked = db.salesOrders.filter((o) => !["cancelled", "draft"].includes(o.status));
+  const booked = allSalesOrders.filter((o) => !["cancelled", "draft"].includes(o.status));
   const revenue = booked.reduce((s, o) => s + o.total, 0);
   const cost = products.reduce((s, p) => s + p.cost, 0);
   const margin = revenue - cost;
@@ -104,7 +108,7 @@ export default async function SalesAnalyticsPage() {
             className="lg:col-span-2"
             title="Purchases vs sales"
             description="Committed spend against booked revenue, by month."
-            data={purchasesVsSalesSync()}
+            data={purchasesSales}
             seriesA={{ key: "purchases", label: "Purchases" }}
             seriesB={{ key: "sales", label: "Sales" }}
           />
