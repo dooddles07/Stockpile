@@ -7,8 +7,8 @@ import { EmptyState } from "@/components/states";
 import { Section, StatTile } from "@/components/record/field-grid";
 import { StatusBadge } from "@/components/status/status-badge";
 import { Button } from "@/components/ui/button";
-import { db } from "@/lib/data/store";
-import { userByIdSync } from "@/lib/repo/inventory";
+import { notifications as allNotifications } from "@/lib/repo/ops";
+import { indexById, users } from "@/lib/repo/reference";
 import { NOW, DAY_MS } from "@/lib/data/rng";
 import { plural, qty, relative } from "@/lib/format";
 import { humanize, priorityMeta } from "@/lib/status";
@@ -20,7 +20,7 @@ export const metadata: Metadata = {
 };
 
 export default async function NotificationsPage() {
-  const notifications = db.notifications;
+  const [notifications, userById] = await Promise.all([allNotifications(), indexById(users)]);
   const unread = notifications.filter((n) => !n.read);
   const critical = notifications.filter((n) => n.priority === "critical");
 
@@ -84,7 +84,7 @@ export default async function NotificationsPage() {
                 <ul className="divide-y">
                   {items.map((n) => {
                     const tone = priorityMeta(n.priority);
-                    const actor = n.actorId ? userByIdSync.get(n.actorId) : null;
+                    const actor = n.actorId ? userById.get(n.actorId) : null;
 
                     return (
                       <li key={n.id}>

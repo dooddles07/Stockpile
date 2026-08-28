@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { PageHeader } from "@/components/shell/page-header";
 import { PermissionDenied } from "@/components/states";
 import { ImportWizard } from "./import-wizard";
-import { db } from "@/lib/data/store";
+import { customers, products, suppliers } from "@/lib/repo/reference";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import type { ImportKind } from "@/lib/import/validate";
@@ -29,11 +29,17 @@ export default async function ImportPage() {
 
   // Existing identifiers, so the wizard can tell a create from an update
   // before anything is written.
+  const [allProducts, allSuppliers, allCustomers] = await Promise.all([
+    products(),
+    suppliers(),
+    customers(),
+  ]);
+  const productSkus = allProducts.map((p) => p.sku);
   const existingKeys: Record<string, string[]> = {
-    products: db.products.map((p) => p.sku),
-    suppliers: db.suppliers.map((s) => s.code),
-    customers: db.customers.map((c) => c.code),
-    stock: db.products.map((p) => p.sku),
+    products: productSkus,
+    suppliers: allSuppliers.map((s) => s.code),
+    customers: allCustomers.map((c) => c.code),
+    stock: productSkus,
   };
 
   return (

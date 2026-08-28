@@ -9,7 +9,7 @@ import {
   SettingToggle,
 } from "@/components/settings/setting-row";
 import { StatusBadge } from "@/components/status/status-badge";
-import { db } from "@/lib/data/store";
+import { products } from "@/lib/repo/reference";
 import { getRole } from "@/lib/auth/session";
 import { isReadOnly } from "@/lib/auth/permissions";
 import { qty } from "@/lib/format";
@@ -50,7 +50,7 @@ export default async function ProductSettingsPage() {
   const readOnly = isReadOnly(role, "settings");
 
   const usage = new Map<string, number>();
-  for (const p of db.products) {
+  for (const p of await products()) {
     usage.set(p.unit, (usage.get(p.unit) ?? 0) + 1);
   }
 

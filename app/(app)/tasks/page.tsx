@@ -15,8 +15,8 @@ import { EmptyState } from "@/components/states";
 import { Section, StatTile } from "@/components/record/field-grid";
 import { StatusBadge } from "@/components/status/status-badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { db } from "@/lib/data/store";
-import { userByIdSync } from "@/lib/repo/inventory";
+import { tasks as allTasks } from "@/lib/repo/ops";
+import { indexById, users } from "@/lib/repo/reference";
 import { dueLabel, initials, plural, qty } from "@/lib/format";
 import { humanize, priorityMeta } from "@/lib/status";
 import { cn } from "@/lib/utils";
@@ -39,7 +39,8 @@ const TYPE_ICON = {
 const PRIORITY_RANK = { critical: 0, high: 1, normal: 2, low: 3 } as const;
 
 export default async function TasksPage() {
-  const tasks = [...db.tasks].sort((a, b) => {
+  const [allTasksList, userById] = await Promise.all([allTasks(), indexById(users)]);
+  const tasks = [...allTasksList].sort((a, b) => {
     if (a.status === "overdue" !== (b.status === "overdue")) {
       return a.status === "overdue" ? -1 : 1;
     }
@@ -97,7 +98,7 @@ export default async function TasksPage() {
               {tasks.map((task) => {
                 const Icon = TYPE_ICON[task.type];
                 const tone = priorityMeta(task.priority);
-                const assignee = userByIdSync.get(task.assignedTo);
+                const assignee = userById.get(task.assignedTo);
 
                 return (
                   <li key={task.id}>

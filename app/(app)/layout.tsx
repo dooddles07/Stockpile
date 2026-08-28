@@ -6,13 +6,18 @@ import { AppSidebar } from "@/components/shell/app-sidebar";
 import { TopBar } from "@/components/shell/top-bar";
 import { OfflineBanner } from "@/components/states/offline-banner";
 import { getCurrentUser, getRole } from "@/lib/auth/session";
-import { navCountsSync } from "@/lib/repo/metrics";
-import { db } from "@/lib/data/store";
+import { navCounts } from "@/lib/repo/metrics";
+import { notifications as allNotifications } from "@/lib/repo/ops";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const [role, user, cookieStore] = await Promise.all([getRole(), getCurrentUser(), cookies()]);
-  const counts = navCountsSync();
-  const unread = db.notifications.filter((n) => !n.read).length;
+  const [role, user, cookieStore, counts, notifications] = await Promise.all([
+    getRole(),
+    getCurrentUser(),
+    cookies(),
+    navCounts(),
+    allNotifications(),
+  ]);
+  const unread = notifications.filter((n) => !n.read).length;
   const sidebarOpen = cookieStore.get("sidebar_state")?.value !== "false";
 
   return (
@@ -26,7 +31,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </a>
         <AppSidebar counts={counts} />
         <SidebarInset className="min-w-0 bg-background">
-          <TopBar notifications={db.notifications} unreadCount={unread} />
+          <TopBar notifications={notifications} unreadCount={unread} />
           <OfflineBanner />
           <main id="main" className="min-w-0 flex-1">
             {children}

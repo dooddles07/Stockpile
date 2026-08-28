@@ -9,7 +9,7 @@ import {
 } from "@/components/settings/setting-row";
 import { getRole } from "@/lib/auth/session";
 import { isReadOnly } from "@/lib/auth/permissions";
-import { db } from "@/lib/data/store";
+import { products, users, warehouses } from "@/lib/repo/reference";
 import { plural } from "@/lib/format";
 
 export const metadata: Metadata = {
@@ -29,6 +29,12 @@ const WEEK_START = { monday: "Monday", sunday: "Sunday" };
 export default async function CompanySettingsPage() {
   const role = await getRole();
   const readOnly = isReadOnly(role, "settings");
+
+  const [allWarehouses, allUsers, allProducts] = await Promise.all([
+    warehouses(),
+    users(),
+    products(),
+  ]);
 
   return (
     <div className="grid gap-4">
@@ -110,8 +116,8 @@ export default async function CompanySettingsPage() {
           <div className="min-w-0">
             <p className="text-[13px] font-medium">Stockpile North America</p>
             <p className="mt-0.5 text-caption leading-relaxed text-muted-foreground">
-              {plural(db.warehouses.length, "site")} · {plural(db.users.length, "user")} ·{" "}
-              {plural(db.products.length, "SKU")}. Other workspaces hold their own stock, users and
+              {plural(allWarehouses.length, "site")} · {plural(allUsers.length, "user")} ·{" "}
+              {plural(allProducts.length, "SKU")}. Other workspaces hold their own stock, users and
               settings; nothing is shared between them except the product catalogue.
             </p>
           </div>

@@ -11,7 +11,7 @@ import {
 } from "@/components/settings/setting-row";
 import { StatusBadge } from "@/components/status/status-badge";
 import { MeterBar } from "@/components/status/meter-bar";
-import { db } from "@/lib/data/store";
+import { users as allUsers } from "@/lib/repo/reference";
 import { getRole } from "@/lib/auth/session";
 import { isReadOnly } from "@/lib/auth/permissions";
 import { percent, plural, qty, relative } from "@/lib/format";
@@ -39,7 +39,7 @@ export default async function SecuritySettingsPage() {
   const role = await getRole();
   const readOnly = isReadOnly(role, "settings");
 
-  const users = db.users;
+  const users = await allUsers();
   const withTwoFactor = users.filter((u) => u.twoFactor);
   const coverage = users.length > 0 ? withTwoFactor.length / users.length : 0;
 
