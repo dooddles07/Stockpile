@@ -8,8 +8,8 @@ import { Section, StatTile } from "@/components/record/field-grid";
 import { SimpleTable } from "@/components/record/simple-table";
 import { StatusBadge } from "@/components/status/status-badge";
 import { Button } from "@/components/ui/button";
-import { db } from "@/lib/data/store";
-import { customerByIdSync, warehouseByIdSync } from "@/lib/repo/inventory";
+import { salesOrders as allSalesOrders } from "@/lib/repo/documents";
+import { customers as allCustomers, indexById, warehouses as allWarehouses } from "@/lib/repo/reference";
 import { NOW } from "@/lib/data/rng";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
@@ -28,7 +28,10 @@ export default async function PickingPage() {
 
   const now = NOW.getTime();
 
-  const queue = db.salesOrders
+  const customerById = await indexById(allCustomers);
+  const warehouseById = await indexById(allWarehouses);
+
+  const queue = (await allSalesOrders())
     .filter((o) => ["reserved", "picking"].includes(o.status))
     .map((o) => {
       const units = o.lines.reduce((s, l) => s + l.quantity, 0);
@@ -36,8 +39,8 @@ export default async function PickingPage() {
       return {
         id: o.id,
         number: o.number,
-        customer: customerByIdSync.get(o.customerId)?.name ?? "—",
-        warehouse: warehouseByIdSync.get(o.warehouseId)?.code ?? "—",
+        customer: customerById.get(o.customerId)?.name ?? "—",
+        warehouse: warehouseById.get(o.warehouseId)?.code ?? "—",
         status: o.status,
         promisedAt: o.promisedAt,
         late: new Date(o.promisedAt).getTime() < now,

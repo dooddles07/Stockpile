@@ -10,14 +10,21 @@ import { SimpleTable } from "@/components/record/simple-table";
 import { StatusBadge } from "@/components/status/status-badge";
 import { EmptyState, PermissionDenied } from "@/components/states";
 import { Button } from "@/components/ui/button";
-import { db } from "@/lib/data/store";
-import { customerByIdSync, locationByIdSync, productByIdSync, warehouseByIdSync } from "@/lib/repo/inventory";
+import { salesOrders as allSalesOrders } from "@/lib/repo/documents";
+import { allStockRows } from "@/lib/repo/inventory";
+import {
+  customers as allCustomers,
+  indexById,
+  locations as allLocations,
+  products as allProducts,
+  warehouses as allWarehouses,
+} from "@/lib/repo/reference";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { date, dueLabel, plural, qty } from "@/lib/format";
 import { NOW } from "@/lib/data/rng";
 import { cn } from "@/lib/utils";
-import type { StockLocation } from "@/lib/types";
+import type { StockLocation, StockRow } from "@/lib/types";
 
 export async function generateMetadata({
   params,
@@ -25,7 +32,7 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const order = db.salesOrders.find((o) => o.id === id);
+  const order = (await allSalesOrders()).find((o) => o.id === id);
   return order
     ? { title: `Pick list ${order.number}`, description: `Walk sheet for ${order.number}.` }
     : { title: "Pick list not found" };
@@ -61,11 +68,17 @@ export default async function PickListPage({ params }: { params: Promise<{ id: s
   if (!can(role, "fulfillment")) return <PermissionDenied module="fulfillment" role={role} />;
 
   const { id } = await params;
-  const order = db.salesOrders.find((o) => o.id === id);
+  const order = (await allSalesOrders()).find((o) => o.id === id);
   if (!order) notFound();
 
-  const customer = customerByIdSync.get(order.customerId);
-  const warehouse = warehouseByIdSync.get(order.warehouseId);
+  const customerById = await indexById(allCustomers);
+  const warehouseById = await indexById(allWarehouses);
+  const productById = await indexById(allProducts);
+  const locationById = await indexById(allLocations);
+  const stockRows = await allStockRows();
+
+  const customer = customerById.get(order.customerId);
+  const warehouse = warehouseById.get(order.warehouseId);
   const pickable = ["reserved", "picking"].includes(order.status);
 
   // Allocate first, sequence second. Which lot to take is a stock decision
@@ -78,12 +91,12 @@ export default async function PickListPage({ params }: { params: Promise<{ id: s
     const outstanding = line.quantity - line.fulfilled;
     if (outstanding <= 0) continue;
 
-    const product = productByIdSync.get(line.productId);
-    const bins = db.stockRows
+    const product = productById.get(line.productId);
+    const bins = stockRows
       .filter((s) => s.productId === line.productId && s.warehouseId === order.warehouseId)
-      .map((s) => ({ row: s, location: locationByIdSync.get(s.locationId) }))
+      .map((s) => ({ row: s, location: locationById.get(s.locationId) }))
       .filter(
-        (b): b is { row: (typeof db.stockRows)[number]; location: StockLocation } =>
+        (b): b is { row: StockRow; location: StockLocation } =>
           Boolean(b.location) && b.row.onHand - b.row.damaged > 0,
       )
       .sort((a, b) => {
