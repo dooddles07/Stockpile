@@ -7,7 +7,7 @@ import { PermissionDenied } from "@/components/states";
 import { Section } from "@/components/record/field-grid";
 import { Button } from "@/components/ui/button";
 import { ConnectionDialog } from "../connection-dialog";
-import { db } from "@/lib/data/store";
+import { integrations } from "@/lib/repo/ops";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 
@@ -86,7 +86,7 @@ export default async function ConnectIntegrationPage() {
   }
 
   const alreadyConnected = new Set(
-    db.integrations.filter((i) => i.status !== "disconnected").map((i) => i.name),
+    (await integrations()).filter((i) => i.status !== "disconnected").map((i) => i.name),
   );
   const groups = [...new Set(CATALOGUE.map((c) => c.group))];
 

@@ -7,7 +7,7 @@ import { EmptyState, PermissionDenied } from "@/components/states";
 import { Section, StatTile } from "@/components/record/field-grid";
 import { StatusBadge } from "@/components/status/status-badge";
 import { Button } from "@/components/ui/button";
-import { db } from "@/lib/data/store";
+import { integrations as allIntegrations } from "@/lib/repo/ops";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { plural, qty, relative } from "@/lib/format";
@@ -43,7 +43,7 @@ export default async function IntegrationsPage() {
   const role = await getRole();
   if (!can(role, "integrations")) return <PermissionDenied module="integrations" role={role} />;
 
-  const integrations = db.integrations;
+  const integrations = await allIntegrations();
   const connected = integrations.filter((i) => i.status === "connected");
   const errored = integrations.filter((i) => i.status === "error");
   const disconnected = integrations.filter((i) => i.status === "disconnected");
