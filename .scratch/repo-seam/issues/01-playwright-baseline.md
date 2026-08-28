@@ -10,12 +10,38 @@ There is currently one test file covering import validation that cannot run, bec
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Playwright is installed and configured to start the application itself for both local and CI runs
-- [ ] Every top-level route group is covered: dashboard, inventory, purchasing, sales, warehousing, analytics, admin, settings, approvals, tasks, notifications, import, and the operator screens
-- [ ] Assertions are on rendered values, ordering and counts — a lost sort order or a promise rendering as an object fails the suite
-- [ ] No assertion depends on repository function names, module structure, or anything else the refactor will deliberately change
-- [ ] The suite passes against the current code, unmodified, before any other ticket starts
-- [ ] The fixed dataset seed is documented as a dependency of the suite
-- [ ] The existing import validation test either runs under the new runner or is deleted
+- [x] Playwright is installed and configured to start the application itself for both local and CI runs
+- [x] Every top-level route group is covered: dashboard, inventory, purchasing, sales, warehousing, analytics, admin, settings, approvals, tasks, notifications, import, and the operator screens
+- [x] Assertions are on rendered values, ordering and counts — a lost sort order or a promise rendering as an object fails the suite
+- [x] No assertion depends on repository function names, module structure, or anything else the refactor will deliberately change
+- [x] The suite passes against the current code, unmodified, before any other ticket starts
+- [x] The fixed dataset seed is documented as a dependency of the suite
+- [x] The existing import validation test either runs under the new runner or is deleted
+
+## Comments
+
+Implemented in `playwright.config.ts` and `e2e/`. 29 tests, all passing cold
+(fresh `webServer` start, no pre-warmed dev server) as of commit `13e019d`.
+`npx tsc --noEmit` and `npm run lint` both clean.
+
+Review (`mattpocock-skills:code-review` against `0d867fa`, ticket as spec
+source) found and this ticket's work then fixed:
+
+- Row-order assertions checked only the first row of each table; expanded to
+  the first four, in order, on every tabular test.
+- `/operator/scan` (the fourth operator screen) had no coverage; added.
+- The `/import` test only checked static copy; replaced with a real file
+  upload of a dataset SKU (`BCL-DLP-111`), asserting the wizard reports it
+  as an existing record — proves the page reads `db.products`.
+- Surfaced a real infrastructure bug in the process: Playwright was bound to
+  `127.0.0.1`, which trips Next 16's dev-origin guard and silently drops
+  client JS, so pages loaded but never hydrated. Every other assertion
+  happened to only need static SSR'd text, so this went unnoticed until a
+  test needed a working `onChange` handler. Fixed by pointing the suite at
+  `localhost` instead (commit `255b093`).
+- Minor cleanup: deduplicated the repeated `main` locator into a fixture
+  (`e2e/fixtures.ts`), named the magic port number.
+
+Commits: `6dab743`, `d4a3412`, `e2c880d`, `255b093`, `13e019d`.
