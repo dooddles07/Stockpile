@@ -2,7 +2,7 @@ import "server-only";
 
 import { cookies } from "next/headers";
 
-import { db } from "@/lib/data/store";
+import { users } from "@/lib/repo/reference";
 import { ROLE_BY_ID } from "./permissions";
 import type { Role, User } from "@/lib/types";
 
@@ -24,9 +24,10 @@ export async function getRole(): Promise<Role> {
 /** A representative user for the active role, used for avatars and attribution. */
 export async function getCurrentUser(): Promise<User> {
   const role = await getRole();
+  const all = await users();
   return (
-    db.users.find((u) => u.role === role && u.status === "active") ??
-    db.users.find((u) => u.role === role) ??
-    db.users[0]
+    all.find((u) => u.role === role && u.status === "active") ??
+    all.find((u) => u.role === role) ??
+    all[0]
   );
 }

@@ -1,7 +1,10 @@
 import { db } from "@/lib/data/store";
-import { customerByIdSync, supplierByIdSync, warehouseByIdSync } from "./inventory";
 import type { ReturnRow } from "@/components/record/returns-view";
 import type { ReturnKind } from "@/lib/types";
+
+const supplierById = new Map(db.suppliers.map((s) => [s.id, s]));
+const customerById = new Map(db.customers.map((c) => [c.id, c]));
+const warehouseById = new Map(db.warehouses.map((w) => [w.id, w]));
 
 /**
  * Return rows for the list pages.
@@ -10,12 +13,12 @@ import type { ReturnKind } from "@/lib/types";
  * source document differ, so they are joined here once rather than in both
  * pages.
  */
-export function returnRowsSync(kind: ReturnKind): ReturnRow[] {
+export async function returnRows(kind: ReturnKind): Promise<ReturnRow[]> {
   return db.returns
     .filter((r) => r.kind === kind)
     .map((r) => {
       const partner =
-        kind === "purchase" ? supplierByIdSync.get(r.partnerId) : customerByIdSync.get(r.partnerId);
+        kind === "purchase" ? supplierById.get(r.partnerId) : customerById.get(r.partnerId);
 
       const restockLines = r.lines.filter((l) => l.restock);
 
@@ -32,7 +35,7 @@ export function returnRowsSync(kind: ReturnKind): ReturnRow[] {
           kind === "purchase"
             ? `/purchasing/purchase-orders/${r.sourceOrderId}`
             : `/sales/orders/${r.sourceOrderId}`,
-        warehouse: warehouseByIdSync.get(r.warehouseId)?.code ?? "—",
+        warehouse: warehouseById.get(r.warehouseId)?.code ?? "—",
         status: r.status,
         reason: r.reason,
         lines: r.lines.length,
@@ -45,8 +48,4 @@ export function returnRowsSync(kind: ReturnKind): ReturnRow[] {
       };
     })
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-}
-
-export async function returnRows(kind: ReturnKind): Promise<ReturnRow[]> {
-  return returnRowsSync(kind);
 }

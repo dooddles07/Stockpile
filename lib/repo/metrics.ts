@@ -5,22 +5,16 @@
  * than invented, so the trend line and the table underneath it tell the same
  * story. A dashboard that contradicts its own drill-down reads as fake.
  *
- * Every function that reads the dataset exists twice during this phase: the
- * original body under a `Sync` suffix (still used by every current caller,
- * unchanged), and a clean async name that only wraps it.
+ * Every function that reads the dataset is asynchronous — phase 2 replaces the
+ * bodies with real queries.
  */
 
 import { db } from "@/lib/data/store";
 import { moneyCompact } from "@/lib/format";
 import { DAY_MS, NOW } from "@/lib/data/rng";
-import {
-  allSummariesSync,
-  healthCountsSync,
-  productByIdSync,
-  summaryForSync,
-  totalInventoryValueSync,
-  warehouseRollupsSync,
-} from "./inventory";
+import { allSummaries, healthCounts, totalInventoryValue, warehouseRollups } from "./inventory";
+
+const productById = new Map(db.products.map((p) => [p.id, p]));
 
 const WEEK_MS = 7 * DAY_MS;
 
@@ -69,10 +63,10 @@ let valueTrendCache: Point[] | null = null;
  * Inventory value over the last 12 weeks, reconstructed by walking the ledger
  * backwards from the current valuation.
  */
-export function inventoryValueTrendSync(): Point[] {
+export async function inventoryValueTrend(): Promise<Point[]> {
   if (valueTrendCache) return valueTrendCache;
   const buckets = weekBuckets(12);
-  const current = totalInventoryValueSync();
+  const current = await totalInventoryValue();
 
   const deltas = buckets.map((b) =>
     db.movements
@@ -93,14 +87,10 @@ export function inventoryValueTrendSync(): Point[] {
   return points;
 }
 
-export async function inventoryValueTrend(): Promise<Point[]> {
-  return inventoryValueTrendSync();
-}
-
 let movementTrendCache: Point[] | null = null;
 
 /** Units received vs units shipped, per week. */
-export function movementTrendSync(): Point[] {
+export async function movementTrend(): Promise<Point[]> {
   if (movementTrendCache) return movementTrendCache;
   movementTrendCache = weekBuckets(12).map((b) => {
     let inbound = 0;
@@ -116,14 +106,10 @@ export function movementTrendSync(): Point[] {
   return movementTrendCache;
 }
 
-export async function movementTrend(): Promise<Point[]> {
-  return movementTrendSync();
-}
-
 let purchaseSalesCache: Point[] | null = null;
 
 /** Purchase spend vs sales revenue, per month. */
-export function purchasesVsSalesSync(): Point[] {
+export async function purchasesVsSales(): Promise<Point[]> {
   if (purchaseSalesCache) return purchaseSalesCache;
   purchaseSalesCache = monthBuckets(12).map((b) => {
     const purchases = db.purchaseOrders
@@ -145,13 +131,9 @@ export function purchasesVsSalesSync(): Point[] {
   return purchaseSalesCache;
 }
 
-export async function purchasesVsSales(): Promise<Point[]> {
-  return purchasesVsSalesSync();
-}
-
 /** Stock composition per warehouse — available / reserved / damaged / in transit. */
-export function warehouseCompositionSync(): Point[] {
-  return warehouseRollupsSync().map((w) => {
+export async function warehouseComposition(): Promise<Point[]> {
+  return (await warehouseRollups()).map((w) => {
     const rows = db.stockRows.filter((r) => r.warehouseId === w.id);
     let available = 0, reserved = 0, damaged = 0, inTransit = 0;
     for (const row of rows) {
@@ -164,13 +146,9 @@ export function warehouseCompositionSync(): Point[] {
   });
 }
 
-export async function warehouseComposition(): Promise<Point[]> {
-  return warehouseCompositionSync();
-}
-
 /** Inventory turnover per month: cost of goods shipped ÷ average stock value. */
-export function turnoverTrendSync(): Point[] {
-  const value = totalInventoryValueSync();
+export async function turnoverTrend(): Promise<Point[]> {
+  const value = await totalInventoryValue();
   return monthBuckets(12).map((b) => {
     const cogs = db.movements
       .filter((m) => {
@@ -180,10 +158,6 @@ export function turnoverTrendSync(): Point[] {
       .reduce((s, m) => s + Math.abs(m.valueChange), 0);
     return { label: b.label, turnover: Math.round((cogs / Math.max(1, value)) * 1200) / 100 };
   });
-}
-
-export async function turnoverTrend(): Promise<Point[]> {
-  return turnoverTrendSync();
 }
 
 /* ---------------------------------------------------------------- kpis --- */
@@ -209,21 +183,17 @@ function pctChange(now: number, before: number): number | null {
   return (now - before) / before;
 }
 
-export function inventoryAccuracySync(): number {
+export async function inventoryAccuracy(): Promise<number> {
   const counted = db.stockCounts.filter((c) => ["approved", "applied"].includes(c.status));
   if (!counted.length) return 0;
   return counted.reduce((s, c) => s + c.accuracyPct, 0) / counted.length / 100;
 }
 
-export async function inventoryAccuracy(): Promise<number> {
-  return inventoryAccuracySync();
-}
-
-export function dashboardKpisSync(): Kpi[] {
-  const trend = inventoryValueTrendSync();
-  const value = totalInventoryValueSync();
+export async function dashboardKpis(): Promise<Kpi[]> {
+  const trend = await inventoryValueTrend();
+  const value = await totalInventoryValue();
   const priorValue = Number(trend[trend.length - 5]?.value ?? value);
-  const health = healthCountsSync();
+  const health = await healthCounts();
 
   const activeSkus = db.products.filter((p) => p.status === "active").length;
 
@@ -243,11 +213,12 @@ export function dashboardKpisSync(): Kpi[] {
     ["in-transit", "partially-received"].includes(t.status),
   );
 
-  const accuracy = inventoryAccuracySync();
+  const accuracy = await inventoryAccuracy();
 
-  const movement = movementTrendSync();
+  const movement = await movementTrend();
   const inboundSpark = movement.map((p) => Number(p.inbound));
   const outboundSpark = movement.map((p) => Number(p.outbound));
+  const purchaseSales = await purchasesVsSales();
 
   return [
     {
@@ -315,7 +286,7 @@ export function dashboardKpisSync(): Kpi[] {
       goodWhen: "up",
       href: "/purchasing/purchase-orders",
       hint: "Submitted through to partially received. Excludes drafts and closed orders.",
-      spark: purchasesVsSalesSync().map((p) => Number(p.purchases)),
+      spark: purchaseSales.map((p) => Number(p.purchases)),
     },
     {
       key: "pending-receipts",
@@ -364,20 +335,16 @@ export function dashboardKpisSync(): Kpi[] {
   ];
 }
 
-export async function dashboardKpis(): Promise<Kpi[]> {
-  return dashboardKpisSync();
-}
-
 /* -------------------------------------------------------------- widgets -- */
 
-export function lowStockAlertsSync(limit = 8) {
-  return allSummariesSync()
+export async function lowStockAlerts(limit = 8) {
+  return (await allSummaries())
     .filter((s) => {
-      const p = productByIdSync.get(s.productId);
+      const p = productById.get(s.productId);
       return p?.status === "active" && (s.health === "critical" || s.health === "out-of-stock" || s.health === "low");
     })
     .map((s) => {
-      const p = productByIdSync.get(s.productId)!;
+      const p = productById.get(s.productId)!;
       return {
         product: p,
         stock: s,
@@ -392,11 +359,7 @@ export function lowStockAlertsSync(limit = 8) {
     .slice(0, limit);
 }
 
-export async function lowStockAlerts(limit = 8) {
-  return lowStockAlertsSync(limit);
-}
-
-export function pendingApprovalsSync() {
+export async function pendingApprovals() {
   const pos = db.purchaseOrders
     .filter((p) => p.status === "submitted")
     .map((p) => ({
@@ -420,7 +383,7 @@ export function pendingApprovalsSync() {
       number: t.number,
       title: `Stock transfer ${t.number}`,
       subtitle: `${db.warehouses.find((w) => w.id === t.fromWarehouseId)?.code} → ${db.warehouses.find((w) => w.id === t.toWarehouseId)?.code}`,
-      amount: t.lines.reduce((s, l) => s + l.quantity * (productByIdSync.get(l.productId)?.unitCost ?? 0), 0),
+      amount: t.lines.reduce((s, l) => s + l.quantity * (productById.get(l.productId)?.unitCost ?? 0), 0),
       createdAt: t.createdAt,
       requestedBy: t.requestedBy,
       href: `/warehousing/transfers/${t.id}`,
@@ -460,11 +423,7 @@ export function pendingApprovalsSync() {
   return [...pos, ...trs, ...adjs, ...counts].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
-export async function pendingApprovals() {
-  return pendingApprovalsSync();
-}
-
-export function expiringLotsSync(days = 30, limit = 20) {
+export async function expiringLots(days = 30, limit = 20) {
   return db.stockRows
     .filter((r) => {
       if (!r.expiresAt || r.onHand <= 0) return false;
@@ -472,7 +431,7 @@ export function expiringLotsSync(days = 30, limit = 20) {
       return d <= days;
     })
     .map((r) => {
-      const p = productByIdSync.get(r.productId)!;
+      const p = productById.get(r.productId)!;
       return {
         row: r,
         product: p,
@@ -484,45 +443,29 @@ export function expiringLotsSync(days = 30, limit = 20) {
     .slice(0, limit);
 }
 
-export async function expiringLots(days = 30, limit = 20) {
-  return expiringLotsSync(days, limit);
-}
-
-export function recentMovementsSync(limit = 10) {
+export async function recentMovements(limit = 10) {
   return db.movements.slice(0, limit);
 }
 
-export async function recentMovements(limit = 10) {
-  return recentMovementsSync(limit);
-}
-
-export function recentReceiptsSync(limit = 6) {
+export async function recentReceipts(limit = 6) {
   return db.purchaseOrders
     .filter((p) => p.receivedAt)
     .sort((a, b) => (b.receivedAt ?? "").localeCompare(a.receivedAt ?? ""))
     .slice(0, limit);
 }
 
-export async function recentReceipts(limit = 6) {
-  return recentReceiptsSync(limit);
-}
-
-export function transfersInFlightSync(limit = 6) {
+export async function transfersInFlight(limit = 6) {
   return db.transfers
     .filter((t) => ["in-transit", "partially-received"].includes(t.status))
     .sort((a, b) => (a.expectedAt ?? "").localeCompare(b.expectedAt ?? ""))
     .slice(0, limit);
 }
 
-export async function transfersInFlight(limit = 6) {
-  return transfersInFlightSync(limit);
-}
-
 /** Live counters that badge the sidebar. */
-export function navCountsSync() {
-  const health = healthCountsSync();
+export async function navCounts() {
+  const health = await healthCounts();
   return {
-    approvals: pendingApprovalsSync().length,
+    approvals: (await pendingApprovals()).length,
     // Matches the Low stock saved view exactly. Out of stock has its own view.
     lowStock: health.low + health.critical,
     receiving: db.purchaseOrders.filter((p) => ["ordered", "partially-received"].includes(p.status)).length,
@@ -531,14 +474,11 @@ export function navCountsSync() {
   };
 }
 
-export async function navCounts() {
-  return navCountsSync();
-}
-
-export type NavCounts = ReturnType<typeof navCountsSync>;
+export type NavCounts = Awaited<ReturnType<typeof navCounts>>;
 
 /** Value of stock that has not moved in `days`. */
-export function deadStockSync(days = 180) {
+export async function deadStock(days = 180) {
+  const summaries = new Map((await allSummaries()).map((s) => [s.productId, s]));
   const cutoff = NOW.getTime() - days * DAY_MS;
   const lastMove = new Map<string, number>();
   for (const m of db.movements) {
@@ -547,15 +487,11 @@ export function deadStockSync(days = 180) {
     if (t > cur) lastMove.set(m.productId, t);
   }
   return db.products
-    .filter((p) => (lastMove.get(p.id) ?? 0) < cutoff && summaryForSync(p.id).value > 0)
+    .filter((p) => (lastMove.get(p.id) ?? 0) < cutoff && (summaries.get(p.id)?.value ?? 0) > 0)
     .map((p) => ({
       product: p,
-      value: summaryForSync(p.id).value,
+      value: summaries.get(p.id)?.value ?? 0,
       lastMovedAt: lastMove.get(p.id) ? new Date(lastMove.get(p.id)!).toISOString() : null,
     }))
     .sort((a, b) => b.value - a.value);
-}
-
-export async function deadStock(days = 180) {
-  return deadStockSync(days);
 }

@@ -1,15 +1,15 @@
 import {
-  agingBucketsSync,
-  categoryPerformanceSync,
-  deadStockRowsSync,
-  productPerformanceSync,
-  spendByCategorySync,
-  supplierScorecardsSync,
-  turnoverRowsSync,
-  valuationRowsSync,
-  warehousePerformanceSync,
+  agingBuckets,
+  categoryPerformance,
+  deadStockRows,
+  productPerformance,
+  spendByCategory,
+  supplierScorecards,
+  turnoverRows,
+  valuationRows,
+  warehousePerformance,
 } from "./analytics";
-import { healthCountsSync, stockLevelRowsSync } from "./inventory";
+import { healthCounts, stockLevelRows } from "./inventory";
 import { db } from "@/lib/data/store";
 import { NOW } from "@/lib/data/rng";
 import { money, percent, qty } from "@/lib/format";
@@ -26,6 +26,8 @@ export interface ReportColumn {
   format?: (value: unknown) => string;
 }
 
+type SummaryLine = { label: string; value: string };
+
 export interface ReportDefinition {
   slug: string;
   name: string;
@@ -35,9 +37,9 @@ export interface ReportDefinition {
   purpose: string;
   module: ModuleKey;
   columns: ReportColumn[];
-  run: () => Record<string, unknown>[];
+  run: () => Promise<Record<string, unknown>[]>;
   /** Headline figures shown above the table. */
-  summary?: (rows: Record<string, unknown>[]) => { label: string; value: string }[];
+  summary?: (rows: Record<string, unknown>[]) => SummaryLine[] | Promise<SummaryLine[]>;
 }
 
 const asMoney = (v: unknown) => money(Number(v));
@@ -64,7 +66,7 @@ export const REPORTS: ReportDefinition[] = [
       { key: "fifoValue", header: "Value (FIFO)", align: "right", format: asMoney },
       { key: "retailValue", header: "Retail value", align: "right", format: asMoney },
     ],
-    run: () => valuationRowsSync() as unknown as Record<string, unknown>[],
+    run: async () => (await valuationRows()) as unknown as Record<string, unknown>[],
     summary: (rows) => [
       { label: "SKUs", value: qty(rows.length) },
       { label: "Units", value: qty(rows.reduce((s, r) => s + Number(r.onHand), 0)) },
@@ -90,7 +92,7 @@ export const REPORTS: ReportDefinition[] = [
       { key: "health", header: "Health", format: (v) => humanize(String(v)) },
       { key: "value", header: "Value", align: "right", format: asMoney },
     ],
-    run: () => stockLevelRowsSync() as unknown as Record<string, unknown>[],
+    run: async () => (await stockLevelRows()) as unknown as Record<string, unknown>[],
     summary: (rows) => [
       { label: "Records", value: qty(rows.length) },
       { label: "Units", value: qty(rows.reduce((s, r) => s + Number(r.onHand), 0)) },
@@ -113,16 +115,16 @@ export const REPORTS: ReportDefinition[] = [
       { key: "incoming", header: "Incoming", align: "right", format: asQty },
       { key: "health", header: "Health", format: (v) => humanize(String(v)) },
     ],
-    run: () =>
-      stockLevelRowsSync()
+    run: async () =>
+      (await stockLevelRows())
         .filter(
           (r) =>
             r.productStatus === "active" &&
             ["low", "critical", "out-of-stock"].includes(r.health),
         )
         .sort((a, b) => a.available - b.available) as unknown as Record<string, unknown>[],
-    summary: (rows) => {
-      const health = healthCountsSync();
+    summary: async (rows) => {
+      const health = await healthCounts();
       return [
         { label: "Records", value: qty(rows.length) },
         { label: "Out of stock", value: qty(health["out-of-stock"]) },
@@ -149,8 +151,8 @@ export const REPORTS: ReportDefinition[] = [
       { key: "turns", header: "Turns", align: "right", format: (v) => Number(v).toFixed(2) },
       { key: "daysOfCover", header: "Days of cover", align: "right", format: asText },
     ],
-    run: () =>
-      turnoverRowsSync().sort((a, b) => b.stockValue - a.stockValue) as unknown as Record<
+    run: async () =>
+      (await turnoverRows()).sort((a, b) => b.stockValue - a.stockValue) as unknown as Record<
         string,
         unknown
       >[],
@@ -170,7 +172,7 @@ export const REPORTS: ReportDefinition[] = [
       { key: "stockValue", header: "Value", align: "right", format: asMoney },
       { key: "daysSinceMovement", header: "Days since movement", align: "right", format: asText },
     ],
-    run: () => deadStockRowsSync() as unknown as Record<string, unknown>[],
+    run: async () => (await deadStockRows()) as unknown as Record<string, unknown>[],
     summary: (rows) => [
       { label: "SKUs", value: qty(rows.length) },
       { label: "Value", value: money(rows.reduce((s, r) => s + Number(r.stockValue), 0)) },
@@ -189,7 +191,7 @@ export const REPORTS: ReportDefinition[] = [
       { key: "units", header: "Units", align: "right", format: asQty },
       { key: "value", header: "Value", align: "right", format: asMoney },
     ],
-    run: () => agingBucketsSync() as unknown as Record<string, unknown>[],
+    run: async () => (await agingBuckets()) as unknown as Record<string, unknown>[],
   },
   {
     slug: "supplier-performance",
@@ -208,7 +210,7 @@ export const REPORTS: ReportDefinition[] = [
       { key: "defectRate", header: "Defects", align: "right", format: (v) => percent(Number(v), 2) },
       { key: "overdueOrders", header: "Overdue", align: "right", format: asQty },
     ],
-    run: () => supplierScorecardsSync() as unknown as Record<string, unknown>[],
+    run: async () => (await supplierScorecards()) as unknown as Record<string, unknown>[],
     summary: (rows) => [
       { label: "Suppliers", value: qty(rows.length) },
       { label: "Total spend", value: money(rows.reduce((s, r) => s + Number(r.spend), 0)) },
@@ -229,7 +231,7 @@ export const REPORTS: ReportDefinition[] = [
       { key: "name", header: "Category" },
       { key: "value", header: "Spend", align: "right", format: asMoney },
     ],
-    run: () => spendByCategorySync() as unknown as Record<string, unknown>[],
+    run: async () => (await spendByCategory()) as unknown as Record<string, unknown>[],
   },
   {
     slug: "open-purchase-orders",
@@ -248,7 +250,7 @@ export const REPORTS: ReportDefinition[] = [
       { key: "expected", header: "Expected" },
       { key: "daysLate", header: "Days late", align: "right", format: asText },
     ],
-    run: () =>
+    run: async () =>
       db.purchaseOrders
         .filter((p) =>
           ["submitted", "approved", "ordered", "partially-received"].includes(p.status),
@@ -287,7 +289,7 @@ export const REPORTS: ReportDefinition[] = [
       { key: "margin", header: "Margin", align: "right", format: asMoney },
       { key: "marginPct", header: "Margin %", align: "right", format: (v) => percent(Number(v), 1) },
     ],
-    run: () => productPerformanceSync() as unknown as Record<string, unknown>[],
+    run: async () => (await productPerformance()) as unknown as Record<string, unknown>[],
     summary: (rows) => [
       { label: "SKUs sold", value: qty(rows.length) },
       { label: "Revenue", value: money(rows.reduce((s, r) => s + Number(r.revenue), 0)) },
@@ -309,7 +311,7 @@ export const REPORTS: ReportDefinition[] = [
       { key: "margin", header: "Margin", align: "right", format: asMoney },
       { key: "marginPct", header: "Margin %", align: "right", format: (v) => percent(Number(v), 1) },
     ],
-    run: () => categoryPerformanceSync() as unknown as Record<string, unknown>[],
+    run: async () => (await categoryPerformance()) as unknown as Record<string, unknown>[],
   },
   {
     slug: "warehouse-performance",
@@ -328,7 +330,7 @@ export const REPORTS: ReportDefinition[] = [
       { key: "shippingOnTime", header: "Shipped on time", align: "right", format: asPct },
       { key: "shrinkageValue", header: "Shrinkage", align: "right", format: asMoney },
     ],
-    run: () => warehousePerformanceSync() as unknown as Record<string, unknown>[],
+    run: async () => (await warehousePerformance()) as unknown as Record<string, unknown>[],
   },
   {
     slug: "movement-ledger",
@@ -348,7 +350,7 @@ export const REPORTS: ReportDefinition[] = [
       { key: "refNumber", header: "Reference" },
       { key: "user", header: "User" },
     ],
-    run: () =>
+    run: async () =>
       db.movements.slice(0, 500).map((m) => ({
         ts: m.ts.slice(0, 16).replace("T", " "),
         type: m.type,
@@ -367,31 +369,19 @@ export const REPORTS: ReportDefinition[] = [
   },
 ];
 
-export function reportBySlugSync(slug: string): ReportDefinition | undefined {
+export async function reportBySlug(slug: string): Promise<ReportDefinition | undefined> {
   return REPORTS.find((r) => r.slug === slug);
 }
 
-export async function reportBySlug(slug: string): Promise<ReportDefinition | undefined> {
-  return reportBySlugSync(slug);
-}
-
-export function reportGroupsSync(): ReportGroup[] {
+export async function reportGroups(): Promise<ReportGroup[]> {
   return ["Inventory", "Purchasing", "Sales", "Warehouse"];
 }
 
-export async function reportGroups(): Promise<ReportGroup[]> {
-  return reportGroupsSync();
-}
-
 /** Used only for the "records" count on the report cards. */
-export function reportSizeSync(report: ReportDefinition): number {
+export async function reportSize(report: ReportDefinition): Promise<number> {
   try {
-    return report.run().length;
+    return (await report.run()).length;
   } catch {
     return 0;
   }
-}
-
-export async function reportSize(report: ReportDefinition): Promise<number> {
-  return reportSizeSync(report);
 }

@@ -4,7 +4,7 @@
  * Raw reads of the event-sourced document tables (Purchase Order, Sales
  * Order, Transfer, Adjustment, Stock Count, Return) plus the Movement
  * ledger, unjoined. See `reference.ts` for why these are raw lists rather
- * than screen-shaped joins, and `inventory.ts` for the Sync/async pattern.
+ * than screen-shaped joins.
  */
 
 import { db } from "@/lib/data/store";
@@ -18,28 +18,16 @@ import type {
   Transfer,
 } from "@/lib/types";
 
-export function purchaseOrdersSync(): PurchaseOrder[] {
+export async function purchaseOrders(): Promise<PurchaseOrder[]> {
   return db.purchaseOrders;
 }
 
-export async function purchaseOrders(): Promise<PurchaseOrder[]> {
-  return purchaseOrdersSync();
-}
-
-export function salesOrdersSync(): SalesOrder[] {
+export async function salesOrders(): Promise<SalesOrder[]> {
   return db.salesOrders;
 }
 
-export async function salesOrders(): Promise<SalesOrder[]> {
-  return salesOrdersSync();
-}
-
-export function transfersSync(): Transfer[] {
-  return db.transfers;
-}
-
 export async function transfers(): Promise<Transfer[]> {
-  return transfersSync();
+  return db.transfers;
 }
 
 export interface TransferRow extends Transfer {
@@ -66,34 +54,18 @@ export async function transferRows(): Promise<TransferRow[]> {
   }));
 }
 
-export function adjustmentsSync(): Adjustment[] {
+export async function adjustments(): Promise<Adjustment[]> {
   return db.adjustments;
 }
 
-export async function adjustments(): Promise<Adjustment[]> {
-  return adjustmentsSync();
-}
-
-export function stockCountsSync(): StockCount[] {
+export async function stockCounts(): Promise<StockCount[]> {
   return db.stockCounts;
 }
 
-export async function stockCounts(): Promise<StockCount[]> {
-  return stockCountsSync();
-}
-
-export function returnsSync(): ReturnDoc[] {
+export async function returns(): Promise<ReturnDoc[]> {
   return db.returns;
 }
 
-export async function returns(): Promise<ReturnDoc[]> {
-  return returnsSync();
-}
-
-export function movementsSync(): Movement[] {
-  return db.movements;
-}
-
 export async function movements(): Promise<Movement[]> {
-  return movementsSync();
+  return db.movements;
 }

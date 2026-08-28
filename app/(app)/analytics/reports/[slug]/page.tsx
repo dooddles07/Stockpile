@@ -42,8 +42,8 @@ export default async function ReportPage({
     return <PermissionDenied module={report.module} role={role} />;
   }
 
-  const raw = report.run();
-  const summary = report.summary?.(raw) ?? [
+  const raw = await report.run();
+  const summary = (await report.summary?.(raw)) ?? [
     { label: "Rows", value: qty(raw.length) },
   ];
 

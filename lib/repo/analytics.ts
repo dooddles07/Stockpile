@@ -5,24 +5,26 @@
  * operational screens read, so a number on a report and the same number on a
  * list page cannot drift apart.
  *
- * Every function that reads the dataset exists twice during this phase: the
- * original body under a `Sync` suffix (still used by every current caller,
- * unchanged), and a clean async name that only wraps it.
+ * Every function that reads the dataset is asynchronous — phase 2 replaces the
+ * bodies with real queries. The `*ById` maps below are private synchronous
+ * indexes over the in-memory dataset, an implementation detail of the current
+ * bodies.
  */
 
 import { db } from "@/lib/data/store";
 import { DAY_MS, NOW } from "@/lib/data/rng";
-import {
-  allSummariesSync,
-  categoryByIdSync,
-  customerByIdSync,
-  productByIdSync,
-  summaryForSync,
-  totalInventoryValueSync,
-  warehouseRollupsSync,
-} from "./inventory";
+import { allSummaries, totalInventoryValue, warehouseRollups } from "./inventory";
+import type { StockSummary } from "@/lib/types";
 
 const round = (n: number) => Math.round(n * 100) / 100;
+
+const productById = new Map(db.products.map((p) => [p.id, p]));
+const categoryById = new Map(db.categories.map((c) => [c.id, c]));
+const customerById = new Map(db.customers.map((c) => [c.id, c]));
+
+async function summaryMap(): Promise<Map<string, StockSummary>> {
+  return new Map((await allSummaries()).map((s) => [s.productId, s]));
+}
 
 /* ------------------------------------------------------------ valuation -- */
 
@@ -49,7 +51,8 @@ export interface ValuationRow {
  * and values the on-hand quantity at the prices actually paid for the most
  * recent receipts — which is why the two differ when purchase prices move.
  */
-export function valuationRowsSync(): ValuationRow[] {
+export async function valuationRows(): Promise<ValuationRow[]> {
+  const summaries = await summaryMap();
   const receiptsByProduct = new Map<string, { qty: number; price: number; ts: string }[]>();
   for (const po of db.purchaseOrders) {
     if (!["partially-received", "received", "closed"].includes(po.status)) continue;
@@ -67,7 +70,7 @@ export function valuationRowsSync(): ValuationRow[] {
 
   return db.products
     .map((product) => {
-      const stock = summaryForSync(product.id);
+      const stock = summaries.get(product.id)!;
       if (stock.onHand <= 0) return null;
 
       // FIFO: the units still on hand are the most recently received ones.
@@ -92,7 +95,7 @@ export function valuationRowsSync(): ValuationRow[] {
         productId: product.id,
         sku: product.sku,
         name: product.shortName,
-        category: categoryByIdSync.get(product.categoryId)?.name ?? "—",
+        category: categoryById.get(product.categoryId)?.name ?? "—",
         onHand: stock.onHand,
         unitCost: product.unitCost,
         avcoValue: round(avcoValue),
@@ -104,10 +107,6 @@ export function valuationRowsSync(): ValuationRow[] {
     })
     .filter((r): r is ValuationRow => r !== null)
     .sort((a, b) => b.avcoValue - a.avcoValue);
-}
-
-export async function valuationRows(): Promise<ValuationRow[]> {
-  return valuationRowsSync();
 }
 
 /* ------------------------------------------------------------- turnover -- */
@@ -131,9 +130,10 @@ const YEAR_AGO = NOW.getTime() - 365 * DAY_MS;
 
 let turnoverCache: TurnoverRow[] | null = null;
 
-export function turnoverRowsSync(): TurnoverRow[] {
+export async function turnoverRows(): Promise<TurnoverRow[]> {
   if (turnoverCache) return turnoverCache;
 
+  const summaries = await summaryMap();
   const sold = new Map<string, { units: number; cost: number }>();
   const lastMoved = new Map<string, number>();
 
@@ -149,7 +149,7 @@ export function turnoverRowsSync(): TurnoverRow[] {
 
   turnoverCache = db.products
     .map((product) => {
-      const stock = summaryForSync(product.id);
+      const stock = summaries.get(product.id)!;
       const s = sold.get(product.id) ?? { units: 0, cost: 0 };
       const stockValue = stock.value;
       const moved = lastMoved.get(product.id) ?? null;
@@ -162,7 +162,7 @@ export function turnoverRowsSync(): TurnoverRow[] {
         productId: product.id,
         sku: product.sku,
         name: product.shortName,
-        category: categoryByIdSync.get(product.categoryId)?.name ?? "—",
+        category: categoryById.get(product.categoryId)?.name ?? "—",
         onHand: stock.onHand,
         stockValue,
         cogs12m: round(s.cost),
@@ -178,13 +178,9 @@ export function turnoverRowsSync(): TurnoverRow[] {
   return turnoverCache;
 }
 
-export async function turnoverRows(): Promise<TurnoverRow[]> {
-  return turnoverRowsSync();
-}
-
 /** Stock with value on the shelf that has not moved in `days`. */
-export function deadStockRowsSync(days = 180): TurnoverRow[] {
-  return turnoverRowsSync()
+export async function deadStockRows(days = 180): Promise<TurnoverRow[]> {
+  return (await turnoverRows())
     .filter(
       (r) =>
         r.stockValue > 0 &&
@@ -193,12 +189,8 @@ export function deadStockRowsSync(days = 180): TurnoverRow[] {
     .sort((a, b) => b.stockValue - a.stockValue);
 }
 
-export async function deadStockRows(days = 180): Promise<TurnoverRow[]> {
-  return deadStockRowsSync(days);
-}
-
 /** Ageing buckets by how long since the SKU last moved. */
-export function agingBucketsSync() {
+export async function agingBuckets() {
   const buckets = [
     { label: "0–30 days", min: 0, max: 30 },
     { label: "31–60 days", min: 31, max: 60 },
@@ -207,7 +199,7 @@ export function agingBucketsSync() {
     { label: "Over 180 days", min: 181, max: Infinity },
   ];
 
-  const rows = turnoverRowsSync().filter((r) => r.stockValue > 0);
+  const rows = (await turnoverRows()).filter((r) => r.stockValue > 0);
 
   return buckets.map((b) => {
     const inBucket = rows.filter((r) => {
@@ -221,10 +213,6 @@ export function agingBucketsSync() {
       units: inBucket.reduce((s, r) => s + r.onHand, 0),
     };
   });
-}
-
-export async function agingBuckets() {
-  return agingBucketsSync();
 }
 
 /* ---------------------------------------------------------- sales rollups */
@@ -244,7 +232,7 @@ export interface ProductPerformanceRow {
 
 let performanceCache: ProductPerformanceRow[] | null = null;
 
-export function productPerformanceSync(): ProductPerformanceRow[] {
+export async function productPerformance(): Promise<ProductPerformanceRow[]> {
   if (performanceCache) return performanceCache;
 
   const acc = new Map<string, { units: number; revenue: number; cost: number; orders: Set<string> }>();
@@ -254,7 +242,7 @@ export function productPerformanceSync(): ProductPerformanceRow[] {
     for (const line of order.lines) {
       const cur =
         acc.get(line.productId) ?? { units: 0, revenue: 0, cost: 0, orders: new Set<string>() };
-      const product = productByIdSync.get(line.productId);
+      const product = productById.get(line.productId);
       cur.units += line.quantity;
       cur.revenue += line.lineTotal;
       cur.cost += line.quantity * (product?.unitCost ?? 0);
@@ -265,13 +253,13 @@ export function productPerformanceSync(): ProductPerformanceRow[] {
 
   performanceCache = [...acc.entries()]
     .map(([productId, v]) => {
-      const product = productByIdSync.get(productId);
+      const product = productById.get(productId);
       const margin = v.revenue - v.cost;
       return {
         productId,
         sku: product?.sku ?? "—",
         name: product?.shortName ?? "—",
-        category: product ? (categoryByIdSync.get(product.categoryId)?.name ?? "—") : "—",
+        category: product ? (categoryById.get(product.categoryId)?.name ?? "—") : "—",
         unitsSold: v.units,
         revenue: round(v.revenue),
         cost: round(v.cost),
@@ -285,13 +273,9 @@ export function productPerformanceSync(): ProductPerformanceRow[] {
   return performanceCache;
 }
 
-export async function productPerformance(): Promise<ProductPerformanceRow[]> {
-  return productPerformanceSync();
-}
-
-export function categoryPerformanceSync() {
+export async function categoryPerformance() {
   const acc = new Map<string, { revenue: number; margin: number; units: number; skus: Set<string> }>();
-  for (const row of productPerformanceSync()) {
+  for (const row of await productPerformance()) {
     const cur = acc.get(row.category) ?? { revenue: 0, margin: 0, units: 0, skus: new Set<string>() };
     cur.revenue += row.revenue;
     cur.margin += row.margin;
@@ -311,11 +295,7 @@ export function categoryPerformanceSync() {
     .sort((a, b) => b.revenue - a.revenue);
 }
 
-export async function categoryPerformance() {
-  return categoryPerformanceSync();
-}
-
-export function topCustomersSync(limit = 10) {
+export async function topCustomers(limit = 10) {
   const acc = new Map<string, { revenue: number; orders: number; units: number }>();
   for (const order of db.salesOrders) {
     if (["cancelled", "draft"].includes(order.status)) continue;
@@ -328,8 +308,8 @@ export function topCustomersSync(limit = 10) {
   return [...acc.entries()]
     .map(([id, v]) => ({
       id,
-      name: customerByIdSync.get(id)?.name ?? "—",
-      code: customerByIdSync.get(id)?.code ?? "—",
+      name: customerById.get(id)?.name ?? "—",
+      code: customerById.get(id)?.code ?? "—",
       revenue: Math.round(v.revenue),
       orders: v.orders,
       units: v.units,
@@ -339,13 +319,9 @@ export function topCustomersSync(limit = 10) {
     .slice(0, limit);
 }
 
-export async function topCustomers(limit = 10) {
-  return topCustomersSync(limit);
-}
-
 /* ------------------------------------------------------ purchasing rollups */
 
-export function supplierScorecardsSync() {
+export async function supplierScorecards() {
   return db.suppliers
     .map((supplier) => {
       const orders = db.purchaseOrders.filter((p) => p.supplierId === supplier.id);
@@ -385,17 +361,13 @@ export function supplierScorecardsSync() {
     .sort((a, b) => b.spend - a.spend);
 }
 
-export async function supplierScorecards() {
-  return supplierScorecardsSync();
-}
-
-export function spendByCategorySync() {
+export async function spendByCategory() {
   const acc = new Map<string, number>();
   for (const po of db.purchaseOrders) {
     if (["cancelled", "draft"].includes(po.status)) continue;
     for (const line of po.lines) {
-      const product = productByIdSync.get(line.productId);
-      const name = product ? (categoryByIdSync.get(product.categoryId)?.name ?? "—") : "—";
+      const product = productById.get(line.productId);
+      const name = product ? (categoryById.get(product.categoryId)?.name ?? "—") : "—";
       acc.set(name, (acc.get(name) ?? 0) + line.lineTotal);
     }
   }
@@ -404,14 +376,10 @@ export function spendByCategorySync() {
     .sort((a, b) => b.value - a.value);
 }
 
-export async function spendByCategory() {
-  return spendByCategorySync();
-}
-
 /* ------------------------------------------------------- warehouse rollups */
 
-export function warehousePerformanceSync() {
-  return warehouseRollupsSync().map((w) => {
+export async function warehousePerformance() {
+  return (await warehouseRollups()).map((w) => {
     const receipts = db.purchaseOrders.filter(
       (p) => p.warehouseId === w.id && ["received", "closed"].includes(p.status),
     );
@@ -456,17 +424,13 @@ export function warehousePerformanceSync() {
   });
 }
 
-export async function warehousePerformance() {
-  return warehousePerformanceSync();
-}
-
 /* ---------------------------------------------------------------- summary */
 
-export function inventoryHeadlineSync() {
-  const summaries = allSummariesSync();
-  const value = totalInventoryValueSync();
-  const dead = deadStockRowsSync();
-  const turnover = turnoverRowsSync();
+export async function inventoryHeadline() {
+  const summaries = await allSummaries();
+  const value = await totalInventoryValue();
+  const dead = await deadStockRows();
+  const turnover = await turnoverRows();
   const totalCogs = turnover.reduce((s, r) => s + r.cogs12m, 0);
 
   return {
@@ -479,8 +443,4 @@ export function inventoryHeadlineSync() {
     turns: value > 0 ? round(totalCogs / value) : 0,
     cogs12m: Math.round(totalCogs),
   };
-}
-
-export async function inventoryHeadline() {
-  return inventoryHeadlineSync();
 }

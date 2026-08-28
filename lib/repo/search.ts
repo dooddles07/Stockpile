@@ -1,5 +1,5 @@
 import { db } from "@/lib/data/store";
-import { summaryForSync } from "./inventory";
+import { allSummaries } from "./inventory";
 import type { ModuleKey, Role } from "@/lib/types";
 import { can } from "@/lib/auth/permissions";
 
@@ -56,10 +56,11 @@ export function kindLabel(kind: SearchKind): string {
  * number) above name matches — an operator pasting "BCL-SCN-104" wants that
  * one row first, not every scanner in the catalogue.
  */
-export function searchSync(query: string, role: Role, limitPerKind = 5): SearchHit[] {
+export async function search(query: string, role: Role, limitPerKind = 5): Promise<SearchHit[]> {
   const q = query.trim().toLowerCase();
   if (q.length < 2) return [];
 
+  const summaries = new Map((await allSummaries()).map((s) => [s.productId, s]));
   const hits: (SearchHit & { score: number })[] = [];
 
   const push = (hit: SearchHit, haystacks: string[]) => {
@@ -75,7 +76,7 @@ export function searchSync(query: string, role: Role, limitPerKind = 5): SearchH
   };
 
   for (const p of db.products) {
-    const stock = summaryForSync(p.id);
+    const stock = summaries.get(p.id)!;
     push(
       {
         kind: "product",
@@ -217,8 +218,4 @@ export function searchSync(query: string, role: Role, limitPerKind = 5): SearchH
     if (out.length >= 30) break;
   }
   return out;
-}
-
-export async function search(query: string, role: Role, limitPerKind = 5): Promise<SearchHit[]> {
-  return searchSync(query, role, limitPerKind);
 }
