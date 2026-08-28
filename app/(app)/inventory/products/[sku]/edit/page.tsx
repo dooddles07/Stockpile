@@ -4,7 +4,8 @@ import type { Metadata } from "next";
 import { PageHeader } from "@/components/shell/page-header";
 import { PermissionDenied } from "@/components/states";
 import { ProductForm } from "../../new/product-form";
-import { db } from "@/lib/data/store";
+import { productBySku } from "@/lib/repo/inventory";
+import { categories as allCategories, suppliers as allSuppliers } from "@/lib/repo/reference";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 
@@ -14,7 +15,7 @@ export async function generateMetadata({
   params: Promise<{ sku: string }>;
 }): Promise<Metadata> {
   const { sku } = await params;
-  const product = db.products.find((p) => p.sku === sku);
+  const product = await productBySku(sku);
   return product
     ? {
         title: `Edit ${product.sku}`,
@@ -26,16 +27,16 @@ export async function generateMetadata({
 export default async function EditProductPage({ params }: { params: Promise<{ sku: string }> }) {
   const { sku } = await params;
   const role = await getRole();
-  const product = db.products.find((p) => p.sku === sku);
+  const product = await productBySku(sku);
   if (!product) notFound();
   if (!can(role, "products", "edit")) {
     return <PermissionDenied module="products" role={role} action="edit" />;
   }
 
-  const categories = db.categories.map((c) => ({ id: c.id, name: c.name }));
+  const categories = (await allCategories()).map((c) => ({ id: c.id, name: c.name }));
   // The current supplier stays selectable even if it has since been put on
   // hold — otherwise saving an unrelated field would silently reassign it.
-  const suppliers = db.suppliers
+  const suppliers = (await allSuppliers())
     .filter((s) => s.status === "active" || s.id === product.primarySupplierId)
     .map((s) => ({ id: s.id, name: s.name }))
     .sort((a, b) => a.name.localeCompare(b.name));

@@ -7,8 +7,8 @@ import { PermissionDenied } from "@/components/states";
 import { StatTile } from "@/components/record/field-grid";
 import { Button } from "@/components/ui/button";
 import { AdjustmentsTable, type AdjustmentTableRow } from "./adjustments-table";
-import { db } from "@/lib/data/store";
-import { userByIdSync, warehouseByIdSync } from "@/lib/repo/inventory";
+import { adjustments as allAdjustments } from "@/lib/repo/documents";
+import { indexById, users as allUsers, warehouses as allWarehouses } from "@/lib/repo/reference";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { humanize } from "@/lib/status";
@@ -23,10 +23,13 @@ export default async function AdjustmentsPage() {
   const role = await getRole();
   if (!can(role, "adjustments")) return <PermissionDenied module="adjustments" role={role} />;
 
-  const rows: AdjustmentTableRow[] = db.adjustments.map((a) => ({
+  const warehouseById = await indexById(allWarehouses);
+  const userById = await indexById(allUsers);
+
+  const rows: AdjustmentTableRow[] = (await allAdjustments()).map((a) => ({
     id: a.id,
     number: a.number,
-    warehouseCode: warehouseByIdSync.get(a.warehouseId)?.code ?? "—",
+    warehouseCode: warehouseById.get(a.warehouseId)?.code ?? "—",
     reason: a.reason,
     reasonLabel: humanize(a.reason),
     status: a.status,
@@ -35,15 +38,15 @@ export default async function AdjustmentsPage() {
     lineCount: a.lines.length,
     totalDelta: a.totalDelta,
     totalValueImpact: a.totalValueImpact,
-    createdBy: userByIdSync.get(a.createdBy)?.name ?? "—",
-    approvedBy: a.approvedBy ? (userByIdSync.get(a.approvedBy)?.name ?? null) : null,
+    createdBy: userById.get(a.createdBy)?.name ?? "—",
+    approvedBy: a.approvedBy ? (userById.get(a.approvedBy)?.name ?? null) : null,
     requiresApproval: a.requiresApproval,
   }));
 
   const pending = rows.filter((r) => r.status === "pending-approval");
   const applied = rows.filter((r) => r.status === "applied");
   const writeOff = applied.filter((r) => r.totalValueImpact < 0).reduce((s, r) => s + r.totalValueImpact, 0);
-  const warehouses = [...new Set(db.warehouses.map((w) => w.code))].sort();
+  const warehouses = [...new Set([...warehouseById.values()].map((w) => w.code))].sort();
 
   return (
     <>

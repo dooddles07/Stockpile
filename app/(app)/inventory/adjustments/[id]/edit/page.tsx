@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Lock } from "lucide-react";
 import { AdjustmentForm } from "../../new/adjustment-form";
-import { db } from "@/lib/data/store";
-import { summaryForSync } from "@/lib/repo/inventory";
+import { adjustments as allAdjustments } from "@/lib/repo/documents";
+import { productRows } from "@/lib/repo/inventory";
+import { warehouses as allWarehouses } from "@/lib/repo/reference";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { humanize } from "@/lib/status";
@@ -19,7 +20,7 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const adjustment = db.adjustments.find((a) => a.id === id);
+  const adjustment = (await allAdjustments()).find((a) => a.id === id);
   return adjustment
     ? { title: `Edit ${adjustment.number}`, description: `Change the draft adjustment ${adjustment.number}.` }
     : { title: "Adjustment not found" };
@@ -28,7 +29,7 @@ export async function generateMetadata({
 export default async function EditAdjustmentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const role = await getRole();
-  const adjustment = db.adjustments.find((a) => a.id === id);
+  const adjustment = (await allAdjustments()).find((a) => a.id === id);
   if (!adjustment) notFound();
   if (!can(role, "adjustments", "edit")) {
     return <PermissionDenied module="adjustments" role={role} action="edit" />;
@@ -65,22 +66,19 @@ export default async function EditAdjustmentPage({ params }: { params: Promise<{
     );
   }
 
-  const warehouses = db.warehouses.map((w) => ({ id: w.id, code: w.code, name: w.name }));
+  const warehouses = (await allWarehouses()).map((w) => ({ id: w.id, code: w.code, name: w.name }));
 
-  const products = db.products
+  const products = (await productRows())
     .filter((p) => p.status === "active" || adjustment.lines.some((l) => l.productId === p.id))
-    .map((p) => {
-      const stock = summaryForSync(p.id);
-      return {
-        id: p.id,
-        sku: p.sku,
-        name: p.shortName,
-        unit: p.unit,
-        unitCost: p.unitCost,
-        sellPrice: p.sellPrice,
-        available: stock.available,
-      };
-    })
+    .map((p) => ({
+      id: p.id,
+      sku: p.sku,
+      name: p.shortName,
+      unit: p.unit,
+      unitCost: p.unitCost,
+      sellPrice: p.sellPrice,
+      available: p.stock.available,
+    }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
   const lines = adjustment.lines.flatMap((line) => {

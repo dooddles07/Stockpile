@@ -7,8 +7,8 @@ import { PermissionDenied } from "@/components/states";
 import { StatTile } from "@/components/record/field-grid";
 import { Button } from "@/components/ui/button";
 import { CountsTable, type CountTableRow } from "./counts-table";
-import { db } from "@/lib/data/store";
-import { userByIdSync, warehouseByIdSync } from "@/lib/repo/inventory";
+import { stockCounts as allStockCounts } from "@/lib/repo/documents";
+import { indexById, users as allUsers, warehouses as allWarehouses } from "@/lib/repo/reference";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { humanize } from "@/lib/status";
@@ -23,14 +23,17 @@ export default async function CountsPage() {
   const role = await getRole();
   if (!can(role, "counts")) return <PermissionDenied module="counts" role={role} />;
 
-  const rows: CountTableRow[] = db.stockCounts.map((c) => {
+  const warehouseById = await indexById(allWarehouses);
+  const userById = await indexById(allUsers);
+
+  const rows: CountTableRow[] = (await allStockCounts()).map((c) => {
     const counted = c.lines.filter((l) => l.counted !== null);
     return {
       id: c.id,
       number: c.number,
       type: c.type,
       typeLabel: humanize(c.type),
-      warehouseCode: warehouseByIdSync.get(c.warehouseId)?.code ?? "—",
+      warehouseCode: warehouseById.get(c.warehouseId)?.code ?? "—",
       scopeLabel: c.scopeLabel,
       status: c.status,
       scheduledFor: c.scheduledFor,
@@ -40,8 +43,8 @@ export default async function CountsPage() {
       varianceLines: counted.filter((l) => l.variance !== 0).length,
       accuracyPct: c.accuracyPct,
       totalVarianceValue: c.totalVarianceValue,
-      assignedTo: c.assignedTo.map((id) => userByIdSync.get(id)?.name ?? "—"),
-      createdBy: userByIdSync.get(c.createdBy)?.name ?? "—",
+      assignedTo: c.assignedTo.map((id) => userById.get(id)?.name ?? "—"),
+      createdBy: userById.get(c.createdBy)?.name ?? "—",
     };
   });
 
@@ -51,7 +54,7 @@ export default async function CountsPage() {
   const meanAccuracy =
     settled.length > 0 ? settled.reduce((s, r) => s + r.accuracyPct, 0) / settled.length / 100 : 0;
   const varianceValue = settled.reduce((s, r) => s + r.totalVarianceValue, 0);
-  const warehouses = [...new Set(db.warehouses.map((w) => w.code))].sort();
+  const warehouses = [...new Set([...warehouseById.values()].map((w) => w.code))].sort();
 
   return (
     <>

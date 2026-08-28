@@ -3,8 +3,15 @@ import type { Metadata } from "next";
 import { PageHeader } from "@/components/shell/page-header";
 import { PermissionDenied } from "@/components/states";
 import { CountForm, type CountScope } from "./count-form";
-import { db } from "@/lib/data/store";
-import { locationByIdSync, productByIdSync } from "@/lib/repo/inventory";
+import { allStockRows } from "@/lib/repo/inventory";
+import {
+  categories as allCategories,
+  indexById,
+  locations as allLocations,
+  products as allProducts,
+  users as allUsers,
+  warehouses as allWarehouses,
+} from "@/lib/repo/reference";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 
@@ -19,20 +26,24 @@ export default async function NewCountPage() {
     return <PermissionDenied module="counts" role={role} action="create" />;
   }
 
-  const warehouses = db.warehouses
+  const categoryList = await allCategories();
+  const productById = await indexById(allProducts);
+  const locationById = await indexById(allLocations);
+
+  const warehouses = (await allWarehouses())
     .filter((w) => w.status !== "closed")
     .map((w) => ({ id: w.id, code: w.code, name: w.name }));
 
-  const counters = db.users
+  const counters = (await allUsers())
     .filter((u) => u.role === "warehouse-staff" && u.status === "active")
     .map((u) => ({ id: u.id, name: u.name, warehouseId: u.warehouseId }));
 
   // SKU counts per (site, zone, category) so the form can estimate the size of
   // a count before anyone commits a shift to it.
   const buckets = new Map<string, CountScope>();
-  for (const row of db.stockRows) {
-    const product = productByIdSync.get(row.productId);
-    const location = locationByIdSync.get(row.locationId);
+  for (const row of await allStockRows()) {
+    const product = productById.get(row.productId);
+    const location = locationById.get(row.locationId);
     if (!product || !location || product.status !== "active") continue;
 
     const key = `${row.warehouseId}:${location.zone}:${product.categoryId}`;
@@ -45,7 +56,7 @@ export default async function NewCountPage() {
       warehouseId: row.warehouseId,
       zone: location.zone,
       categoryId: product.categoryId,
-      categoryName: db.categories.find((c) => c.id === product.categoryId)?.name ?? "—",
+      categoryName: categoryList.find((c) => c.id === product.categoryId)?.name ?? "—",
       skuCount: 1,
     });
   }
@@ -67,7 +78,7 @@ export default async function NewCountPage() {
           warehouses={warehouses}
           counters={counters}
           scopes={[...buckets.values()]}
-          categories={db.categories.map((c) => ({ id: c.id, name: c.name }))}
+          categories={categoryList.map((c) => ({ id: c.id, name: c.name }))}
         />
       </div>
     </>

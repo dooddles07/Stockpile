@@ -12,8 +12,9 @@ import { WorkflowStepper } from "@/components/status/workflow-stepper";
 import { StatusBadge } from "@/components/status/status-badge";
 import { PermissionDenied } from "@/components/states";
 import { Button } from "@/components/ui/button";
-import { db } from "@/lib/data/store";
-import { locationByIdSync, productByIdSync, userByIdSync, warehouseByIdSync } from "@/lib/repo/inventory";
+import { adjustments as allAdjustments } from "@/lib/repo/documents";
+import { warehouseById } from "@/lib/repo/inventory";
+import { indexById, locations as allLocations, products as allProducts, users as allUsers } from "@/lib/repo/reference";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { date, dateTime, money, plural, qty, signed, signedMoney } from "@/lib/format";
@@ -27,7 +28,7 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const adjustment = db.adjustments.find((a) => a.id === id);
+  const adjustment = (await allAdjustments()).find((a) => a.id === id);
   return adjustment
     ? { title: adjustment.number, description: `Stock adjustment — ${humanize(adjustment.reason)}.` }
     : { title: "Adjustment not found" };
@@ -50,10 +51,13 @@ export default async function AdjustmentDetailPage({
   if (!can(role, "adjustments")) return <PermissionDenied module="adjustments" role={role} />;
 
   const { id } = await params;
-  const adjustment = db.adjustments.find((a) => a.id === id);
+  const adjustment = (await allAdjustments()).find((a) => a.id === id);
   if (!adjustment) notFound();
 
-  const warehouse = warehouseByIdSync.get(adjustment.warehouseId);
+  const warehouse = await warehouseById(adjustment.warehouseId);
+  const productById = await indexById(allProducts);
+  const locationById = await indexById(allLocations);
+  const userById = await indexById(allUsers);
   const canApprove = can(role, "adjustments", "approve");
   const awaitingDecision = adjustment.status === "pending-approval";
   const isNegative = adjustment.totalValueImpact < 0;
@@ -62,7 +66,7 @@ export default async function AdjustmentDetailPage({
     id: event.id,
     ts: event.ts,
     tone: ACTION_TONE[event.action] ?? "neutral",
-    title: `${humanize(event.action)} by ${userByIdSync.get(event.userId)?.name ?? "—"}`,
+    title: `${humanize(event.action)} by ${userById.get(event.userId)?.name ?? "—"}`,
     detail: event.note,
   }));
 
@@ -95,7 +99,7 @@ export default async function AdjustmentDetailPage({
               {humanize(adjustment.reason)} · {warehouse?.code} {warehouse?.name}
             </span>
             <span className="text-caption text-muted-foreground">
-              Raised {date(adjustment.createdAt)} by {userByIdSync.get(adjustment.createdBy)?.name}
+              Raised {date(adjustment.createdAt)} by {userById.get(adjustment.createdBy)?.name}
             </span>
           </>
         }
@@ -195,7 +199,7 @@ export default async function AdjustmentDetailPage({
                   cell: (line) => (
                     <Link href={`/inventory/products/${line.sku}`} className="grid gap-0.5 hover:underline">
                       <span className="font-medium">
-                        {productByIdSync.get(line.productId)?.shortName ?? line.name}
+                        {productById.get(line.productId)?.shortName ?? line.name}
                       </span>
                       <span className="text-code text-[11px] text-muted-foreground">{line.sku}</span>
                     </Link>
@@ -207,7 +211,7 @@ export default async function AdjustmentDetailPage({
                   hideOnMobile: true,
                   cell: (line) => (
                     <span className="text-code text-muted-foreground">
-                      {locationByIdSync.get(line.locationId)?.code ?? "—"}
+                      {locationById.get(line.locationId)?.code ?? "—"}
                     </span>
                   ),
                 },
@@ -298,12 +302,12 @@ export default async function AdjustmentDetailPage({
                 { label: "Adjustment", value: adjustment.number, mono: true },
                 { label: "Reason", value: humanize(adjustment.reason) },
                 { label: "Warehouse", value: `${warehouse?.code} · ${warehouse?.name}` },
-                { label: "Raised by", value: userByIdSync.get(adjustment.createdBy)?.name ?? "—" },
+                { label: "Raised by", value: userById.get(adjustment.createdBy)?.name ?? "—" },
                 { label: "Raised", value: dateTime(adjustment.createdAt) },
                 {
                   label: "Approved by",
                   value: adjustment.approvedBy
-                    ? (userByIdSync.get(adjustment.approvedBy)?.name ?? "—")
+                    ? (userById.get(adjustment.approvedBy)?.name ?? "—")
                     : "Not approved",
                 },
                 {

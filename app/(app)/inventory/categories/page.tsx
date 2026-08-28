@@ -8,8 +8,8 @@ import { Button } from "@/components/ui/button";
 import { MeterBar } from "@/components/status/meter-bar";
 import { StatusBadge } from "@/components/status/status-badge";
 import { ProductThumb } from "@/components/product/product-thumb";
-import { db } from "@/lib/data/store";
-import { healthOf, productRowsSync } from "@/lib/repo/inventory";
+import { healthOf, productRows } from "@/lib/repo/inventory";
+import { categories as allCategories } from "@/lib/repo/reference";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { money, percent, qty } from "@/lib/format";
@@ -23,10 +23,11 @@ export default async function CategoriesPage() {
   const role = await getRole();
   if (!can(role, "categories")) return <PermissionDenied module="categories" role={role} />;
 
-  const products = productRowsSync();
+  const products = await productRows();
   const totalValue = products.reduce((s, p) => s + p.stock.value, 0);
 
-  const categories = db.categories
+  const categoryList = await allCategories();
+  const categories = categoryList
     .map((category) => {
       const items = products.filter((p) => p.categoryId === category.id);
       const value = items.reduce((s, p) => s + p.stock.value, 0);
@@ -55,7 +56,7 @@ export default async function CategoriesPage() {
       <PageHeader
         crumbs={[{ label: "Inventory", href: "/inventory/products" }, { label: "Categories" }]}
         title="Categories"
-        description={`${db.categories.length} categories covering ${qty(products.length)} SKUs and ${money(totalValue)} of stock.`}
+        description={`${categoryList.length} categories covering ${qty(products.length)} SKUs and ${money(totalValue)} of stock.`}
         actions={
           can(role, "categories", "create") && (
             <Button size="sm" className="h-8" render={<Link href="/inventory/categories/new" />}>

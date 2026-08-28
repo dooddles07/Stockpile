@@ -3,8 +3,8 @@ import type { Metadata } from "next";
 import { PageHeader } from "@/components/shell/page-header";
 import { PermissionDenied } from "@/components/states";
 import { AdjustmentForm } from "./adjustment-form";
-import { db } from "@/lib/data/store";
-import { summaryForSync } from "@/lib/repo/inventory";
+import { productRows } from "@/lib/repo/inventory";
+import { warehouses as allWarehouses } from "@/lib/repo/reference";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 
@@ -19,22 +19,19 @@ export default async function NewAdjustmentPage() {
     return <PermissionDenied module="adjustments" role={role} action="create" />;
   }
 
-  const warehouses = db.warehouses.map((w) => ({ id: w.id, code: w.code, name: w.name }));
+  const warehouses = (await allWarehouses()).map((w) => ({ id: w.id, code: w.code, name: w.name }));
 
-  const products = db.products
+  const products = (await productRows())
     .filter((p) => p.status === "active")
-    .map((p) => {
-      const stock = summaryForSync(p.id);
-      return {
-        id: p.id,
-        sku: p.sku,
-        name: p.shortName,
-        unit: p.unit,
-        unitCost: p.unitCost,
-        sellPrice: p.sellPrice,
-        available: stock.available,
-      };
-    })
+    .map((p) => ({
+      id: p.id,
+      sku: p.sku,
+      name: p.shortName,
+      unit: p.unit,
+      unitCost: p.unitCost,
+      sellPrice: p.sellPrice,
+      available: p.stock.available,
+    }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
   return (

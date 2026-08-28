@@ -5,8 +5,14 @@ import { PageHeader } from "@/components/shell/page-header";
 import { PermissionDenied } from "@/components/states";
 import { StatTile } from "@/components/record/field-grid";
 import { MovementsTable, type MovementTableRow } from "./movements-table";
-import { db } from "@/lib/data/store";
-import { locationByIdSync, productByIdSync, userByIdSync, warehouseByIdSync } from "@/lib/repo/inventory";
+import { movements as allMovements } from "@/lib/repo/documents";
+import {
+  indexById,
+  locations as allLocations,
+  products as allProducts,
+  users as allUsers,
+  warehouses as allWarehouses,
+} from "@/lib/repo/reference";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { humanize } from "@/lib/status";
@@ -49,8 +55,13 @@ export default async function MovementsPage({
 
   const { q } = await searchParams;
 
-  const rows: MovementTableRow[] = db.movements.map((m) => {
-    const product = productByIdSync.get(m.productId);
+  const productById = await indexById(allProducts);
+  const warehouseById = await indexById(allWarehouses);
+  const locationById = await indexById(allLocations);
+  const userById = await indexById(allUsers);
+
+  const rows: MovementTableRow[] = (await allMovements()).map((m) => {
+    const product = productById.get(m.productId);
     return {
       id: m.id,
       ts: m.ts,
@@ -59,8 +70,8 @@ export default async function MovementsPage({
       sku: m.sku,
       productName: product?.shortName ?? "—",
       productHref: `/inventory/products/${m.sku}`,
-      warehouseCode: warehouseByIdSync.get(m.warehouseId)?.code ?? "—",
-      locationCode: locationByIdSync.get(m.locationId)?.code ?? "—",
+      warehouseCode: warehouseById.get(m.warehouseId)?.code ?? "—",
+      locationCode: locationById.get(m.locationId)?.code ?? "—",
       qtyBefore: m.qtyBefore,
       qtyChange: m.qtyChange,
       qtyAfter: m.qtyAfter,
@@ -68,7 +79,7 @@ export default async function MovementsPage({
       valueChange: m.valueChange,
       refNumber: m.refNumber,
       refHref: refHref(m.refType, m.refId),
-      user: userByIdSync.get(m.userId)?.name ?? "—",
+      user: userById.get(m.userId)?.name ?? "—",
       reason: m.reason,
     };
   });
@@ -76,7 +87,7 @@ export default async function MovementsPage({
   const inbound = rows.filter((r) => r.qtyChange > 0);
   const outbound = rows.filter((r) => r.qtyChange < 0);
   const netValue = rows.reduce((s, r) => s + r.valueChange, 0);
-  const warehouses = [...new Set(db.warehouses.map((w) => w.code))].sort();
+  const warehouses = [...new Set([...warehouseById.values()].map((w) => w.code))].sort();
 
   return (
     <>

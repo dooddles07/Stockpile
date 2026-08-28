@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { PageHeader } from "@/components/shell/page-header";
 import { PermissionDenied } from "@/components/states";
 import { ProductForm } from "./product-form";
-import { db } from "@/lib/data/store";
+import { categories as allCategories, products as allProducts, suppliers as allSuppliers } from "@/lib/repo/reference";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 
@@ -30,16 +30,17 @@ export default async function NewProductPage() {
     return <PermissionDenied module="products" role={role} action="create" />;
   }
 
-  const categories = db.categories.map((c) => ({ id: c.id, name: c.name }));
-  const suppliers = db.suppliers
+  const categoryList = await allCategories();
+  const categories = categoryList.map((c) => ({ id: c.id, name: c.name }));
+  const suppliers = (await allSuppliers())
     .filter((s) => s.status === "active")
     .map((s) => ({ id: s.id, name: s.name }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
   // Continue the existing numbering rather than restarting at 001 — SKUs are
   // scanned and spoken aloud, so collisions are expensive.
-  const prefix = CATEGORY_PREFIX[db.categories[0].slug] ?? "GEN";
-  const nextNumber = db.products.length + 101;
+  const prefix = CATEGORY_PREFIX[categoryList[0].slug] ?? "GEN";
+  const nextNumber = (await allProducts()).length + 101;
   const suggestedSku = `${prefix}-NEW-${nextNumber}`;
 
   return (

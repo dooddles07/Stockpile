@@ -6,8 +6,8 @@ import { PageHeader } from "@/components/shell/page-header";
 import { PermissionDenied } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { ProductsTable, type ProductTableRow } from "./products-table";
-import { db } from "@/lib/data/store";
-import { productRowsSync } from "@/lib/repo/inventory";
+import { productRows } from "@/lib/repo/inventory";
+import { categories as allCategories, suppliers as allSuppliers } from "@/lib/repo/reference";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { money, qty } from "@/lib/format";
@@ -22,7 +22,7 @@ export default async function ProductsPage() {
   const role = await getRole();
   if (!can(role, "products")) return <PermissionDenied module="products" role={role} />;
 
-  const rows: ProductTableRow[] = productRowsSync().map((p) => ({
+  const rows: ProductTableRow[] = (await productRows()).map((p) => ({
     id: p.id,
     sku: p.sku,
     name: p.name,
@@ -48,8 +48,8 @@ export default async function ProductsPage() {
 
   const totalValue = rows.reduce((s, r) => s + r.stockValue, 0);
   const activeCount = rows.filter((r) => r.status === "active").length;
-  const categories = [...new Set(db.categories.map((c) => c.name))].sort();
-  const suppliers = [...new Set(db.suppliers.map((s) => s.name))].sort();
+  const categories = [...new Set((await allCategories()).map((c) => c.name))].sort();
+  const suppliers = [...new Set((await allSuppliers()).map((s) => s.name))].sort();
 
   return (
     <>

@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { PageHeader } from "@/components/shell/page-header";
 import { PermissionDenied } from "@/components/states";
 import { CategoryForm } from "./category-form";
-import { db } from "@/lib/data/store";
+import { categories as allCategories } from "@/lib/repo/reference";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 
@@ -18,7 +18,8 @@ export default async function NewCategoryPage() {
     return <PermissionDenied module="categories" role={role} action="create" />;
   }
 
-  const parents = db.categories
+  const categoryList = await allCategories();
+  const parents = categoryList
     .filter((c) => c.parentId === null)
     .map((c) => ({ id: c.id, name: c.name }))
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -36,7 +37,7 @@ export default async function NewCategoryPage() {
       />
 
       <div className="p-4 sm:p-6">
-        <CategoryForm parents={parents} takenSlugs={db.categories.map((c) => c.slug)} />
+        <CategoryForm parents={parents} takenSlugs={categoryList.map((c) => c.slug)} />
       </div>
     </>
   );

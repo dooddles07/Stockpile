@@ -5,13 +5,13 @@ import { PageHeader } from "@/components/shell/page-header";
 import { PermissionDenied } from "@/components/states";
 import { StatTile } from "@/components/record/field-grid";
 import { StockTable, type StockTableRow } from "./stock-table";
-import { db } from "@/lib/data/store";
 import {
   STOCK_VIEWS,
   applyStockView,
-  stockLevelRowsSync,
+  stockLevelRows,
   type StockViewKey,
 } from "@/lib/repo/inventory";
+import { categories as allCategories, warehouses as allWarehouses } from "@/lib/repo/reference";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { money, qty } from "@/lib/format";
@@ -34,7 +34,7 @@ export default async function StockLevelsPage({
   const view: StockViewKey = rawView && rawView in STOCK_VIEWS ? (rawView as StockViewKey) : "all";
   const meta = STOCK_VIEWS[view];
 
-  const all = stockLevelRowsSync();
+  const all = await stockLevelRows();
   const filtered = applyStockView(all, view);
 
   const rows: StockTableRow[] = filtered.map((r) => ({
@@ -67,8 +67,8 @@ export default async function StockLevelsPage({
   const damaged = rows.reduce((s, r) => s + r.damaged, 0);
   const skus = new Set(rows.map((r) => r.sku)).size;
 
-  const warehouses = [...new Set(db.warehouses.map((w) => w.code))].sort();
-  const categories = [...new Set(db.categories.map((c) => c.name))].sort();
+  const warehouses = [...new Set((await allWarehouses()).map((w) => w.code))].sort();
+  const categories = [...new Set((await allCategories()).map((c) => c.name))].sort();
 
   return (
     <>
