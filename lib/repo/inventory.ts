@@ -3,19 +3,30 @@
  *
  * Everything derives from `db.stockRows` so the product page, the stock table
  * and the dashboard KPI can never disagree about how much of something exists.
+ *
+ * Every function that reads the dataset exists twice during this phase: the
+ * original body under a `Sync` suffix (still used by every current caller,
+ * unchanged), and a clean async name that only wraps it. Phase 2 replaces the
+ * async body with a real query; the `Sync` twin is deleted once nothing calls
+ * it anymore (ticket 10).
  */
 
 import { db } from "@/lib/data/store";
 import { daysUntil } from "@/lib/format";
 import type {
+  Category,
+  Customer,
   Product,
   StockHealth,
   StockLocation,
   StockRow,
   StockSummary,
+  Supplier,
+  User,
   Warehouse,
 } from "@/lib/types";
 
+/** Pure classification, no dataset input — stays synchronous. */
 export function healthOf(available: number, reorderPoint: number): StockHealth {
   if (available <= 0) return "out-of-stock";
   if (available < reorderPoint * 0.4) return "critical";
@@ -71,16 +82,48 @@ function buildIndex() {
 
 const index = buildIndex();
 
-export const productById = new Map(db.products.map((p) => [p.id, p]));
-export const productBySku = new Map(db.products.map((p) => [p.sku, p]));
-export const warehouseById = new Map(db.warehouses.map((w) => [w.id, w]));
-export const locationById = new Map(db.locations.map((l) => [l.id, l]));
-export const supplierById = new Map(db.suppliers.map((s) => [s.id, s]));
-export const customerById = new Map(db.customers.map((c) => [c.id, c]));
-export const userById = new Map(db.users.map((u) => [u.id, u]));
-export const categoryById = new Map(db.categories.map((c) => [c.id, c]));
+export const productByIdSync = new Map(db.products.map((p) => [p.id, p]));
+export const productBySkuSync = new Map(db.products.map((p) => [p.sku, p]));
+export const warehouseByIdSync = new Map(db.warehouses.map((w) => [w.id, w]));
+export const locationByIdSync = new Map(db.locations.map((l) => [l.id, l]));
+export const supplierByIdSync = new Map(db.suppliers.map((s) => [s.id, s]));
+export const customerByIdSync = new Map(db.customers.map((c) => [c.id, c]));
+export const userByIdSync = new Map(db.users.map((u) => [u.id, u]));
+export const categoryByIdSync = new Map(db.categories.map((c) => [c.id, c]));
 
-export function summaryFor(productId: string): StockSummary {
+export async function productById(id: string): Promise<Product | undefined> {
+  return productByIdSync.get(id);
+}
+
+export async function productBySku(sku: string): Promise<Product | undefined> {
+  return productBySkuSync.get(sku);
+}
+
+export async function warehouseById(id: string): Promise<Warehouse | undefined> {
+  return warehouseByIdSync.get(id);
+}
+
+export async function locationById(id: string): Promise<StockLocation | undefined> {
+  return locationByIdSync.get(id);
+}
+
+export async function supplierById(id: string): Promise<Supplier | undefined> {
+  return supplierByIdSync.get(id);
+}
+
+export async function customerById(id: string): Promise<Customer | undefined> {
+  return customerByIdSync.get(id);
+}
+
+export async function userById(id: string): Promise<User | undefined> {
+  return userByIdSync.get(id);
+}
+
+export async function categoryById(id: string): Promise<Category | undefined> {
+  return categoryByIdSync.get(id);
+}
+
+export function summaryForSync(productId: string): StockSummary {
   return (
     index.summaries.get(productId) ?? {
       productId,
@@ -90,12 +133,24 @@ export function summaryFor(productId: string): StockSummary {
   );
 }
 
-export function stockRowsFor(productId: string): StockRow[] {
+export async function summaryFor(productId: string): Promise<StockSummary> {
+  return summaryForSync(productId);
+}
+
+export function stockRowsForSync(productId: string): StockRow[] {
   return index.rowsByProduct.get(productId) ?? [];
 }
 
-export function allSummaries(): StockSummary[] {
+export async function stockRowsFor(productId: string): Promise<StockRow[]> {
+  return stockRowsForSync(productId);
+}
+
+export function allSummariesSync(): StockSummary[] {
   return [...index.summaries.values()];
+}
+
+export async function allSummaries(): Promise<StockSummary[]> {
+  return allSummariesSync();
 }
 
 /* -------------------------------------------------------------- joins ---- */
@@ -108,15 +163,19 @@ export interface ProductRow extends Product {
 
 let productRowsCache: ProductRow[] | null = null;
 
-export function productRows(): ProductRow[] {
+export function productRowsSync(): ProductRow[] {
   if (productRowsCache) return productRowsCache;
   productRowsCache = db.products.map((p) => ({
     ...p,
-    categoryName: categoryById.get(p.categoryId)?.name ?? "—",
-    supplierName: supplierById.get(p.primarySupplierId)?.name ?? "—",
-    stock: summaryFor(p.id),
+    categoryName: categoryByIdSync.get(p.categoryId)?.name ?? "—",
+    supplierName: supplierByIdSync.get(p.primarySupplierId)?.name ?? "—",
+    stock: summaryForSync(p.id),
   }));
   return productRowsCache;
+}
+
+export async function productRows(): Promise<ProductRow[]> {
+  return productRowsSync();
 }
 
 export interface StockLevelRow {
@@ -150,20 +209,20 @@ export interface StockLevelRow {
 
 let stockLevelCache: StockLevelRow[] | null = null;
 
-export function stockLevelRows(): StockLevelRow[] {
+export function stockLevelRowsSync(): StockLevelRow[] {
   if (stockLevelCache) return stockLevelCache;
   stockLevelCache = db.stockRows.map((row, i) => {
-    const product = productById.get(row.productId)!;
-    const warehouse = warehouseById.get(row.warehouseId)!;
-    const location = locationById.get(row.locationId);
+    const product = productByIdSync.get(row.productId)!;
+    const warehouse = warehouseByIdSync.get(row.warehouseId)!;
+    const location = locationByIdSync.get(row.locationId);
     const available = Math.max(0, row.onHand - row.reserved - row.damaged);
-    const summary = summaryFor(row.productId);
+    const summary = summaryForSync(row.productId);
     return {
       id: `${row.productId}:${row.warehouseId}:${i}`,
       productId: row.productId,
       sku: product.sku,
       name: product.name,
-      categoryName: categoryById.get(product.categoryId)?.name ?? "—",
+      categoryName: categoryByIdSync.get(product.categoryId)?.name ?? "—",
       productAvailable: summary.available,
       productStatus: product.status,
       warehouseId: warehouse.id,
@@ -189,36 +248,52 @@ export function stockLevelRows(): StockLevelRow[] {
   return stockLevelCache;
 }
 
-/* ------------------------------------------------------------ rollups ---- */
-
-export function totalInventoryValue(): number {
-  return Math.round(allSummaries().reduce((s, x) => s + x.value, 0));
+export async function stockLevelRows(): Promise<StockLevelRow[]> {
+  return stockLevelRowsSync();
 }
 
-export function healthCounts(): Record<StockHealth, number> {
+/* ------------------------------------------------------------ rollups ---- */
+
+export function totalInventoryValueSync(): number {
+  return Math.round(allSummariesSync().reduce((s, x) => s + x.value, 0));
+}
+
+export async function totalInventoryValue(): Promise<number> {
+  return totalInventoryValueSync();
+}
+
+export function healthCountsSync(): Record<StockHealth, number> {
   const out: Record<StockHealth, number> = {
     healthy: 0, low: 0, critical: 0, "out-of-stock": 0, overstock: 0,
   };
-  for (const s of allSummaries()) {
-    const product = productById.get(s.productId);
+  for (const s of allSummariesSync()) {
+    const product = productByIdSync.get(s.productId);
     if (product?.status !== "active") continue;
     out[s.health]++;
   }
   return out;
 }
 
-export function valueByCategory(): { name: string; value: number; skus: number }[] {
+export async function healthCounts(): Promise<Record<StockHealth, number>> {
+  return healthCountsSync();
+}
+
+export function valueByCategorySync(): { name: string; value: number; skus: number }[] {
   const acc = new Map<string, { value: number; skus: number }>();
   for (const p of db.products) {
-    const name = categoryById.get(p.categoryId)?.name ?? "—";
+    const name = categoryByIdSync.get(p.categoryId)?.name ?? "—";
     const cur = acc.get(name) ?? { value: 0, skus: 0 };
-    cur.value += summaryFor(p.id).value;
+    cur.value += summaryForSync(p.id).value;
     cur.skus += 1;
     acc.set(name, cur);
   }
   return [...acc.entries()]
     .map(([name, v]) => ({ name, value: Math.round(v.value), skus: v.skus }))
     .sort((a, b) => b.value - a.value);
+}
+
+export async function valueByCategory(): Promise<{ name: string; value: number; skus: number }[]> {
+  return valueByCategorySync();
 }
 
 export interface WarehouseRollup extends Warehouse {
@@ -231,20 +306,20 @@ export interface WarehouseRollup extends Warehouse {
   openTransfers: number;
 }
 
-export function warehouseRollups(): WarehouseRollup[] {
+export function warehouseRollupsSync(): WarehouseRollup[] {
   return db.warehouses.map((w) => {
     const rows = db.stockRows.filter((r) => r.warehouseId === w.id);
     const skus = new Set(rows.map((r) => r.productId));
     let value = 0;
     let units = 0;
     for (const row of rows) {
-      const p = productById.get(row.productId)!;
+      const p = productByIdSync.get(row.productId)!;
       value += row.onHand * p.unitCost;
       units += row.onHand;
     }
     return {
       ...w,
-      managerName: userById.get(w.managerId)?.name ?? "—",
+      managerName: userByIdSync.get(w.managerId)?.name ?? "—",
       skuCount: skus.size,
       unitCount: units,
       inventoryValue: Math.round(value),
@@ -259,8 +334,16 @@ export function warehouseRollups(): WarehouseRollup[] {
   });
 }
 
-export function locationsFor(warehouseId: string): StockLocation[] {
+export async function warehouseRollups(): Promise<WarehouseRollup[]> {
+  return warehouseRollupsSync();
+}
+
+export function locationsForSync(warehouseId: string): StockLocation[] {
   return db.locations.filter((l) => l.warehouseId === warehouseId);
+}
+
+export async function locationsFor(warehouseId: string): Promise<StockLocation[]> {
+  return locationsForSync(warehouseId);
 }
 
 /* ------------------------------------------------------------- filters --- */
@@ -283,6 +366,7 @@ export const STOCK_VIEWS = {
 
 export type StockViewKey = keyof typeof STOCK_VIEWS;
 
+/** Pure filter over an already-fetched array — no dataset input, stays synchronous. */
 export function applyStockView(rows: StockLevelRow[], view: StockViewKey): StockLevelRow[] {
   // The health views are operational queues: a discontinued SKU running low is
   // not something anyone acts on, so it stays out of them. "All stock" is the
@@ -305,6 +389,10 @@ export function applyStockView(rows: StockLevelRow[], view: StockViewKey): Stock
   }
 }
 
-export function movementsFor(productId: string) {
+export function movementsForSync(productId: string) {
   return db.movements.filter((m) => m.productId === productId);
+}
+
+export async function movementsFor(productId: string) {
+  return movementsForSync(productId);
 }

@@ -1,15 +1,15 @@
 import {
-  agingBuckets,
-  categoryPerformance,
-  deadStockRows,
-  productPerformance,
-  spendByCategory,
-  supplierScorecards,
-  turnoverRows,
-  valuationRows,
-  warehousePerformance,
+  agingBucketsSync,
+  categoryPerformanceSync,
+  deadStockRowsSync,
+  productPerformanceSync,
+  spendByCategorySync,
+  supplierScorecardsSync,
+  turnoverRowsSync,
+  valuationRowsSync,
+  warehousePerformanceSync,
 } from "./analytics";
-import { healthCounts, stockLevelRows } from "./inventory";
+import { healthCountsSync, stockLevelRowsSync } from "./inventory";
 import { db } from "@/lib/data/store";
 import { NOW } from "@/lib/data/rng";
 import { money, percent, qty } from "@/lib/format";
@@ -64,7 +64,7 @@ export const REPORTS: ReportDefinition[] = [
       { key: "fifoValue", header: "Value (FIFO)", align: "right", format: asMoney },
       { key: "retailValue", header: "Retail value", align: "right", format: asMoney },
     ],
-    run: () => valuationRows() as unknown as Record<string, unknown>[],
+    run: () => valuationRowsSync() as unknown as Record<string, unknown>[],
     summary: (rows) => [
       { label: "SKUs", value: qty(rows.length) },
       { label: "Units", value: qty(rows.reduce((s, r) => s + Number(r.onHand), 0)) },
@@ -90,7 +90,7 @@ export const REPORTS: ReportDefinition[] = [
       { key: "health", header: "Health", format: (v) => humanize(String(v)) },
       { key: "value", header: "Value", align: "right", format: asMoney },
     ],
-    run: () => stockLevelRows() as unknown as Record<string, unknown>[],
+    run: () => stockLevelRowsSync() as unknown as Record<string, unknown>[],
     summary: (rows) => [
       { label: "Records", value: qty(rows.length) },
       { label: "Units", value: qty(rows.reduce((s, r) => s + Number(r.onHand), 0)) },
@@ -114,7 +114,7 @@ export const REPORTS: ReportDefinition[] = [
       { key: "health", header: "Health", format: (v) => humanize(String(v)) },
     ],
     run: () =>
-      stockLevelRows()
+      stockLevelRowsSync()
         .filter(
           (r) =>
             r.productStatus === "active" &&
@@ -122,7 +122,7 @@ export const REPORTS: ReportDefinition[] = [
         )
         .sort((a, b) => a.available - b.available) as unknown as Record<string, unknown>[],
     summary: (rows) => {
-      const health = healthCounts();
+      const health = healthCountsSync();
       return [
         { label: "Records", value: qty(rows.length) },
         { label: "Out of stock", value: qty(health["out-of-stock"]) },
@@ -150,7 +150,7 @@ export const REPORTS: ReportDefinition[] = [
       { key: "daysOfCover", header: "Days of cover", align: "right", format: asText },
     ],
     run: () =>
-      turnoverRows().sort((a, b) => b.stockValue - a.stockValue) as unknown as Record<
+      turnoverRowsSync().sort((a, b) => b.stockValue - a.stockValue) as unknown as Record<
         string,
         unknown
       >[],
@@ -170,7 +170,7 @@ export const REPORTS: ReportDefinition[] = [
       { key: "stockValue", header: "Value", align: "right", format: asMoney },
       { key: "daysSinceMovement", header: "Days since movement", align: "right", format: asText },
     ],
-    run: () => deadStockRows() as unknown as Record<string, unknown>[],
+    run: () => deadStockRowsSync() as unknown as Record<string, unknown>[],
     summary: (rows) => [
       { label: "SKUs", value: qty(rows.length) },
       { label: "Value", value: money(rows.reduce((s, r) => s + Number(r.stockValue), 0)) },
@@ -189,7 +189,7 @@ export const REPORTS: ReportDefinition[] = [
       { key: "units", header: "Units", align: "right", format: asQty },
       { key: "value", header: "Value", align: "right", format: asMoney },
     ],
-    run: () => agingBuckets() as unknown as Record<string, unknown>[],
+    run: () => agingBucketsSync() as unknown as Record<string, unknown>[],
   },
   {
     slug: "supplier-performance",
@@ -208,7 +208,7 @@ export const REPORTS: ReportDefinition[] = [
       { key: "defectRate", header: "Defects", align: "right", format: (v) => percent(Number(v), 2) },
       { key: "overdueOrders", header: "Overdue", align: "right", format: asQty },
     ],
-    run: () => supplierScorecards() as unknown as Record<string, unknown>[],
+    run: () => supplierScorecardsSync() as unknown as Record<string, unknown>[],
     summary: (rows) => [
       { label: "Suppliers", value: qty(rows.length) },
       { label: "Total spend", value: money(rows.reduce((s, r) => s + Number(r.spend), 0)) },
@@ -229,7 +229,7 @@ export const REPORTS: ReportDefinition[] = [
       { key: "name", header: "Category" },
       { key: "value", header: "Spend", align: "right", format: asMoney },
     ],
-    run: () => spendByCategory() as unknown as Record<string, unknown>[],
+    run: () => spendByCategorySync() as unknown as Record<string, unknown>[],
   },
   {
     slug: "open-purchase-orders",
@@ -287,7 +287,7 @@ export const REPORTS: ReportDefinition[] = [
       { key: "margin", header: "Margin", align: "right", format: asMoney },
       { key: "marginPct", header: "Margin %", align: "right", format: (v) => percent(Number(v), 1) },
     ],
-    run: () => productPerformance() as unknown as Record<string, unknown>[],
+    run: () => productPerformanceSync() as unknown as Record<string, unknown>[],
     summary: (rows) => [
       { label: "SKUs sold", value: qty(rows.length) },
       { label: "Revenue", value: money(rows.reduce((s, r) => s + Number(r.revenue), 0)) },
@@ -309,7 +309,7 @@ export const REPORTS: ReportDefinition[] = [
       { key: "margin", header: "Margin", align: "right", format: asMoney },
       { key: "marginPct", header: "Margin %", align: "right", format: (v) => percent(Number(v), 1) },
     ],
-    run: () => categoryPerformance() as unknown as Record<string, unknown>[],
+    run: () => categoryPerformanceSync() as unknown as Record<string, unknown>[],
   },
   {
     slug: "warehouse-performance",
@@ -328,7 +328,7 @@ export const REPORTS: ReportDefinition[] = [
       { key: "shippingOnTime", header: "Shipped on time", align: "right", format: asPct },
       { key: "shrinkageValue", header: "Shrinkage", align: "right", format: asMoney },
     ],
-    run: () => warehousePerformance() as unknown as Record<string, unknown>[],
+    run: () => warehousePerformanceSync() as unknown as Record<string, unknown>[],
   },
   {
     slug: "movement-ledger",
@@ -367,19 +367,31 @@ export const REPORTS: ReportDefinition[] = [
   },
 ];
 
-export function reportBySlug(slug: string): ReportDefinition | undefined {
+export function reportBySlugSync(slug: string): ReportDefinition | undefined {
   return REPORTS.find((r) => r.slug === slug);
 }
 
-export function reportGroups(): ReportGroup[] {
+export async function reportBySlug(slug: string): Promise<ReportDefinition | undefined> {
+  return reportBySlugSync(slug);
+}
+
+export function reportGroupsSync(): ReportGroup[] {
   return ["Inventory", "Purchasing", "Sales", "Warehouse"];
 }
 
+export async function reportGroups(): Promise<ReportGroup[]> {
+  return reportGroupsSync();
+}
+
 /** Used only for the "records" count on the report cards. */
-export function reportSize(report: ReportDefinition): number {
+export function reportSizeSync(report: ReportDefinition): number {
   try {
     return report.run().length;
   } catch {
     return 0;
   }
+}
+
+export async function reportSize(report: ReportDefinition): Promise<number> {
+  return reportSizeSync(report);
 }
