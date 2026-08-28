@@ -13,7 +13,7 @@ import {
   can,
   levelFor,
 } from "@/lib/auth/permissions";
-import { db } from "@/lib/data/store";
+import { users as allUsers } from "@/lib/repo/reference";
 import { getRole } from "@/lib/auth/session";
 import { plural } from "@/lib/format";
 import type { Role } from "@/lib/types";
@@ -43,7 +43,7 @@ export default async function EditRolePage({ params }: { params: Promise<{ id: s
     return <PermissionDenied module="roles" role={role} action="change permissions for" />;
   }
 
-  const holders = db.users.filter((u) => u.role === meta.id && u.status === "active").length;
+  const holders = (await allUsers()).filter((u) => u.role === meta.id && u.status === "active").length;
 
   const modules: ModuleRow[] = ALL_MODULE_KEYS.map((key) => ({
     key,

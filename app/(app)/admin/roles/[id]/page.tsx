@@ -29,8 +29,7 @@ import {
   actionsFor,
   levelFor,
 } from "@/lib/auth/permissions";
-import { db } from "@/lib/data/store";
-import { warehouseByIdSync } from "@/lib/repo/inventory";
+import { indexById, users as allUsers, warehouses as allWarehouses } from "@/lib/repo/reference";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { humanize } from "@/lib/status";
@@ -67,7 +66,8 @@ export default async function RoleDetailPage({
   if (!target) notFound();
 
   const canEdit = can(role, "roles", "manage");
-  const holders = db.users.filter((u) => u.role === target.id);
+  const warehouseById = await indexById(allWarehouses);
+  const holders = (await allUsers()).filter((u) => u.role === target.id);
   const granted = ALL_MODULE_KEYS.filter((m) => levelFor(target.id, m) !== "none");
   const writable = ALL_MODULE_KEYS.filter((m) => can(target.id, m, "edit"));
   const approvable = ALL_MODULE_KEYS.filter((m) => can(target.id, m, "approve"));
@@ -277,7 +277,7 @@ export default async function RoleDetailPage({
                   header: "Site",
                   cell: (u) =>
                     u.warehouseId ? (
-                      <span className="font-medium">{warehouseByIdSync.get(u.warehouseId)?.code}</span>
+                      <span className="font-medium">{warehouseById.get(u.warehouseId)?.code}</span>
                     ) : (
                       <span className="text-muted-foreground">all</span>
                     ),

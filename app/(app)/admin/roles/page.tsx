@@ -25,7 +25,7 @@ import {
   levelFor,
   type AccessLevel,
 } from "@/lib/auth/permissions";
-import { db } from "@/lib/data/store";
+import { users as allUsers } from "@/lib/repo/reference";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { plural, qty } from "@/lib/format";
@@ -50,8 +50,10 @@ export default async function RolesPage() {
   const role = await getRole();
   if (!can(role, "roles")) return <PermissionDenied module="roles" role={role} />;
 
+  const users = await allUsers();
+
   const usersByRole = new Map<string, number>();
-  for (const u of db.users) {
+  for (const u of users) {
     usersByRole.set(u.role, (usersByRole.get(u.role) ?? 0) + 1);
   }
 
@@ -69,7 +71,7 @@ export default async function RolesPage() {
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatTile label="Roles" value={qty(ROLES.length)} />
           <StatTile label="Modules" value={qty(ALL_MODULE_KEYS.length)} />
-          <StatTile label="Users assigned" value={qty(db.users.length)} />
+          <StatTile label="Users assigned" value={qty(users.length)} />
           <StatTile
             label="Your role"
             value={ROLES.find((r) => r.id === role)?.label ?? role}

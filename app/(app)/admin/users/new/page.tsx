@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { PageHeader } from "@/components/shell/page-header";
 import { PermissionDenied } from "@/components/states";
 import { UserForm } from "./user-form";
-import { db } from "@/lib/data/store";
+import { warehouses } from "@/lib/repo/reference";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 
@@ -18,7 +18,7 @@ export default async function NewUserPage() {
     return <PermissionDenied module="users" role={role} action="invite people to" />;
   }
 
-  const sites = db.warehouses.map((w) => ({ id: w.id, label: `${w.code} · ${w.name}` }));
+  const sites = (await warehouses()).map((w) => ({ id: w.id, label: `${w.code} · ${w.name}` }));
 
   return (
     <>

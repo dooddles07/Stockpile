@@ -7,8 +7,7 @@ import { PermissionDenied } from "@/components/states";
 import { StatTile } from "@/components/record/field-grid";
 import { Button } from "@/components/ui/button";
 import { UsersTable, type UserTableRow } from "./users-table";
-import { db } from "@/lib/data/store";
-import { warehouseByIdSync } from "@/lib/repo/inventory";
+import { indexById, users as allUsers, warehouses as allWarehouses } from "@/lib/repo/reference";
 import { ROLE_BY_ID } from "@/lib/auth/permissions";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
@@ -23,7 +22,10 @@ export default async function UsersPage() {
   const role = await getRole();
   if (!can(role, "users")) return <PermissionDenied module="users" role={role} />;
 
-  const rows: UserTableRow[] = db.users.map((u) => ({
+  const users = await allUsers();
+  const warehouseById = await indexById(allWarehouses);
+
+  const rows: UserTableRow[] = users.map((u) => ({
     id: u.id,
     name: u.name,
     email: u.email,
@@ -31,7 +33,7 @@ export default async function UsersPage() {
     roleLabel: ROLE_BY_ID.get(u.role)?.label ?? u.role,
     department: u.department,
     status: u.status,
-    warehouseCode: u.warehouseId ? (warehouseByIdSync.get(u.warehouseId)?.code ?? null) : null,
+    warehouseCode: u.warehouseId ? (warehouseById.get(u.warehouseId)?.code ?? null) : null,
     lastLoginAt: u.lastLoginAt,
     createdAt: u.createdAt,
     twoFactor: u.twoFactor,
@@ -42,7 +44,7 @@ export default async function UsersPage() {
   const invited = rows.filter((r) => r.status === "invited");
   const suspended = rows.filter((r) => r.status === "suspended");
   const withTwoFactor = rows.filter((r) => r.twoFactor);
-  const departments = [...new Set(db.users.map((u) => u.department))].sort();
+  const departments = [...new Set(users.map((u) => u.department))].sort();
 
   return (
     <>
