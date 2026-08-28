@@ -4,7 +4,8 @@ import type { Metadata } from "next";
 import { PageHeader } from "@/components/shell/page-header";
 import { PermissionDenied } from "@/components/states";
 import { RuleBuilder } from "../../new/rule-builder";
-import { db } from "@/lib/data/store";
+import { automationRules } from "@/lib/repo/ops";
+import { warehouses } from "@/lib/repo/reference";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { plural } from "@/lib/format";
@@ -15,7 +16,7 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const rule = db.automationRules.find((r) => r.id === id);
+  const rule = (await automationRules()).find((r) => r.id === id);
   return rule
     ? { title: `Edit ${rule.name}`, description: `Change when ${rule.name} fires and what it does.` }
     : { title: "Rule not found" };
@@ -28,7 +29,7 @@ export default async function EditAutomationRulePage({
 }) {
   const { id } = await params;
   const role = await getRole();
-  const rule = db.automationRules.find((r) => r.id === id);
+  const rule = (await automationRules()).find((r) => r.id === id);
   if (!rule) notFound();
   if (!can(role, "automation", "edit")) {
     return <PermissionDenied module="automation" role={role} action="edit" />;
@@ -36,7 +37,7 @@ export default async function EditAutomationRulePage({
 
   const scopes = [
     "All warehouses",
-    ...db.warehouses.map((w) => `${w.code} · ${w.name}`),
+    ...(await warehouses()).map((w) => `${w.code} · ${w.name}`),
     "All suppliers",
     "All channels",
   ];

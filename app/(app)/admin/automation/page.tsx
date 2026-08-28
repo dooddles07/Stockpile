@@ -8,7 +8,7 @@ import { StatTile } from "@/components/record/field-grid";
 import { StatusBadge } from "@/components/status/status-badge";
 import { MeterBar } from "@/components/status/meter-bar";
 import { Button } from "@/components/ui/button";
-import { db } from "@/lib/data/store";
+import { automationRules as allRules, automationRuns as allRuns } from "@/lib/repo/ops";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { percent, plural, qty, relative } from "@/lib/format";
@@ -23,9 +23,9 @@ export default async function AutomationPage() {
   const role = await getRole();
   if (!can(role, "automation")) return <PermissionDenied module="automation" role={role} />;
 
-  const rules = db.automationRules;
+  const rules = await allRules();
   const enabled = rules.filter((r) => r.enabled);
-  const runs = db.automationRuns;
+  const runs = await allRuns();
   const failures = runs.filter((r) => r.outcome === "failed");
   const affected = runs.reduce((s, r) => s + r.affected, 0);
 

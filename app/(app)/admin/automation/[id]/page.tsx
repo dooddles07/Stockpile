@@ -10,8 +10,8 @@ import { StatusBadge } from "@/components/status/status-badge";
 import { MeterBar } from "@/components/status/meter-bar";
 import { EmptyState, PermissionDenied } from "@/components/states";
 import { Button } from "@/components/ui/button";
-import { db } from "@/lib/data/store";
-import { userByIdSync } from "@/lib/repo/inventory";
+import { automationRules, automationRuns } from "@/lib/repo/ops";
+import { userById } from "@/lib/repo/inventory";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { dateTime, percent, plural, qty, relative } from "@/lib/format";
@@ -23,7 +23,7 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const rule = db.automationRules.find((r) => r.id === id);
+  const rule = (await automationRules()).find((r) => r.id === id);
   return rule ? { title: rule.name, description: rule.description } : { title: "Rule not found" };
 }
 
@@ -42,10 +42,10 @@ export default async function AutomationRulePage({
   if (!can(role, "automation")) return <PermissionDenied module="automation" role={role} />;
 
   const { id } = await params;
-  const rule = db.automationRules.find((r) => r.id === id);
+  const rule = (await automationRules()).find((r) => r.id === id);
   if (!rule) notFound();
 
-  const runs = db.automationRuns
+  const runs = (await automationRuns())
     .filter((r) => r.ruleId === rule.id)
     .sort((a, b) => b.ts.localeCompare(a.ts));
 
@@ -54,6 +54,7 @@ export default async function AutomationRulePage({
   const affected = runs.reduce((s, r) => s + r.affected, 0);
   const meanDuration =
     runs.length > 0 ? Math.round(runs.reduce((s, r) => s + r.durationMs, 0) / runs.length) : 0;
+  const createdBy = await userById(rule.createdBy);
 
   return (
     <>
@@ -280,7 +281,7 @@ export default async function AutomationRulePage({
               fields={[
                 { label: "Status", value: rule.enabled ? "Enabled" : "Disabled" },
                 { label: "Scope", value: rule.scope },
-                { label: "Created by", value: userByIdSync.get(rule.createdBy)?.name ?? "—" },
+                { label: "Created by", value: createdBy?.name ?? "—" },
                 { label: "Total runs", value: qty(rule.runCount) },
                 {
                   label: "Last run",

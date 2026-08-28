@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { PageHeader } from "@/components/shell/page-header";
 import { PermissionDenied } from "@/components/states";
 import { RuleBuilder } from "./rule-builder";
-import { db } from "@/lib/data/store";
+import { warehouses } from "@/lib/repo/reference";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 
@@ -20,7 +20,7 @@ export default async function NewAutomationRulePage() {
 
   const scopes = [
     "All warehouses",
-    ...db.warehouses.map((w) => `${w.code} · ${w.name}`),
+    ...(await warehouses()).map((w) => `${w.code} · ${w.name}`),
     "All suppliers",
     "All channels",
   ];
