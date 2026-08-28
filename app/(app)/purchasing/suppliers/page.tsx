@@ -7,7 +7,7 @@ import { PermissionDenied } from "@/components/states";
 import { StatTile } from "@/components/record/field-grid";
 import { Button } from "@/components/ui/button";
 import { SuppliersTable, type SupplierTableRow } from "./suppliers-table";
-import { db } from "@/lib/data/store";
+import { products as allProducts, suppliers as allSuppliers } from "@/lib/repo/reference";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { money, percent, qty } from "@/lib/format";
@@ -22,13 +22,15 @@ export default async function SuppliersPage() {
   if (!can(role, "suppliers")) return <PermissionDenied module="suppliers" role={role} />;
 
   const skusBySupplier = new Map<string, number>();
-  for (const p of db.products) {
+  for (const p of await allProducts()) {
     for (const sid of p.supplierIds) {
       skusBySupplier.set(sid, (skusBySupplier.get(sid) ?? 0) + 1);
     }
   }
 
-  const rows: SupplierTableRow[] = db.suppliers.map((s) => ({
+  const suppliers = await allSuppliers();
+
+  const rows: SupplierTableRow[] = suppliers.map((s) => ({
     id: s.id,
     code: s.code,
     name: s.name,
@@ -52,7 +54,7 @@ export default async function SuppliersPage() {
   const totalSpend = rows.reduce((s, r) => s + r.totalSpend, 0);
   const meanOnTime = rows.length > 0 ? rows.reduce((s, r) => s + r.onTimeRate, 0) / rows.length : 0;
   const underperforming = rows.filter((r) => r.onTimeRate < 0.85 || r.defectRate > 0.04);
-  const countries = [...new Set(db.suppliers.map((s) => s.country))].sort();
+  const countries = [...new Set(suppliers.map((s) => s.country))].sort();
 
   return (
     <>

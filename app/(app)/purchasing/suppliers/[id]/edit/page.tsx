@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 import { PageHeader } from "@/components/shell/page-header";
 import { PermissionDenied } from "@/components/states";
 import { SupplierForm } from "../../new/supplier-form";
-import { db } from "@/lib/data/store";
+import { categories as allCategories, suppliers as allSuppliers } from "@/lib/repo/reference";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 
@@ -14,7 +14,7 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const supplier = db.suppliers.find((s) => s.id === id);
+  const supplier = (await allSuppliers()).find((s) => s.id === id);
   return supplier
     ? {
         title: `Edit ${supplier.code}`,
@@ -26,13 +26,13 @@ export async function generateMetadata({
 export default async function EditSupplierPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const role = await getRole();
-  const supplier = db.suppliers.find((s) => s.id === id);
+  const supplier = (await allSuppliers()).find((s) => s.id === id);
   if (!supplier) notFound();
   if (!can(role, "suppliers", "edit")) {
     return <PermissionDenied module="suppliers" role={role} action="edit" />;
   }
 
-  const categories = db.categories.map((c) => ({ id: c.id, name: c.name }));
+  const categories = (await allCategories()).map((c) => ({ id: c.id, name: c.name }));
 
   return (
     <>

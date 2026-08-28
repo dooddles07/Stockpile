@@ -7,8 +7,13 @@ import { PermissionDenied } from "@/components/states";
 import { StatTile } from "@/components/record/field-grid";
 import { Button } from "@/components/ui/button";
 import { PoTable, type PoTableRow } from "./po-table";
-import { db } from "@/lib/data/store";
-import { supplierByIdSync, userByIdSync, warehouseByIdSync } from "@/lib/repo/inventory";
+import { purchaseOrders as allPurchaseOrders } from "@/lib/repo/documents";
+import {
+  indexById,
+  suppliers as allSuppliers,
+  users as allUsers,
+  warehouses as allWarehouses,
+} from "@/lib/repo/reference";
 import { NOW } from "@/lib/data/rng";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
@@ -32,8 +37,12 @@ export default async function PurchaseOrdersPage({
   const { q } = await searchParams;
   const now = NOW.getTime();
 
-  const rows: PoTableRow[] = db.purchaseOrders.map((p) => {
-    const supplier = supplierByIdSync.get(p.supplierId);
+  const supplierById = await indexById(allSuppliers);
+  const warehouseById = await indexById(allWarehouses);
+  const userById = await indexById(allUsers);
+
+  const rows: PoTableRow[] = (await allPurchaseOrders()).map((p) => {
+    const supplier = supplierById.get(p.supplierId);
     const units = p.lines.reduce((s, l) => s + l.quantity, 0);
     const receivedUnits = p.lines.reduce((s, l) => s + l.fulfilled, 0);
     const open = ["submitted", "approved", "ordered", "partially-received"].includes(p.status);
@@ -43,7 +52,7 @@ export default async function PurchaseOrdersPage({
       number: p.number,
       supplier: supplier?.name ?? "—",
       supplierCode: supplier?.code ?? "—",
-      warehouseCode: warehouseByIdSync.get(p.warehouseId)?.code ?? "—",
+      warehouseCode: warehouseById.get(p.warehouseId)?.code ?? "—",
       status: p.status,
       createdAt: p.createdAt,
       orderedAt: p.orderedAt,
@@ -53,8 +62,8 @@ export default async function PurchaseOrdersPage({
       units,
       receivedUnits,
       total: p.total,
-      createdBy: userByIdSync.get(p.createdBy)?.name ?? "—",
-      approvedBy: p.approvedBy ? (userByIdSync.get(p.approvedBy)?.name ?? null) : null,
+      createdBy: userById.get(p.createdBy)?.name ?? "—",
+      approvedBy: p.approvedBy ? (userById.get(p.approvedBy)?.name ?? null) : null,
       paymentTerms: p.paymentTerms,
       overdue: open && new Date(p.expectedAt).getTime() < now,
     };
@@ -67,7 +76,7 @@ export default async function PurchaseOrdersPage({
   const overdue = rows.filter((r) => r.overdue);
 
   const suppliers = [...new Set(rows.map((r) => r.supplier))].sort();
-  const warehouses = [...new Set(db.warehouses.map((w) => w.code))].sort();
+  const warehouses = [...new Set([...warehouseById.values()].map((w) => w.code))].sort();
 
   return (
     <>

@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { PageHeader } from "@/components/shell/page-header";
 import { PermissionDenied } from "@/components/states";
 import { SupplierForm } from "./supplier-form";
-import { db } from "@/lib/data/store";
+import { categories as allCategories, suppliers as allSuppliers } from "@/lib/repo/reference";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 
@@ -18,13 +18,13 @@ export default async function NewSupplierPage() {
     return <PermissionDenied module="suppliers" role={role} action="create" />;
   }
 
-  const categories = db.categories.map((c) => ({ id: c.id, name: c.name }));
+  const categories = (await allCategories()).map((c) => ({ id: c.id, name: c.name }));
 
   // Continue the existing numbering in the format already in use. Supplier
   // codes are read aloud on the phone and typed into remittance advice, so a
   // collision — or a second format — is expensive.
   const highest = Math.max(
-    ...db.suppliers.map((s) => Number(s.code.replace(/\D/g, "")) || 0),
+    ...(await allSuppliers()).map((s) => Number(s.code.replace(/\D/g, "")) || 0),
   );
   const suggestedCode = `S-${highest + 1}`;
 

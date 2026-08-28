@@ -8,8 +8,13 @@ import { Section, StatTile } from "@/components/record/field-grid";
 import { SimpleTable } from "@/components/record/simple-table";
 import { StatusBadge } from "@/components/status/status-badge";
 import { Button } from "@/components/ui/button";
-import { db } from "@/lib/data/store";
-import { supplierByIdSync, userByIdSync, warehouseByIdSync } from "@/lib/repo/inventory";
+import { purchaseOrders as allPurchaseOrders } from "@/lib/repo/documents";
+import {
+  indexById,
+  suppliers as allSuppliers,
+  users as allUsers,
+  warehouses as allWarehouses,
+} from "@/lib/repo/reference";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { date, money, plural, qty, relative } from "@/lib/format";
@@ -24,7 +29,11 @@ export default async function GoodsReceivedPage() {
   const role = await getRole();
   if (!can(role, "receiving")) return <PermissionDenied module="receiving" role={role} />;
 
-  const receipts = db.purchaseOrders
+  const supplierById = await indexById(allSuppliers);
+  const warehouseById = await indexById(allWarehouses);
+  const userById = await indexById(allUsers);
+
+  const receipts = (await allPurchaseOrders())
     .filter((p) => ["partially-received", "received", "closed"].includes(p.status))
     .map((p) => {
       const ordered = p.lines.reduce((s, l) => s + l.quantity, 0);
@@ -37,9 +46,9 @@ export default async function GoodsReceivedPage() {
       return {
         id: p.id,
         number: p.number,
-        supplier: supplierByIdSync.get(p.supplierId)?.name ?? "—",
+        supplier: supplierById.get(p.supplierId)?.name ?? "—",
         supplierId: p.supplierId,
-        warehouse: warehouseByIdSync.get(p.warehouseId)?.code ?? "—",
+        warehouse: warehouseById.get(p.warehouseId)?.code ?? "—",
         status: p.status,
         receivedAt: p.receivedAt,
         expectedAt: p.expectedAt,
@@ -49,7 +58,7 @@ export default async function GoodsReceivedPage() {
         received,
         receivedValue: Math.round(receivedValue),
         complete: received >= ordered,
-        bookedBy: userByIdSync.get(p.createdBy)?.name ?? "—",
+        bookedBy: userById.get(p.createdBy)?.name ?? "—",
       };
     })
     .sort((a, b) => (b.receivedAt ?? "").localeCompare(a.receivedAt ?? ""));

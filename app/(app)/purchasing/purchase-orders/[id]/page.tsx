@@ -13,8 +13,15 @@ import { GoodsReceipt } from "./goods-receipt";
 import { WorkflowStepper } from "@/components/status/workflow-stepper";
 import { StatusBadge } from "@/components/status/status-badge";
 import { EmptyState, PermissionDenied } from "@/components/states";
-import { db } from "@/lib/data/store";
-import { productByIdSync, supplierByIdSync, userByIdSync, warehouseByIdSync } from "@/lib/repo/inventory";
+import { purchaseOrders as allPurchaseOrders } from "@/lib/repo/documents";
+import {
+  indexById,
+  locations as allLocations,
+  products as allProducts,
+  suppliers as allSuppliers,
+  users as allUsers,
+  warehouses as allWarehouses,
+} from "@/lib/repo/reference";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { date, dateTime, deliveryLabel, money, percent, plural, qty } from "@/lib/format";
@@ -28,7 +35,7 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const po = db.purchaseOrders.find((p) => p.id === id);
+  const po = (await allPurchaseOrders()).find((p) => p.id === id);
   return po
     ? { title: po.number, description: `Purchase order — ${money(po.total)}.` }
     : { title: "Purchase order not found" };
@@ -56,11 +63,16 @@ export default async function PurchaseOrderDetailPage({
   }
 
   const { id } = await params;
-  const po = db.purchaseOrders.find((p) => p.id === id);
+  const po = (await allPurchaseOrders()).find((p) => p.id === id);
   if (!po) notFound();
 
-  const supplier = supplierByIdSync.get(po.supplierId);
-  const warehouse = warehouseByIdSync.get(po.warehouseId);
+  const supplierById = await indexById(allSuppliers);
+  const warehouseById = await indexById(allWarehouses);
+  const userById = await indexById(allUsers);
+  const productById = await indexById(allProducts);
+
+  const supplier = supplierById.get(po.supplierId);
+  const warehouse = warehouseById.get(po.warehouseId);
   const canApprove = can(role, "purchase-orders", "approve");
   const awaitingDecision = po.status === "submitted";
   const receivable = ["ordered", "partially-received"].includes(po.status);
@@ -74,7 +86,7 @@ export default async function PurchaseOrderDetailPage({
     id: event.id,
     ts: event.ts,
     tone: ACTION_TONE[event.action] ?? "neutral",
-    title: `${humanize(event.action)} by ${userByIdSync.get(event.userId)?.name ?? "—"}`,
+    title: `${humanize(event.action)} by ${userById.get(event.userId)?.name ?? "—"}`,
     detail: event.note,
   }));
 
@@ -117,7 +129,7 @@ export default async function PurchaseOrderDetailPage({
             header: "Product",
             cell: (l) => (
               <Link href={`/inventory/products/${l.sku}`} className="grid gap-0.5 hover:underline">
-                <span className="font-medium">{productByIdSync.get(l.productId)?.shortName ?? l.name}</span>
+                <span className="font-medium">{productById.get(l.productId)?.shortName ?? l.name}</span>
                 <span className="text-code text-[11px] text-muted-foreground">{l.sku}</span>
               </Link>
             ),
@@ -293,10 +305,10 @@ export default async function PurchaseOrderDetailPage({
                 value: `${date(po.expectedAt)} · ${deliveryLabel(po.expectedAt, po.receivedAt)}`,
               },
               { label: "Received", value: po.receivedAt ? dateTime(po.receivedAt) : "Not received" },
-              { label: "Raised by", value: userByIdSync.get(po.createdBy)?.name ?? "—" },
+              { label: "Raised by", value: userById.get(po.createdBy)?.name ?? "—" },
               {
                 label: "Approved by",
-                value: po.approvedBy ? (userByIdSync.get(po.approvedBy)?.name ?? "—") : "Not approved",
+                value: po.approvedBy ? (userById.get(po.approvedBy)?.name ?? "—") : "Not approved",
               },
             ]}
           />
@@ -354,7 +366,7 @@ export default async function PurchaseOrderDetailPage({
 
   /* ------------------------------------------------------------- receive -- */
 
-  const receiptLocations = db.locations
+  const receiptLocations = (await allLocations())
     .filter((l) => l.warehouseId === po.warehouseId && l.type !== "quarantine")
     .map((l) => ({ id: l.id, code: l.code }));
 
@@ -365,7 +377,7 @@ export default async function PurchaseOrderDetailPage({
       destination={warehouse?.code ?? "—"}
       locations={receiptLocations}
       lines={po.lines.map((l) => {
-        const product = productByIdSync.get(l.productId);
+        const product = productById.get(l.productId);
         return {
           id: l.id,
           sku: l.sku,

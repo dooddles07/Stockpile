@@ -7,7 +7,7 @@ import { PermissionDenied } from "@/components/states";
 import { StatTile } from "@/components/record/field-grid";
 import { ReturnsTable } from "@/components/record/returns-view";
 import { Button } from "@/components/ui/button";
-import { returnRowsSync } from "@/lib/repo/returns";
+import { returnRows } from "@/lib/repo/returns";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { money, qty } from "@/lib/format";
@@ -23,7 +23,7 @@ export default async function PurchaseReturnsPage() {
     return <PermissionDenied module="purchase-returns" role={role} />;
   }
 
-  const rows = returnRowsSync("purchase");
+  const rows = await returnRows("purchase");
   const open = rows.filter((r) => !["credited", "rejected"].includes(r.status));
   const credited = rows.filter((r) => r.status === "credited");
   const creditOutstanding = open.reduce((s, r) => s + r.refundTotal, 0);

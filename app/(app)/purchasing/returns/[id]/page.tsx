@@ -9,8 +9,15 @@ import { SimpleTable } from "@/components/record/simple-table";
 import { WorkflowStepper } from "@/components/status/workflow-stepper";
 import { StatusBadge } from "@/components/status/status-badge";
 import { PermissionDenied } from "@/components/states";
-import { db } from "@/lib/data/store";
-import { customerByIdSync, productByIdSync, supplierByIdSync, userByIdSync, warehouseByIdSync } from "@/lib/repo/inventory";
+import { returns as allReturns } from "@/lib/repo/documents";
+import {
+  customers as allCustomers,
+  indexById,
+  products as allProducts,
+  suppliers as allSuppliers,
+  users as allUsers,
+  warehouses as allWarehouses,
+} from "@/lib/repo/reference";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { date, dateTime, money, plural, qty } from "@/lib/format";
@@ -23,7 +30,7 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const doc = db.returns.find((r) => r.id === id);
+  const doc = (await allReturns()).find((r) => r.id === id);
   return doc
     ? { title: doc.number, description: `${doc.kind === "purchase" ? "Purchase" : "Sales"} return — ${doc.reason}.` }
     : { title: "Return not found" };
@@ -36,17 +43,20 @@ export default async function ReturnDetailPage({
 }) {
   const role = await getRole();
   const { id } = await params;
-  const doc = db.returns.find((r) => r.id === id);
+  const doc = (await allReturns()).find((r) => r.id === id);
   if (!doc) notFound();
 
   const moduleKey: ModuleKey = doc.kind === "purchase" ? "purchase-returns" : "sales-returns";
   if (!can(role, moduleKey)) return <PermissionDenied module={moduleKey} role={role} />;
 
   const isPurchase = doc.kind === "purchase";
+  const productById = await indexById(allProducts);
+  const userById = await indexById(allUsers);
+  const warehouseById = await indexById(allWarehouses);
   const partner = isPurchase
-    ? supplierByIdSync.get(doc.partnerId)
-    : customerByIdSync.get(doc.partnerId);
-  const warehouse = warehouseByIdSync.get(doc.warehouseId);
+    ? (await allSuppliers()).find((s) => s.id === doc.partnerId)
+    : (await allCustomers()).find((c) => c.id === doc.partnerId);
+  const warehouse = warehouseById.get(doc.warehouseId);
 
   const units = doc.lines.reduce((s, l) => s + l.quantity, 0);
   const restockLines = doc.lines.filter((l) => l.restock);
@@ -160,7 +170,7 @@ export default async function ReturnDetailPage({
                   cell: (l) => (
                     <Link href={`/inventory/products/${l.sku}`} className="grid gap-0.5 hover:underline">
                       <span className="font-medium">
-                        {productByIdSync.get(l.productId)?.shortName ?? l.name}
+                        {productById.get(l.productId)?.shortName ?? l.name}
                       </span>
                       <span className="text-code text-[11px] text-muted-foreground">{l.sku}</span>
                     </Link>
@@ -251,7 +261,7 @@ export default async function ReturnDetailPage({
                   label: "Resolved",
                   value: doc.resolvedAt ? dateTime(doc.resolvedAt) : "Not resolved",
                 },
-                { label: "Raised by", value: userByIdSync.get(doc.createdBy)?.name ?? "—" },
+                { label: "Raised by", value: userById.get(doc.createdBy)?.name ?? "—" },
                 { label: "Reason", value: doc.reason, span: 2 },
               ]}
             />

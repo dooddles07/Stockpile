@@ -3,8 +3,8 @@ import type { Metadata } from "next";
 import { PageHeader } from "@/components/shell/page-header";
 import { PermissionDenied } from "@/components/states";
 import { ReturnForm, type ReturnableOrder } from "@/components/record/return-form";
-import { db } from "@/lib/data/store";
-import { supplierByIdSync, warehouseByIdSync } from "@/lib/repo/inventory";
+import { purchaseOrders as allPurchaseOrders } from "@/lib/repo/documents";
+import { indexById, suppliers as allSuppliers, warehouses as allWarehouses } from "@/lib/repo/reference";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { date } from "@/lib/format";
@@ -38,15 +38,18 @@ export default async function NewPurchaseReturnPage({
 
   // Only what has actually been booked in can go back. Quantities are capped at
   // what was received, not what was ordered.
-  const orders: ReturnableOrder[] = db.purchaseOrders
+  const supplierById = await indexById(allSuppliers);
+  const warehouseById = await indexById(allWarehouses);
+
+  const orders: ReturnableOrder[] = (await allPurchaseOrders())
     .filter((p) => RECEIVED.includes(p.status) && p.lines.some((l) => l.fulfilled > 0))
     .sort((a, b) => (b.receivedAt ?? "").localeCompare(a.receivedAt ?? ""))
     .slice(0, 60)
     .map((p) => ({
       id: p.id,
       number: p.number,
-      partner: supplierByIdSync.get(p.supplierId)?.name ?? "—",
-      siteCode: warehouseByIdSync.get(p.warehouseId)?.code ?? "—",
+      partner: supplierById.get(p.supplierId)?.name ?? "—",
+      siteCode: warehouseById.get(p.warehouseId)?.code ?? "—",
       dated: p.receivedAt ? `Received ${date(p.receivedAt)}` : "Part received",
       lines: p.lines
         .filter((l) => l.fulfilled > 0)

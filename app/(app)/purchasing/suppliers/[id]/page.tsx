@@ -12,8 +12,15 @@ import { StatusBadge } from "@/components/status/status-badge";
 import { ProductThumb } from "@/components/product/product-thumb";
 import { EmptyState, PermissionDenied } from "@/components/states";
 import { Button } from "@/components/ui/button";
-import { db } from "@/lib/data/store";
-import { categoryByIdSync, summaryForSync, warehouseByIdSync } from "@/lib/repo/inventory";
+import { purchaseOrders as allPurchaseOrders, returns as allReturns } from "@/lib/repo/documents";
+import { summaryFor } from "@/lib/repo/inventory";
+import {
+  categories as allCategories,
+  indexById,
+  products as allProducts,
+  suppliers as allSuppliers,
+  warehouses as allWarehouses,
+} from "@/lib/repo/reference";
 import { NOW } from "@/lib/data/rng";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
@@ -27,7 +34,7 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const supplier = db.suppliers.find((s) => s.id === id);
+  const supplier = (await allSuppliers()).find((s) => s.id === id);
   return supplier
     ? { title: supplier.name, description: `${supplier.code} — performance, products and purchase history.` }
     : { title: "Supplier not found" };
@@ -42,15 +49,22 @@ export default async function SupplierDetailPage({
   if (!can(role, "suppliers")) return <PermissionDenied module="suppliers" role={role} />;
 
   const { id } = await params;
-  const supplier = db.suppliers.find((s) => s.id === id);
+  const supplier = (await allSuppliers()).find((s) => s.id === id);
   if (!supplier) notFound();
 
   const showSpend = can(role, "suppliers", "export") || can(role, "valuation");
 
-  const products = db.products.filter((p) => p.supplierIds.includes(supplier.id));
-  const orders = db.purchaseOrders
+  const categoryById = await indexById(allCategories);
+  const warehouseById = await indexById(allWarehouses);
+
+  const products = (await allProducts()).filter((p) => p.supplierIds.includes(supplier.id));
+  const orders = (await allPurchaseOrders())
     .filter((p) => p.supplierId === supplier.id)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+  const summaryByProduct = new Map(
+    await Promise.all(products.map(async (p) => [p.id, await summaryFor(p.id)] as const)),
+  );
 
   const open = orders.filter((p) =>
     ["submitted", "approved", "ordered", "partially-received"].includes(p.status),
@@ -65,7 +79,7 @@ export default async function SupplierDetailPage({
   );
   const observedOnTime = received.length > 0 ? deliveredOnTime.length / received.length : null;
 
-  const returns = db.returns.filter(
+  const returns = (await allReturns()).filter(
     (r) => r.kind === "purchase" && r.partnerId === supplier.id,
   );
 
@@ -122,7 +136,8 @@ export default async function SupplierDetailPage({
                   <span className="flex flex-wrap gap-1.5">
                     {supplier.categories.map((slug) => {
                       const name =
-                        db.categories.find((c) => c.slug === slug)?.name ?? humanize(slug);
+                        [...categoryById.values()].find((c) => c.slug === slug)?.name ??
+                        humanize(slug);
                       return <StatusBadge key={slug} label={name} tone="neutral" showDot={false} />;
                     })}
                   </span>
@@ -171,7 +186,7 @@ export default async function SupplierDetailPage({
                 key: "warehouse",
                 header: "Into",
                 hideOnMobile: true,
-                cell: (p) => warehouseByIdSync.get(p.warehouseId)?.code ?? "—",
+                cell: (p) => warehouseById.get(p.warehouseId)?.code ?? "—",
               },
               { key: "lines", header: "Lines", align: "right", hideOnMobile: true, cell: (p) => qty(p.lines.length) },
               {
@@ -337,7 +352,7 @@ export default async function SupplierDetailPage({
             header: "Product",
             cell: (p) => (
               <Link href={`/inventory/products/${p.sku}`} className="flex min-w-0 items-center gap-2.5">
-                <ProductThumb category={categoryByIdSync.get(p.categoryId)?.name ?? ""} sku={p.sku} />
+                <ProductThumb category={categoryById.get(p.categoryId)?.name ?? ""} sku={p.sku} />
                 <span className="grid min-w-0 gap-0.5">
                   <span className="truncate font-medium hover:underline">{p.shortName}</span>
                   <span className="text-code truncate text-[11px] text-muted-foreground">{p.sku}</span>
@@ -349,7 +364,7 @@ export default async function SupplierDetailPage({
             key: "category",
             header: "Category",
             hideOnMobile: true,
-            cell: (p) => categoryByIdSync.get(p.categoryId)?.name ?? "—",
+            cell: (p) => categoryById.get(p.categoryId)?.name ?? "—",
           },
           {
             key: "role",
@@ -371,12 +386,12 @@ export default async function SupplierDetailPage({
             key: "available",
             header: "Available",
             align: "right",
-            cell: (p) => qty(summaryForSync(p.id).available),
+            cell: (p) => qty(summaryByProduct.get(p.id)?.available ?? 0),
           },
           {
             key: "health",
             header: "Health",
-            cell: (p) => <StatusBadge status={summaryForSync(p.id).health} />,
+            cell: (p) => <StatusBadge status={summaryByProduct.get(p.id)?.health ?? "out-of-stock"} />,
           },
           { key: "status", header: "Status", hideOnMobile: true, cell: (p) => <StatusBadge status={p.status} /> },
         ]}

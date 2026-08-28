@@ -3,8 +3,12 @@ import type { Metadata } from "next";
 import { PageHeader } from "@/components/shell/page-header";
 import { PermissionDenied } from "@/components/states";
 import { PoForm, type PoProduct } from "./po-form";
-import { db } from "@/lib/data/store";
-import { summaryForSync } from "@/lib/repo/inventory";
+import { summaryFor } from "@/lib/repo/inventory";
+import {
+  products as allProducts,
+  suppliers as allSuppliers,
+  warehouses as allWarehouses,
+} from "@/lib/repo/reference";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 
@@ -19,7 +23,7 @@ export default async function NewPurchaseOrderPage() {
     return <PermissionDenied module="purchase-orders" role={role} action="create" />;
   }
 
-  const suppliers = db.suppliers
+  const suppliers = (await allSuppliers())
     .map((s) => ({
       id: s.id,
       code: s.code,
@@ -36,10 +40,11 @@ export default async function NewPurchaseOrderPage() {
       return a.name.localeCompare(b.name);
     });
 
-  const products: PoProduct[] = db.products
-    .filter((p) => p.status === "active")
-    .map((p) => {
-      const stock = summaryForSync(p.id);
+  const products: PoProduct[] = await Promise.all(
+    (await allProducts())
+      .filter((p) => p.status === "active")
+      .map(async (p) => {
+      const stock = await summaryFor(p.id);
       const belowReorder = stock.available < p.reorderPoint;
       // Bring the SKU back to its reorder point plus its standard order
       // quantity, less whatever is already on its way.
@@ -62,9 +67,10 @@ export default async function NewPurchaseOrderPage() {
         belowReorder,
         reorderPoint: p.reorderPoint,
       };
-    });
+    }),
+  );
 
-  const warehouses = db.warehouses
+  const warehouses = (await allWarehouses())
     .filter((w) => w.status === "operational")
     .map((w) => ({ id: w.id, code: w.code, name: w.name }));
 
