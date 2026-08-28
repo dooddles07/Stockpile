@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const PORT = 3100;
+
 /**
  * Smoke suite against the generated dataset (lib/data/store.ts, seeded via
  * lib/data/rng.ts). The dataset is generated once per process from a fixed
@@ -14,13 +16,16 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   reporter: "list",
   use: {
-    baseURL: "http://127.0.0.1:3100",
+    // `localhost`, not `127.0.0.1`: Next's dev-origin guard treats them as
+    // different origins and silently drops client JS for the latter,
+    // breaking hydration without failing the page load.
+    baseURL: `http://localhost:${PORT}`,
     trace: "on-first-retry",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
-    command: "npm run dev -- --port 3100",
-    url: "http://127.0.0.1:3100",
+    command: `npm run dev -- --port ${PORT}`,
+    url: `http://localhost:${PORT}`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },
