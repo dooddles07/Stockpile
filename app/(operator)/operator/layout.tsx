@@ -6,9 +6,9 @@ import { OfflineBanner } from "@/components/states/offline-banner";
 import { OperatorTabs } from "./operator-tabs";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser, getRole } from "@/lib/auth/session";
-import { warehouseByIdSync } from "@/lib/repo/inventory";
-import { db } from "@/lib/data/store";
-import { pendingApprovalsSync } from "@/lib/repo/metrics";
+import { purchaseOrders as allPurchaseOrders, transfers as allTransfers } from "@/lib/repo/documents";
+import { warehouses as allWarehouses } from "@/lib/repo/reference";
+import { pendingApprovals } from "@/lib/repo/metrics";
 import { can } from "@/lib/auth/permissions";
 import { ROLE_BY_ID } from "@/lib/auth/permissions";
 
@@ -24,16 +24,17 @@ export default async function OperatorLayout({ children }: { children: React.Rea
   const [role, user] = await Promise.all([getRole(), getCurrentUser()]);
 
   // A site is assumed rather than asked for: the handheld belongs to a building.
-  const site = warehouseByIdSync.get(user.warehouseId ?? "") ?? db.warehouses[0];
+  const warehouses = await allWarehouses();
+  const site = warehouses.find((w) => w.id === user.warehouseId) ?? warehouses[0];
 
   const approvals = can(role, "approvals")
-    ? pendingApprovalsSync().filter((a) => can(role, a.module, "approve")).length
+    ? (await pendingApprovals()).filter((a) => can(role, a.module, "approve")).length
     : 0;
   const receiving = can(role, "receiving")
-    ? db.purchaseOrders.filter(
+    ? (await allPurchaseOrders()).filter(
         (p) => ["ordered", "partially-received"].includes(p.status) && p.warehouseId === site.id,
       ).length +
-      db.transfers.filter(
+      (await allTransfers()).filter(
         (t) => ["in-transit", "partially-received"].includes(t.status) && t.toWarehouseId === site.id,
       ).length
     : 0;
