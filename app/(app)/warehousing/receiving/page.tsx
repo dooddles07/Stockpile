@@ -9,8 +9,13 @@ import { SimpleTable } from "@/components/record/simple-table";
 import { Section } from "@/components/record/field-grid";
 import { StatusBadge } from "@/components/status/status-badge";
 import { Button } from "@/components/ui/button";
-import { db } from "@/lib/data/store";
-import { productByIdSync, supplierByIdSync, warehouseByIdSync } from "@/lib/repo/inventory";
+import { purchaseOrders as allPurchaseOrders, transfers as allTransfers } from "@/lib/repo/documents";
+import {
+  indexById,
+  products as allProducts,
+  suppliers as allSuppliers,
+  warehouses as allWarehouses,
+} from "@/lib/repo/reference";
 import { NOW } from "@/lib/data/rng";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
@@ -28,7 +33,11 @@ export default async function ReceivingPage() {
 
   const now = NOW.getTime();
 
-  const purchaseReceipts = db.purchaseOrders
+  const supplierById = await indexById(allSuppliers);
+  const warehouseById = await indexById(allWarehouses);
+  const productById = await indexById(allProducts);
+
+  const purchaseReceipts = (await allPurchaseOrders())
     .filter((p) => ["ordered", "partially-received"].includes(p.status))
     .map((p) => {
       const ordered = p.lines.reduce((s, l) => s + l.quantity, 0);
@@ -36,8 +45,8 @@ export default async function ReceivingPage() {
       return {
         id: p.id,
         number: p.number,
-        source: supplierByIdSync.get(p.supplierId)?.name ?? "—",
-        warehouse: warehouseByIdSync.get(p.warehouseId)?.code ?? "—",
+        source: supplierById.get(p.supplierId)?.name ?? "—",
+        warehouse: warehouseById.get(p.warehouseId)?.code ?? "—",
         status: p.status,
         expectedAt: p.expectedAt,
         overdue: new Date(p.expectedAt).getTime() < now,
@@ -51,7 +60,7 @@ export default async function ReceivingPage() {
     })
     .sort((a, b) => a.expectedAt.localeCompare(b.expectedAt));
 
-  const transferReceipts = db.transfers
+  const transferReceipts = (await allTransfers())
     .filter((t) => ["in-transit", "partially-received"].includes(t.status))
     .map((t) => {
       const shipped = t.lines.reduce((s, l) => s + l.shipped, 0);
@@ -59,8 +68,8 @@ export default async function ReceivingPage() {
       return {
         id: t.id,
         number: t.number,
-        source: `${warehouseByIdSync.get(t.fromWarehouseId)?.code} · ${warehouseByIdSync.get(t.fromWarehouseId)?.name}`,
-        warehouse: warehouseByIdSync.get(t.toWarehouseId)?.code ?? "—",
+        source: `${warehouseById.get(t.fromWarehouseId)?.code} · ${warehouseById.get(t.fromWarehouseId)?.name}`,
+        warehouse: warehouseById.get(t.toWarehouseId)?.code ?? "—",
         status: t.status,
         expectedAt: t.expectedAt,
         overdue: new Date(t.expectedAt).getTime() < now,
@@ -69,7 +78,7 @@ export default async function ReceivingPage() {
         received,
         outstanding: shipped - received,
         value: Math.round(
-          t.lines.reduce((s, l) => s + l.quantity * (productByIdSync.get(l.productId)?.unitCost ?? 0), 0),
+          t.lines.reduce((s, l) => s + l.quantity * (productById.get(l.productId)?.unitCost ?? 0), 0),
         ),
         href: `/warehousing/transfers/${t.id}?tab=receive`,
       };
