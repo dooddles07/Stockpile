@@ -4,8 +4,8 @@ import { PageHeader } from "@/components/shell/page-header";
 import { PermissionDenied } from "@/components/states";
 import { StatTile } from "@/components/record/field-grid";
 import { LocationsTable, type LocationTableRow } from "./locations-table";
-import { db } from "@/lib/data/store";
-import { warehouseByIdSync } from "@/lib/repo/inventory";
+import { allStockRows } from "@/lib/repo/inventory";
+import { indexById, locations as allLocations, warehouses as allWarehouses } from "@/lib/repo/reference";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { humanize } from "@/lib/status";
@@ -20,16 +20,18 @@ export default async function LocationsPage() {
   const role = await getRole();
   if (!can(role, "locations")) return <PermissionDenied module="locations" role={role} />;
 
+  const warehouseById = await indexById(allWarehouses);
+
   // How many distinct SKUs sit in each location, from the stock records.
   const skusByLocation = new Map<string, Set<string>>();
-  for (const row of db.stockRows) {
+  for (const row of await allStockRows()) {
     const set = skusByLocation.get(row.locationId) ?? new Set<string>();
     set.add(row.productId);
     skusByLocation.set(row.locationId, set);
   }
 
-  const rows: LocationTableRow[] = db.locations.map((l) => {
-    const warehouse = warehouseByIdSync.get(l.warehouseId);
+  const rows: LocationTableRow[] = (await allLocations()).map((l) => {
+    const warehouse = warehouseById.get(l.warehouseId);
     return {
       id: l.id,
       code: l.code,
@@ -54,7 +56,7 @@ export default async function LocationsPage() {
   const occupied = rows.reduce((s, r) => s + r.occupiedUnits, 0);
   const nearFull = rows.filter((r) => r.fill > 0.9).length;
   const restricted = rows.filter((r) => r.restricted).length;
-  const warehouses = [...new Set(db.warehouses.map((w) => w.code))].sort();
+  const warehouses = [...new Set([...warehouseById.values()].map((w) => w.code))].sort();
 
   return (
     <>

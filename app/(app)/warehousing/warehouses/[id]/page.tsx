@@ -11,14 +11,20 @@ import { StatusBadge } from "@/components/status/status-badge";
 import { EmptyState, PermissionDenied } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { MeterBar, capacityTone } from "@/components/status/meter-bar";
-import { db } from "@/lib/data/store";
+import { stockLevelRows, warehouseRollups } from "@/lib/repo/inventory";
 import {
-  locationByIdSync,
-  productByIdSync,
-  stockLevelRowsSync,
-  userByIdSync,
-  warehouseRollupsSync,
-} from "@/lib/repo/inventory";
+  movements as allMovements,
+  purchaseOrders as allPurchaseOrders,
+  transfers as allTransfers,
+} from "@/lib/repo/documents";
+import {
+  indexById,
+  locations as allLocations,
+  products as allProducts,
+  suppliers as allSuppliers,
+  users as allUsers,
+  warehouses as allWarehouses,
+} from "@/lib/repo/reference";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { date, dateTime, dueLabel, money, percent, plural, qty, relative, signed } from "@/lib/format";
@@ -30,7 +36,7 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const site = db.warehouses.find((w) => w.id === id);
+  const site = (await allWarehouses()).find((w) => w.id === id);
   return site
     ? { title: site.name, description: `${site.code} — capacity, stock and activity.` }
     : { title: "Warehouse not found" };
@@ -52,20 +58,25 @@ export default async function WarehouseDetailPage({
   if (!can(role, "warehouses")) return <PermissionDenied module="warehouses" role={role} />;
 
   const { id } = await params;
-  const rollup = warehouseRollupsSync().find((w) => w.id === id);
+  const rollup = (await warehouseRollups()).find((w) => w.id === id);
   if (!rollup) notFound();
 
-  const showValue = can(role, "valuation") || can(role, "warehouses", "export");
-  const locations = db.locations.filter((l) => l.warehouseId === rollup.id);
-  const stock = stockLevelRowsSync().filter((r) => r.warehouseId === rollup.id);
-  const movements = db.movements.filter((m) => m.warehouseId === rollup.id).slice(0, 25);
+  const productById = await indexById(allProducts);
+  const locationById = await indexById(allLocations);
+  const userById = await indexById(allUsers);
+  const supplierById = await indexById(allSuppliers);
 
-  const transfers = db.transfers
+  const showValue = can(role, "valuation") || can(role, "warehouses", "export");
+  const locations = (await allLocations()).filter((l) => l.warehouseId === rollup.id);
+  const stock = (await stockLevelRows()).filter((r) => r.warehouseId === rollup.id);
+  const movements = (await allMovements()).filter((m) => m.warehouseId === rollup.id).slice(0, 25);
+
+  const transfers = (await allTransfers())
     .filter((t) => t.fromWarehouseId === rollup.id || t.toWarehouseId === rollup.id)
     .filter((t) => !["received", "cancelled"].includes(t.status))
     .sort((a, b) => a.expectedAt.localeCompare(b.expectedAt));
 
-  const incomingPos = db.purchaseOrders
+  const incomingPos = (await allPurchaseOrders())
     .filter((p) => p.warehouseId === rollup.id && ["ordered", "partially-received"].includes(p.status))
     .sort((a, b) => a.expectedAt.localeCompare(b.expectedAt));
 
@@ -264,7 +275,7 @@ export default async function WarehouseDetailPage({
                         <span className="text-code font-medium">{po.number}</span>
                       </span>
                       <span className="truncate text-caption text-muted-foreground">
-                        {db.suppliers.find((s) => s.id === po.supplierId)?.name}
+                        {supplierById.get(po.supplierId)?.name}
                       </span>
                     </span>
                     <span className="grid shrink-0 justify-items-end gap-1">
@@ -397,7 +408,7 @@ export default async function WarehouseDetailPage({
               <Link href={`/inventory/products/${m.sku}`} className="grid gap-0.5 hover:underline">
                 <span className="text-code font-medium">{m.sku}</span>
                 <span className="truncate text-[11px] text-muted-foreground">
-                  {productByIdSync.get(m.productId)?.shortName}
+                  {productById.get(m.productId)?.shortName}
                 </span>
               </Link>
             ),
@@ -408,7 +419,7 @@ export default async function WarehouseDetailPage({
             hideOnMobile: true,
             cell: (m) => (
               <span className="text-code text-muted-foreground">
-                {locationByIdSync.get(m.locationId)?.code ?? "—"}
+                {locationById.get(m.locationId)?.code ?? "—"}
               </span>
             ),
           },
@@ -438,7 +449,7 @@ export default async function WarehouseDetailPage({
             key: "user",
             header: "User",
             hideOnMobile: true,
-            cell: (m) => userByIdSync.get(m.userId)?.name ?? "—",
+            cell: (m) => userById.get(m.userId)?.name ?? "—",
           },
         ]}
         empty={

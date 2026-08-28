@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 import { PageHeader } from "@/components/shell/page-header";
 import { PermissionDenied } from "@/components/states";
 import { WarehouseForm } from "../../new/warehouse-form";
-import { db } from "@/lib/data/store";
+import { users as allUsers, warehouses as allWarehouses } from "@/lib/repo/reference";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 
@@ -14,7 +14,7 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const site = db.warehouses.find((w) => w.id === id);
+  const site = (await allWarehouses()).find((w) => w.id === id);
   return site
     ? { title: `Edit ${site.code}`, description: `Change the site record for ${site.name}.` }
     : { title: "Site not found" };
@@ -23,13 +23,13 @@ export async function generateMetadata({
 export default async function EditWarehousePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const role = await getRole();
-  const site = db.warehouses.find((w) => w.id === id);
+  const site = (await allWarehouses()).find((w) => w.id === id);
   if (!site) notFound();
   if (!can(role, "warehouses", "edit")) {
     return <PermissionDenied module="warehouses" role={role} action="edit" />;
   }
 
-  const managers = db.users
+  const managers = (await allUsers())
     .filter(
       (u) =>
         (u.status === "active" && ["inventory-manager", "super-admin"].includes(u.role)) ||

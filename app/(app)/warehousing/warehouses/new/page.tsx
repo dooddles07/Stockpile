@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { PageHeader } from "@/components/shell/page-header";
 import { PermissionDenied } from "@/components/states";
 import { WarehouseForm } from "./warehouse-form";
-import { db } from "@/lib/data/store";
+import { users as allUsers, warehouses as allWarehouses } from "@/lib/repo/reference";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 
@@ -18,7 +18,7 @@ export default async function NewWarehousePage() {
     return <PermissionDenied module="warehouses" role={role} action="create" />;
   }
 
-  const managers = db.users
+  const managers = (await allUsers())
     .filter((u) => u.status === "active" && ["inventory-manager", "super-admin"].includes(u.role))
     .map((u) => ({ id: u.id, name: u.name }))
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -26,7 +26,7 @@ export default async function NewWarehousePage() {
   // Site codes carry the type: DC-03 after DC-02. A new site defaults to a
   // distribution centre, and the operator can change both together.
   const next =
-    db.warehouses.filter((w) => w.code.startsWith("DC-")).length + 1;
+    (await allWarehouses()).filter((w) => w.code.startsWith("DC-")).length + 1;
 
   return (
     <>
