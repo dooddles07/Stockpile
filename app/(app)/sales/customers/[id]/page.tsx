@@ -12,8 +12,14 @@ import { StatusBadge } from "@/components/status/status-badge";
 import { ProductThumb } from "@/components/product/product-thumb";
 import { EmptyState, PermissionDenied } from "@/components/states";
 import { Button } from "@/components/ui/button";
-import { db } from "@/lib/data/store";
-import { categoryByIdSync, productByIdSync, warehouseByIdSync } from "@/lib/repo/inventory";
+import { returns as allReturns, salesOrders as allSalesOrders } from "@/lib/repo/documents";
+import {
+  categories as allCategories,
+  customers as allCustomers,
+  indexById,
+  products as allProducts,
+  warehouses as allWarehouses,
+} from "@/lib/repo/reference";
 import { NOW } from "@/lib/data/rng";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
@@ -27,7 +33,7 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const customer = db.customers.find((c) => c.id === id);
+  const customer = (await allCustomers()).find((c) => c.id === id);
   return customer
     ? { title: customer.name, description: `${customer.code} — orders, credit and buying history.` }
     : { title: "Customer not found" };
@@ -44,10 +50,14 @@ export default async function CustomerDetailPage({
   if (!can(role, "customers")) return <PermissionDenied module="customers" role={role} />;
 
   const { id } = await params;
-  const customer = db.customers.find((c) => c.id === id);
+  const customer = (await allCustomers()).find((c) => c.id === id);
   if (!customer) notFound();
 
-  const orders = db.salesOrders
+  const categoryById = await indexById(allCategories);
+  const productById = await indexById(allProducts);
+  const warehouseById = await indexById(allWarehouses);
+
+  const orders = (await allSalesOrders())
     .filter((o) => o.customerId === customer.id)
     .sort((a, b) => b.placedAt.localeCompare(a.placedAt));
 
@@ -56,7 +66,7 @@ export default async function CustomerDetailPage({
   const backorders = orders.filter((o) => o.status === "backorder");
   const late = open.filter((o) => new Date(o.promisedAt).getTime() < NOW.getTime());
 
-  const returns = db.returns.filter((r) => r.kind === "sales" && r.partnerId === customer.id);
+  const returns = (await allReturns()).filter((r) => r.kind === "sales" && r.partnerId === customer.id);
 
   const creditUsed = customer.creditLimit > 0 ? customer.outstanding / customer.creditLimit : 0;
   const overLimit = creditUsed > 1;
@@ -75,7 +85,7 @@ export default async function CustomerDetailPage({
     }
   }
   const topProducts = [...byProduct.entries()]
-    .map(([productId, v]) => ({ product: productByIdSync.get(productId), ...v }))
+    .map(([productId, v]) => ({ product: productById.get(productId), ...v }))
     .filter((p) => p.product)
     .sort((a, b) => b.value - a.value)
     .slice(0, 10);
@@ -173,7 +183,7 @@ export default async function CustomerDetailPage({
                 key: "warehouse",
                 header: "From",
                 hideOnMobile: true,
-                cell: (o) => warehouseByIdSync.get(o.warehouseId)?.code ?? "—",
+                cell: (o) => warehouseById.get(o.warehouseId)?.code ?? "—",
               },
               { key: "lines", header: "Lines", align: "right", cell: (o) => qty(o.lines.length) },
               { key: "total", header: "Total", align: "right", cell: (o) => money(o.total) },
@@ -296,7 +306,7 @@ export default async function CustomerDetailPage({
                 className="flex min-w-0 items-center gap-2.5"
               >
                 <ProductThumb
-                  category={categoryByIdSync.get(p.product!.categoryId)?.name ?? ""}
+                  category={categoryById.get(p.product!.categoryId)?.name ?? ""}
                   sku={p.product!.sku}
                 />
                 <span className="grid min-w-0 gap-0.5">
@@ -312,7 +322,7 @@ export default async function CustomerDetailPage({
             key: "category",
             header: "Category",
             hideOnMobile: true,
-            cell: (p) => categoryByIdSync.get(p.product!.categoryId)?.name ?? "—",
+            cell: (p) => categoryById.get(p.product!.categoryId)?.name ?? "—",
           },
           { key: "units", header: "Units bought", align: "right", cell: (p) => qty(p.units) },
           {

@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 import { PageHeader } from "@/components/shell/page-header";
 import { PermissionDenied } from "@/components/states";
 import { CustomerForm } from "../../new/customer-form";
-import { db } from "@/lib/data/store";
+import { customers as allCustomers } from "@/lib/repo/reference";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { money } from "@/lib/format";
@@ -15,7 +15,7 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const customer = db.customers.find((c) => c.id === id);
+  const customer = (await allCustomers()).find((c) => c.id === id);
   return customer
     ? {
         title: `Edit ${customer.code}`,
@@ -27,7 +27,7 @@ export async function generateMetadata({
 export default async function EditCustomerPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const role = await getRole();
-  const customer = db.customers.find((c) => c.id === id);
+  const customer = (await allCustomers()).find((c) => c.id === id);
   if (!customer) notFound();
   if (!can(role, "customers", "edit")) {
     return <PermissionDenied module="customers" role={role} action="edit" />;

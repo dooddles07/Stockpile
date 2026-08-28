@@ -7,8 +7,8 @@ import { PermissionDenied } from "@/components/states";
 import { StatTile } from "@/components/record/field-grid";
 import { Button } from "@/components/ui/button";
 import { OrdersTable, type OrderTableRow } from "./orders-table";
-import { db } from "@/lib/data/store";
-import { customerByIdSync, warehouseByIdSync } from "@/lib/repo/inventory";
+import { salesOrders as allSalesOrders } from "@/lib/repo/documents";
+import { customers as allCustomers, indexById, warehouses as allWarehouses } from "@/lib/repo/reference";
 import { NOW } from "@/lib/data/rng";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
@@ -33,8 +33,11 @@ export default async function SalesOrdersPage({
   const { q } = await searchParams;
   const now = NOW.getTime();
 
-  const rows: OrderTableRow[] = db.salesOrders.map((o) => {
-    const customer = customerByIdSync.get(o.customerId);
+  const customerById = await indexById(allCustomers);
+  const warehouseById = await indexById(allWarehouses);
+
+  const rows: OrderTableRow[] = (await allSalesOrders()).map((o) => {
+    const customer = customerById.get(o.customerId);
     const units = o.lines.reduce((s, l) => s + l.quantity, 0);
     const fulfilledUnits = o.lines.reduce((s, l) => s + l.fulfilled, 0);
 
@@ -43,7 +46,7 @@ export default async function SalesOrdersPage({
       number: o.number,
       customer: customer?.name ?? "—",
       customerCode: customer?.code ?? "—",
-      warehouseCode: warehouseByIdSync.get(o.warehouseId)?.code ?? "—",
+      warehouseCode: warehouseById.get(o.warehouseId)?.code ?? "—",
       status: o.status,
       paymentStatus: o.paymentStatus,
       fulfillmentStatus: o.fulfillmentStatus,
@@ -68,7 +71,7 @@ export default async function SalesOrdersPage({
   const unpaid = rows.filter((r) => r.paymentStatus === "unpaid" && r.status !== "cancelled");
 
   const customers = [...new Set(rows.map((r) => r.customer))].sort();
-  const warehouses = [...new Set(db.warehouses.map((w) => w.code))].sort();
+  const warehouses = [...new Set([...warehouseById.values()].map((w) => w.code))].sort();
 
   return (
     <>

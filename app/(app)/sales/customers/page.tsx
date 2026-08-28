@@ -7,7 +7,8 @@ import { PermissionDenied } from "@/components/states";
 import { StatTile } from "@/components/record/field-grid";
 import { Button } from "@/components/ui/button";
 import { CustomersTable, type CustomerTableRow } from "./customers-table";
-import { db } from "@/lib/data/store";
+import { salesOrders as allSalesOrders } from "@/lib/repo/documents";
+import { customers as allCustomers } from "@/lib/repo/reference";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { humanize } from "@/lib/status";
@@ -24,8 +25,11 @@ export default async function CustomersPage() {
 
   const openStatuses = ["confirmed", "reserved", "picking", "packing", "shipped", "backorder"];
 
-  const rows: CustomerTableRow[] = db.customers.map((c) => {
-    const orders = db.salesOrders.filter((o) => o.customerId === c.id);
+  const customers = await allCustomers();
+  const salesOrders = await allSalesOrders();
+
+  const rows: CustomerTableRow[] = customers.map((c) => {
+    const orders = salesOrders.filter((o) => o.customerId === c.id);
     const openOrders = orders.filter((o) => openStatuses.includes(o.status)).length;
     const lastOrder = orders
       .map((o) => o.placedAt)
@@ -56,7 +60,7 @@ export default async function CustomersPage() {
   const totalSpend = rows.reduce((s, r) => s + r.totalSpend, 0);
   const outstanding = rows.reduce((s, r) => s + r.outstanding, 0);
   const nearLimit = rows.filter((r) => r.creditUsed > 0.9);
-  const countries = [...new Set(db.customers.map((c) => c.country))].sort();
+  const countries = [...new Set(customers.map((c) => c.country))].sort();
 
   return (
     <>

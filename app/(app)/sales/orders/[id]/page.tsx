@@ -13,16 +13,15 @@ import { WorkflowStepper } from "@/components/status/workflow-stepper";
 import { StatusBadge } from "@/components/status/status-badge";
 import { EmptyState, PermissionDenied } from "@/components/states";
 import { Button } from "@/components/ui/button";
-import { db } from "@/lib/data/store";
+import { returns as allReturns, salesOrders as allSalesOrders } from "@/lib/repo/documents";
 import {
-  customerByIdSync,
-  locationByIdSync,
-  productByIdSync,
-  stockRowsForSync,
-  summaryForSync,
-  userByIdSync,
-  warehouseByIdSync,
+  customerById,
+  stockRowsFor,
+  summaryFor,
+  userById,
+  warehouseById,
 } from "@/lib/repo/inventory";
+import { indexById, locations as allLocations, products as allProducts } from "@/lib/repo/reference";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { date, dateTime, deliveryLabel, money, percent, plural, qty } from "@/lib/format";
@@ -35,7 +34,7 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const order = db.salesOrders.find((o) => o.id === id);
+  const order = (await allSalesOrders()).find((o) => o.id === id);
   return order
     ? { title: order.number, description: `Sales order — ${money(order.total)}.` }
     : { title: "Sales order not found" };
@@ -52,36 +51,46 @@ export default async function SalesOrderDetailPage({
   if (!can(role, "sales-orders")) return <PermissionDenied module="sales-orders" role={role} />;
 
   const { id } = await params;
-  const order = db.salesOrders.find((o) => o.id === id);
+  const order = (await allSalesOrders()).find((o) => o.id === id);
   if (!order) notFound();
 
-  const customer = customerByIdSync.get(order.customerId);
-  const warehouse = warehouseByIdSync.get(order.warehouseId);
+  const customer = await customerById(order.customerId);
+  const warehouse = await warehouseById(order.warehouseId);
+  const productById = await indexById(allProducts);
+  const locationById = await indexById(allLocations);
 
   const units = order.lines.reduce((s, l) => s + l.quantity, 0);
   const fulfilledUnits = order.lines.reduce((s, l) => s + l.fulfilled, 0);
   const progress = units > 0 ? fulfilledUnits / units : 0;
 
   const stage = FULFILLABLE.find((s) => s === order.status);
-  const returns = db.returns.filter(
+  const returns = (await allReturns()).filter(
     (r) => r.kind === "sales" && r.sourceOrderId === order.id,
   );
 
   // Availability at the order's own warehouse — the global figure would say a
   // line is fine when the stock is in the wrong building.
-  const lineAvailability = new Map<string, { atSite: number; global: number; bin: string }>();
-  for (const line of order.lines) {
-    const rows = stockRowsForSync(line.productId).filter((r) => r.warehouseId === order.warehouseId);
-    const atSite = rows.reduce(
-      (s, r) => s + Math.max(0, r.onHand - r.reserved - r.damaged),
-      0,
-    );
-    lineAvailability.set(line.id, {
-      atSite,
-      global: summaryForSync(line.productId).available,
-      bin: rows[0] ? (locationByIdSync.get(rows[0].locationId)?.code ?? "—") : "—",
-    });
-  }
+  const lineAvailability = new Map<string, { atSite: number; global: number; bin: string }>(
+    await Promise.all(
+      order.lines.map(async (line) => {
+        const rows = (await stockRowsFor(line.productId)).filter(
+          (r) => r.warehouseId === order.warehouseId,
+        );
+        const atSite = rows.reduce(
+          (s, r) => s + Math.max(0, r.onHand - r.reserved - r.damaged),
+          0,
+        );
+        return [
+          line.id,
+          {
+            atSite,
+            global: (await summaryFor(line.productId)).available,
+            bin: rows[0] ? (locationById.get(rows[0].locationId)?.code ?? "—") : "—",
+          },
+        ] as const;
+      }),
+    ),
+  );
 
   const shortLines = order.lines.filter(
     (l) => (lineAvailability.get(l.id)?.atSite ?? 0) < l.quantity - l.fulfilled,
@@ -94,7 +103,7 @@ export default async function SalesOrderDetailPage({
       tone: "neutral",
       title: `Placed via ${humanize(order.channel)}`,
       detail: `${plural(order.lines.length, "line")} · ${money(order.total, { cents: true })}`,
-      actor: userByIdSync.get(order.createdBy)?.name,
+      actor: (await userById(order.createdBy))?.name,
     },
   ];
 
@@ -138,7 +147,7 @@ export default async function SalesOrderDetailPage({
             header: "Product",
             cell: (l) => (
               <Link href={`/inventory/products/${l.sku}`} className="grid gap-0.5 hover:underline">
-                <span className="font-medium">{productByIdSync.get(l.productId)?.shortName ?? l.name}</span>
+                <span className="font-medium">{productById.get(l.productId)?.shortName ?? l.name}</span>
                 <span className="text-code text-[11px] text-muted-foreground">{l.sku}</span>
               </Link>
             ),
@@ -391,7 +400,7 @@ export default async function SalesOrderDetailPage({
         return {
           id: l.id,
           sku: l.sku,
-          name: productByIdSync.get(l.productId)?.shortName ?? l.name,
+          name: productById.get(l.productId)?.shortName ?? l.name,
           locationCode: a?.bin ?? "—",
           ordered: l.quantity,
           alreadyPicked: l.fulfilled,

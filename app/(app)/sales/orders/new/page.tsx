@@ -3,8 +3,13 @@ import type { Metadata } from "next";
 import { PageHeader } from "@/components/shell/page-header";
 import { PermissionDenied } from "@/components/states";
 import { OrderForm, type OrderStockRow } from "./order-form";
-import { db } from "@/lib/data/store";
-import { productByIdSync, stockLevelRowsSync } from "@/lib/repo/inventory";
+import { stockLevelRows } from "@/lib/repo/inventory";
+import {
+  customers as allCustomers,
+  indexById,
+  products as allProducts,
+  warehouses as allWarehouses,
+} from "@/lib/repo/reference";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 
@@ -19,7 +24,7 @@ export default async function NewSalesOrderPage() {
     return <PermissionDenied module="sales-orders" role={role} action="create" />;
   }
 
-  const customers = db.customers
+  const customers = (await allCustomers())
     .map((c) => ({
       id: c.id,
       code: c.code,
@@ -36,15 +41,17 @@ export default async function NewSalesOrderPage() {
       return a.name.localeCompare(b.name);
     });
 
-  const warehouses = db.warehouses
+  const warehouses = (await allWarehouses())
     .filter((w) => w.status === "operational")
     .map((w) => ({ id: w.id, code: w.code, name: w.name }));
 
+  const productById = await indexById(allProducts);
+
   // Availability per product per site, since a sales order ships from one site.
   const byKey = new Map<string, OrderStockRow>();
-  for (const row of stockLevelRowsSync()) {
+  for (const row of await stockLevelRows()) {
     if (row.available <= 0) continue;
-    const product = productByIdSync.get(row.productId);
+    const product = productById.get(row.productId);
     if (!product || product.status !== "active") continue;
 
     const key = `${row.productId}:${row.warehouseId}`;

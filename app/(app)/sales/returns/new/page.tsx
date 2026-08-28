@@ -3,8 +3,8 @@ import type { Metadata } from "next";
 import { PageHeader } from "@/components/shell/page-header";
 import { PermissionDenied } from "@/components/states";
 import { ReturnForm, type ReturnableOrder } from "@/components/record/return-form";
-import { db } from "@/lib/data/store";
-import { customerByIdSync, warehouseByIdSync } from "@/lib/repo/inventory";
+import { salesOrders as allSalesOrders } from "@/lib/repo/documents";
+import { customers as allCustomers, indexById, warehouses as allWarehouses } from "@/lib/repo/reference";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { date } from "@/lib/format";
@@ -37,15 +37,18 @@ export default async function NewSalesReturnPage({
 
   // Only orders that actually left the building can come back. Newest first —
   // a return is nearly always against something recent.
-  const orders: ReturnableOrder[] = db.salesOrders
+  const customerById = await indexById(allCustomers);
+  const warehouseById = await indexById(allWarehouses);
+
+  const orders: ReturnableOrder[] = (await allSalesOrders())
     .filter((o) => o.shippedAt && o.lines.some((l) => l.fulfilled > 0))
     .sort((a, b) => (b.shippedAt ?? "").localeCompare(a.shippedAt ?? ""))
     .slice(0, 60)
     .map((o) => ({
       id: o.id,
       number: o.number,
-      partner: customerByIdSync.get(o.customerId)?.name ?? "—",
-      siteCode: warehouseByIdSync.get(o.warehouseId)?.code ?? "—",
+      partner: customerById.get(o.customerId)?.name ?? "—",
+      siteCode: warehouseById.get(o.warehouseId)?.code ?? "—",
       dated: `Shipped ${date(o.shippedAt!)}`,
       lines: o.lines
         .filter((l) => l.fulfilled > 0)
