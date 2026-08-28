@@ -33,7 +33,9 @@ const eslintConfig = defineConfig([
     },
   },
   {
-    files: ["lib/repo/**"],
+    // The repository layer, plus the seed script — the sanctioned bridge that
+    // loads the generated dataset into Postgres once.
+    files: ["lib/repo/**", "lib/db/seed.ts"],
     rules: { "no-restricted-imports": "off" },
   },
   {
