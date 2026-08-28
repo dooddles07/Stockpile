@@ -14,12 +14,36 @@ This ticket is deliberately not user-visible. It was split out because the alter
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Drizzle and migration tooling are installed and a migration can be authored and applied
-- [ ] The driver in use supports interactive transactions; the HTTP driver is explicitly not used
-- [ ] The database client initialises lazily on first use and is not wrapped in a proxy
-- [ ] A production build succeeds with no connection string present
-- [ ] CI creates a Neon branch, applies migrations, runs the Playwright suite, and deletes the branch
-- [ ] The branch is deleted even when the suite fails
-- [ ] The Playwright suite from phase 1 still passes, unchanged, against the generated dataset
+- [x] Drizzle and migration tooling are installed and a migration can be authored and applied
+- [x] The driver in use supports interactive transactions; the HTTP driver is explicitly not used
+- [x] The database client initialises lazily on first use and is not wrapped in a proxy
+- [x] A production build succeeds with no connection string present
+- [x] CI creates a Neon branch, applies migrations, runs the Playwright suite, and deletes the branch
+- [x] The branch is deleted even when the suite fails
+- [x] The Playwright suite from phase 1 still passes, unchanged, against the generated dataset
+
+## Comments
+
+`drizzle-orm` + `drizzle-kit` installed alongside `@neondatabase/serverless`
+and `ws`. `npm run db:generate` authors migrations from `lib/db/schema.ts`;
+`npm run db:migrate` applies them. `drizzle/0000_init.sql` is the first,
+authored offline and committed — one table, the append-only `events` stream
+from ADR-0003, which later tickets build around rather than reshape.
+
+`lib/db/client.ts` exports `getDb()`: `drizzle-orm/neon-serverless` over a
+WebSocket `Pool`, never `neon-http` (ADR-0003/0006 need interactive
+transactions). The `Pool` is constructed on first call behind a plain
+`let db` module variable — no top-level construction, no proxy. It throws
+`"DATABASE_URL is not set"` when the variable is absent rather than at
+import. Nothing imports it yet, so `next build` with no connection string
+present succeeds; a dedicated CI `build` job keeps that true.
+
+`.github/workflows/e2e.yml`: the `playwright` job creates a Neon branch
+(`neondatabase/create-branch-action@v6`), applies migrations to it,
+runs the unchanged Playwright suite, and deletes the branch in an
+`if: always()` step (`delete-branch-action@v3`, `branch:` accepts the id).
+The suite still renders from the generated dataset — the harness is proven
+by clean provision and teardown, not by the suite reading Postgres yet. All
+29 phase-1 tests pass unmodified.
