@@ -10,14 +10,13 @@
  * and ADR-0010's daily demo reset is `import { seed }` and call it again.
  *
  * Ticket 02 loaded Categories, Warehouses, Locations, Products and Stock Rows.
- * Ticket 03 adds Suppliers, Purchase Orders and their lines, and Returns and
- * their lines. `returns` / `return_lines` hold BOTH kinds: `documents.returns()`
- * and `returnRows(kind)` are one shared function each, and the unmodified
- * Playwright suite covers the sales-returns screen too, so both kinds must load
- * now. Parallel ticket 04 (Sales & Customers) therefore does NOT create these
- * tables — it only re-points `returnRows`'s sales counterparty from
- * `reference.customers` (dataset) to a Postgres query. Everything else still
- * renders from the in-memory dataset until a later ticket moves it.
+ * Ticket 03 added Suppliers, Purchase Orders and their lines, and Returns and
+ * their lines — `returns` / `return_lines` hold BOTH kinds, since
+ * `documents.returns()` and `returnRows(kind)` are one shared function each.
+ * Ticket 04 adds Customers, Sales Orders and their lines; once `reference.customers`
+ * reads Postgres, `returnRows`'s sales counterparty follows with no change there.
+ * Everything else still renders from the in-memory dataset until a later ticket
+ * moves it.
  *
  * Its own Pool, not `lib/db/client.ts`: that module is `server-only` and this
  * runs under plain Node.
@@ -33,12 +32,15 @@ import ws from "ws";
 import { db as dataset } from "@/lib/data/store";
 import {
   categories,
+  customers,
   locations,
   products,
   purchaseOrderLines,
   purchaseOrders,
   returnLines,
   returns,
+  salesOrderLines,
+  salesOrders,
   stockRows,
   suppliers,
   warehouses,
@@ -57,12 +59,12 @@ export async function seed() {
     // re-seed reproduces the same seq values; CASCADE covers the foreign keys
     // between the tables.
     await db.execute(
-      sql`TRUNCATE TABLE ${returnLines}, ${returns}, ${purchaseOrderLines}, ${purchaseOrders}, ${suppliers}, ${stockRows}, ${products}, ${locations}, ${warehouses}, ${categories} RESTART IDENTITY CASCADE`,
+      sql`TRUNCATE TABLE ${salesOrderLines}, ${salesOrders}, ${customers}, ${returnLines}, ${returns}, ${purchaseOrderLines}, ${purchaseOrders}, ${suppliers}, ${stockRows}, ${products}, ${locations}, ${warehouses}, ${categories} RESTART IDENTITY CASCADE`,
     );
 
     // FK order: categories -> warehouses -> locations -> products -> stock_rows,
-    // then suppliers -> purchase_orders -> purchase_order_lines, and
-    // returns -> return_lines.
+    // then suppliers -> purchase_orders -> purchase_order_lines,
+    // returns -> return_lines, and customers -> sales_orders -> sales_order_lines.
     // One multi-row INSERT per table; chunk .values() if the dataset ever
     // approaches Postgres's 65535-parameter limit (~2k product rows, or ~5k
     // order lines at 12 columns).
@@ -89,9 +91,16 @@ export async function seed() {
       dataset.returns.flatMap((ret) => ret.lines.map((line) => ({ ...line, returnId: ret.id }))),
     );
 
+    await db.insert(customers).values(dataset.customers);
+    await db.insert(salesOrders).values(dataset.salesOrders.map(({ lines, ...so }) => so));
+    await db.insert(salesOrderLines).values(
+      dataset.salesOrders.flatMap((so) => so.lines.map((line) => ({ ...line, salesOrderId: so.id }))),
+    );
+
     // Fail loud if a truncate or insert silently dropped rows.
     const poLineCount = dataset.purchaseOrders.reduce((s, po) => s + po.lines.length, 0);
     const returnLineCount = dataset.returns.reduce((s, ret) => s + ret.lines.length, 0);
+    const soLineCount = dataset.salesOrders.reduce((s, so) => s + so.lines.length, 0);
     const checks = [
       ["categories", categories, dataset.categories.length],
       ["warehouses", warehouses, dataset.warehouses.length],
@@ -103,6 +112,9 @@ export async function seed() {
       ["purchase_order_lines", purchaseOrderLines, poLineCount],
       ["returns", returns, dataset.returns.length],
       ["return_lines", returnLines, returnLineCount],
+      ["customers", customers, dataset.customers.length],
+      ["sales_orders", salesOrders, dataset.salesOrders.length],
+      ["sales_order_lines", salesOrderLines, soLineCount],
     ] as const;
     const counts: Record<string, number> = {};
     for (const [name, table, expected] of checks) {
