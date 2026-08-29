@@ -15,6 +15,9 @@
  * `documents.returns()` and `returnRows(kind)` are one shared function each.
  * Ticket 04 adds Customers, Sales Orders and their lines; once `reference.customers`
  * reads Postgres, `returnRows`'s sales counterparty follows with no change there.
+ * Ticket 05 adds Transfers and their lines (`transfers` / `transfer_lines`),
+ * loaded after the sales area — they reference only warehouses, products and
+ * locations, all seeded earlier.
  * Everything else still renders from the in-memory dataset until a later ticket
  * moves it.
  *
@@ -43,6 +46,8 @@ import {
   salesOrders,
   stockRows,
   suppliers,
+  transferLines,
+  transfers,
   warehouses,
 } from "@/lib/db/schema";
 
@@ -59,7 +64,7 @@ export async function seed() {
     // re-seed reproduces the same seq values; CASCADE covers the foreign keys
     // between the tables.
     await db.execute(
-      sql`TRUNCATE TABLE ${salesOrderLines}, ${salesOrders}, ${customers}, ${returnLines}, ${returns}, ${purchaseOrderLines}, ${purchaseOrders}, ${suppliers}, ${stockRows}, ${products}, ${locations}, ${warehouses}, ${categories} RESTART IDENTITY CASCADE`,
+      sql`TRUNCATE TABLE ${transferLines}, ${transfers}, ${salesOrderLines}, ${salesOrders}, ${customers}, ${returnLines}, ${returns}, ${purchaseOrderLines}, ${purchaseOrders}, ${suppliers}, ${stockRows}, ${products}, ${locations}, ${warehouses}, ${categories} RESTART IDENTITY CASCADE`,
     );
 
     // FK order: categories -> warehouses -> locations -> products -> stock_rows,
@@ -97,10 +102,16 @@ export async function seed() {
       dataset.salesOrders.flatMap((so) => so.lines.map((line) => ({ ...line, salesOrderId: so.id }))),
     );
 
+    await db.insert(transfers).values(dataset.transfers.map(({ lines, ...tr }) => tr));
+    await db.insert(transferLines).values(
+      dataset.transfers.flatMap((tr) => tr.lines.map((line) => ({ ...line, transferId: tr.id }))),
+    );
+
     // Fail loud if a truncate or insert silently dropped rows.
     const poLineCount = dataset.purchaseOrders.reduce((s, po) => s + po.lines.length, 0);
     const returnLineCount = dataset.returns.reduce((s, ret) => s + ret.lines.length, 0);
     const soLineCount = dataset.salesOrders.reduce((s, so) => s + so.lines.length, 0);
+    const transferLineCount = dataset.transfers.reduce((s, tr) => s + tr.lines.length, 0);
     const checks = [
       ["categories", categories, dataset.categories.length],
       ["warehouses", warehouses, dataset.warehouses.length],
@@ -115,6 +126,8 @@ export async function seed() {
       ["customers", customers, dataset.customers.length],
       ["sales_orders", salesOrders, dataset.salesOrders.length],
       ["sales_order_lines", salesOrderLines, soLineCount],
+      ["transfers", transfers, dataset.transfers.length],
+      ["transfer_lines", transferLines, transferLineCount],
     ] as const;
     const counts: Record<string, number> = {};
     for (const [name, table, expected] of checks) {
