@@ -36,9 +36,9 @@ export const suppliers = cache(
   (): Promise<Supplier[]> => getDb().select().from(schema.suppliers).orderBy(schema.suppliers.id),
 );
 
-export async function customers(): Promise<Customer[]> {
-  return db.customers;
-}
+export const customers = cache(
+  (): Promise<Customer[]> => getDb().select().from(schema.customers).orderBy(schema.customers.id),
+);
 
 export async function users(): Promise<User[]> {
   return db.users;

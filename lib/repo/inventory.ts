@@ -13,8 +13,8 @@
  * share `load()`, one batched read of the five tables per request via React
  * `cache`.
  *
- * Suppliers, Users, Customers, Transfers and Movements are not tables yet, so
- * the few functions that need them still read the generated dataset.
+ * Users, Transfers and Movements are not tables yet, so the few functions that
+ * need them still read the generated dataset.
  */
 
 import { cache } from "react";
@@ -25,7 +25,7 @@ import { db } from "@/lib/data/store";
 import { getDb } from "@/lib/db/client";
 import * as schema from "@/lib/db/schema";
 import { daysUntil } from "@/lib/format";
-import { indexById, suppliers as allSuppliers } from "./reference";
+import { customers as allCustomers, indexById, suppliers as allSuppliers } from "./reference";
 import type { StockViewKey } from "./stock-views";
 import type {
   Category,
@@ -129,10 +129,10 @@ const load = cache(async () => {
   };
 });
 
-// Suppliers moved to Postgres in ticket 03; indexed per request via `cache`.
-// Users / Customers are not tables yet — still the generated dataset.
+// Suppliers moved to Postgres in ticket 03, Customers in ticket 04; each
+// indexed per request via `cache`. Users are not a table yet — still the dataset.
 const supplierIndex = cache(() => indexById(allSuppliers));
-const customerByIdMap = new Map(db.customers.map((c) => [c.id, c]));
+const customerIndex = cache(() => indexById(allCustomers));
 const userByIdMap = new Map(db.users.map((u) => [u.id, u]));
 
 const EMPTY_SUMMARY: Omit<StockSummary, "productId"> = {
@@ -165,7 +165,7 @@ export async function supplierById(id: string): Promise<Supplier | undefined> {
 }
 
 export async function customerById(id: string): Promise<Customer | undefined> {
-  return customerByIdMap.get(id);
+  return (await customerIndex()).get(id);
 }
 
 export async function userById(id: string): Promise<User | undefined> {

@@ -6,16 +6,18 @@
  * ledger, unjoined. See `reference.ts` for why these are raw lists rather
  * than screen-shaped joins.
  *
- * Ticket 03 moved Purchase Orders and Returns onto Postgres. Each is two
- * queries — the parent rows and the line rows — stitched back into the nested
- * shape the screens expect, deduped per request via React `cache`.
+ * Ticket 03 moved Purchase Orders and Returns onto Postgres; ticket 04 moved
+ * Sales Orders. Each is two queries — the parent rows and the line rows —
+ * stitched back into the nested shape the screens expect, deduped per request
+ * via React `cache`.
  *
- * `incomingByProduct` is the incoming balance projected from open Purchase
- * Order state (ADR-0002, spec story 21): never from the Movement ledger, which
- * has no movement type that produces it.
+ * `incomingByProduct` / `reservedByProduct` are the incoming and reserved
+ * balances projected from open Purchase Order / Sales Order state (ADR-0002,
+ * CONTEXT.md, spec story 21): never from the Movement ledger, which has no
+ * movement type that produces either.
  *
  * The remaining accessors still read the generated dataset until their ticket
- * (04 sales, 05 transfers, 10/15 adjustments and counts).
+ * (05 transfers, 10/15 adjustments and counts).
  */
 
 import { cache } from "react";
@@ -42,6 +44,16 @@ import type {
  * nothing incoming.
  */
 const OPEN_PO_STATUSES = ["submitted", "approved", "ordered", "partially-received"] as const;
+
+/**
+ * Sales Order statuses that hold stock: `confirmed` through `packing`. The
+ * sales-orders screen states the rule — "Confirming an order reserves stock
+ * against it" — so reservation starts at `confirmed`, not at the later
+ * `reserved` step. `draft` is uncommitted; `shipped` / `delivered` have
+ * released the stock as `sale` Movements; `cancelled` released it too;
+ * `backorder` could not be reserved from stock in the first place.
+ */
+const OPEN_SO_STATUSES = ["confirmed", "reserved", "picking", "packing"] as const;
 
 /** Group rows by a key, preserving input order within each group. */
 function groupBy<T>(rows: T[], keyOf: (row: T) => string): Map<string, T[]> {
@@ -98,9 +110,49 @@ export const incomingByProduct = cache(async (): Promise<Map<string, number>> =>
   return new Map(rows.map((r) => [r.productId, r.incoming]));
 });
 
-export async function salesOrders(): Promise<SalesOrder[]> {
-  return db.salesOrders;
-}
+export const salesOrders = cache(async (): Promise<SalesOrder[]> => {
+  const pg = getDb();
+  const [orders, lineRows] = await Promise.all([
+    pg.select().from(schema.salesOrders).orderBy(schema.salesOrders.id),
+    pg.select().from(schema.salesOrderLines).orderBy(schema.salesOrderLines.seq),
+  ]);
+
+  const linesByOrder = groupBy(lineRows, (r) => r.salesOrderId);
+  return orders.map((order) => ({
+    ...order,
+    // Drop the identity PK and parent FK; a null `note` column becomes the
+    // absent optional field.
+    lines: (linesByOrder.get(order.id) ?? []).map(({ seq, salesOrderId, note, ...line }) =>
+      note == null ? line : { ...line, note },
+    ),
+  }));
+});
+
+/**
+ * Reserved quantity per Product: `sum(quantity - fulfilled)` across the lines
+ * of every open Sales Order — the reserved balance projected from open
+ * Document state, per ADR-0002 and CONTEXT.md ("Reserved" is derived from open
+ * Documents, never from Movements).
+ *
+ * The read-phase stock screens still render the seeded `stock_rows.reserved`
+ * projection; the write path (ticket 09) is what rebuilds that projection, and
+ * this is the query it is rebuilt from.
+ */
+export const reservedByProduct = cache(async (): Promise<Map<string, number>> => {
+  const rows = await getDb()
+    .select({
+      productId: schema.salesOrderLines.productId,
+      reserved: sql<number>`sum(${schema.salesOrderLines.quantity} - ${schema.salesOrderLines.fulfilled})::int`,
+    })
+    .from(schema.salesOrderLines)
+    .innerJoin(
+      schema.salesOrders,
+      eq(schema.salesOrders.id, schema.salesOrderLines.salesOrderId),
+    )
+    .where(inArray(schema.salesOrders.status, [...OPEN_SO_STATUSES]))
+    .groupBy(schema.salesOrderLines.productId);
+  return new Map(rows.map((r) => [r.productId, r.reserved]));
+});
 
 export async function transfers(): Promise<Transfer[]> {
   return db.transfers;

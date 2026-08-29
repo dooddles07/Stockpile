@@ -15,9 +15,9 @@ import type { ReturnKind } from "@/lib/types";
  * source document differ, so they are joined here once rather than in both
  * pages.
  *
- * Ticket 03 moved the return Documents, Suppliers and Warehouses onto Postgres.
- * Customers are still the generated dataset (behind `reference.customers`)
- * until ticket 04.
+ * Ticket 03 moved the return Documents, Suppliers and Warehouses onto Postgres;
+ * ticket 04 moved Customers, so both counterparties now resolve from Postgres
+ * through the same `indexById` calls below.
  */
 export async function returnRows(kind: ReturnKind): Promise<ReturnRow[]> {
   const [docs, partnerById, warehouseById] = await Promise.all([
