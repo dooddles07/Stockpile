@@ -33,11 +33,11 @@ jobs:
 
       - run: npx playwright install --with-deps chromium
 
-      # A throwaway Neon branch per run: migrations are applied to it and it is
-      # deleted afterwards (see the always() step below), so CI proves the
-      # provision/migrate/teardown pipeline the rest of phase 2 depends on.
-      # The Playwright suite still renders from the generated dataset and does
-      # not read this database yet.
+      # A throwaway Neon branch per run: migrations are applied and the seed is
+      # loaded, the suite runs against it, and it is deleted afterwards (see the
+      # always() step below). This exercises the provision/migrate/seed/teardown
+      # pipeline the rest of phase 2 depends on, and the seed script — the same
+      # one ADR-0010's daily reset calls — on every run.
       - name: Create Neon branch
         id: neon
         uses: neondatabase/create-branch-action@v6
@@ -51,8 +51,15 @@ jobs:
         env:
           DATABASE_URL: ${{ steps.neon.outputs.db_url }}
 
+      - name: Seed the database
+        run: npm run db:seed
+        env:
+          DATABASE_URL: ${{ steps.neon.outputs.db_url }}
+
       - name: Run Playwright suite
         run: npm run test:e2e
+        env:
+          DATABASE_URL: ${{ steps.neon.outputs.db_url }}
 
       - name: Delete Neon branch
         if: always()

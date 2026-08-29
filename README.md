@@ -2,7 +2,7 @@
 
 An inventory management platform for businesses that hold stock across several sites — the full lifecycle from purchase order to shelf to shipment, with the movement ledger, approvals and audit trail that make the numbers defensible.
 
-Built as a front-end system: every screen runs against a deterministic in-memory dataset rather than a database, so the whole product can be explored end to end without a backend.
+The inventory screens read from Postgres (Neon), loaded from a deterministic seed. The rest of the product still renders from the in-memory dataset that seed is generated from, and is being moved across table by table.
 
 ## What it covers
 
@@ -33,8 +33,13 @@ Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS v4 · shadcn/u
 
 ```bash
 npm install
-npm run dev      # http://localhost:3000
+export DATABASE_URL=postgres://…   # a Neon connection string (pooled)
+npm run db:migrate                 # apply migrations
+npm run db:seed                    # load the deterministic dataset
+npm run dev                        # http://localhost:3000
 ```
+
+`db:seed` truncates and reloads the five inventory tables; it is safe to re-run.
 
 ```bash
 npm run build    # production build
