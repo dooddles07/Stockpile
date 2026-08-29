@@ -1,17 +1,31 @@
 /**
  * Inventory reads.
  *
- * Everything derives from `db.stockRows` so the product page, the stock table
- * and the dashboard KPI can never disagree about how much of something exists.
+ * Phase 2, ticket 02: the bodies now query Postgres. The signatures are
+ * unchanged from phase 1 — every function that reads the dataset is still
+ * asynchronous and returns the same shape, so only this file moves and the
+ * recorded Playwright assertions still hold.
  *
- * Every function that reads the dataset is asynchronous — phase 2 replaces the
- * bodies with real queries. The lookup maps and `summaryOf` below are private
- * synchronous helpers over the once-built in-memory index; they are an
- * implementation detail of the current bodies, not part of the surface.
+ * The three screen-shaped functions — `productRows`, `stockLevelRows`,
+ * `warehouseRollups` — are each a single joined query. Integer quantities are
+ * summed in SQL (exact); the money arithmetic stays in JS, unchanged, so no
+ * rendered value shifts. The primitive lookups (`productById`, `summaryFor`, …)
+ * share `load()`, one batched read of the five tables per request via React
+ * `cache`.
+ *
+ * Suppliers, Users, Customers, Transfers and Movements are not tables yet, so
+ * the few functions that need them still read the generated dataset.
  */
 
+import { cache } from "react";
+
+import { eq, getTableColumns, sql } from "drizzle-orm";
+
 import { db } from "@/lib/data/store";
+import { getDb } from "@/lib/db/client";
+import * as schema from "@/lib/db/schema";
 import { daysUntil } from "@/lib/format";
+import type { StockViewKey } from "./stock-views";
 import type {
   Category,
   Customer,
@@ -42,16 +56,19 @@ export const HEALTH_ORDER: StockHealth[] = [
   "overstock",
 ];
 
-function buildIndex() {
+const byId = <T extends { id: string }>(xs: readonly T[]) =>
+  new Map(xs.map((x) => [x.id, x]));
+
+function buildIndex(stockRows: StockRow[], products: Product[]) {
   const rowsByProduct = new Map<string, StockRow[]>();
-  for (const row of db.stockRows) {
+  for (const row of stockRows) {
     const list = rowsByProduct.get(row.productId) ?? [];
     list.push(row);
     rowsByProduct.set(row.productId, list);
   }
 
   const summaries = new Map<string, StockSummary>();
-  for (const product of db.products) {
+  for (const product of products) {
     const rows = rowsByProduct.get(product.id) ?? [];
     let onHand = 0, reserved = 0, damaged = 0, incoming = 0, inTransit = 0;
     for (const row of rows) {
@@ -79,41 +96,66 @@ function buildIndex() {
   return { rowsByProduct, summaries };
 }
 
-const index = buildIndex();
+type StockIndex = ReturnType<typeof buildIndex>;
 
-const productByIdMap = new Map(db.products.map((p) => [p.id, p]));
-const productBySkuMap = new Map(db.products.map((p) => [p.sku, p]));
-const warehouseByIdMap = new Map(db.warehouses.map((w) => [w.id, w]));
-const locationByIdMap = new Map(db.locations.map((l) => [l.id, l]));
+/**
+ * The five migrated tables plus the derived index and lookup maps, fetched
+ * once per request. Ordered by id (stock_rows by its identity column) so
+ * iteration matches the generator's original order, which several recorded
+ * assertions depend on.
+ */
+const load = cache(async () => {
+  const pg = getDb();
+  const [products, stockRows, warehouses, locations, categories] = await Promise.all([
+    pg.select().from(schema.products).orderBy(schema.products.id),
+    pg.select().from(schema.stockRows).orderBy(schema.stockRows.seq),
+    pg.select().from(schema.warehouses).orderBy(schema.warehouses.id),
+    pg.select().from(schema.locations).orderBy(schema.locations.id),
+    pg.select().from(schema.categories).orderBy(schema.categories.id),
+  ]);
+
+  return {
+    products,
+    stockRows,
+    warehouses,
+    locations,
+    index: buildIndex(stockRows, products),
+    productByIdMap: byId(products),
+    productBySkuMap: new Map(products.map((p) => [p.sku, p])),
+    warehouseByIdMap: byId(warehouses),
+    locationByIdMap: byId(locations),
+    categoryByIdMap: byId(categories),
+  };
+});
+
+// Suppliers / Users / Customers are not tables yet — still the generated dataset.
 const supplierByIdMap = new Map(db.suppliers.map((s) => [s.id, s]));
 const customerByIdMap = new Map(db.customers.map((c) => [c.id, c]));
 const userByIdMap = new Map(db.users.map((u) => [u.id, u]));
-const categoryByIdMap = new Map(db.categories.map((c) => [c.id, c]));
 
 const EMPTY_SUMMARY: Omit<StockSummary, "productId"> = {
   onHand: 0, reserved: 0, damaged: 0, incoming: 0, inTransit: 0,
   available: 0, value: 0, health: "out-of-stock", warehouseCount: 0,
 };
 
-/** Current body's synchronous read of the pre-built summary index. */
-function summaryOf(productId: string): StockSummary {
+function summaryOf(index: StockIndex, productId: string): StockSummary {
   return index.summaries.get(productId) ?? { productId, ...EMPTY_SUMMARY };
 }
 
 export async function productById(id: string): Promise<Product | undefined> {
-  return productByIdMap.get(id);
+  return (await load()).productByIdMap.get(id);
 }
 
 export async function productBySku(sku: string): Promise<Product | undefined> {
-  return productBySkuMap.get(sku);
+  return (await load()).productBySkuMap.get(sku);
 }
 
 export async function warehouseById(id: string): Promise<Warehouse | undefined> {
-  return warehouseByIdMap.get(id);
+  return (await load()).warehouseByIdMap.get(id);
 }
 
 export async function locationById(id: string): Promise<StockLocation | undefined> {
-  return locationByIdMap.get(id);
+  return (await load()).locationByIdMap.get(id);
 }
 
 export async function supplierById(id: string): Promise<Supplier | undefined> {
@@ -129,23 +171,23 @@ export async function userById(id: string): Promise<User | undefined> {
 }
 
 export async function categoryById(id: string): Promise<Category | undefined> {
-  return categoryByIdMap.get(id);
+  return (await load()).categoryByIdMap.get(id);
 }
 
 export async function summaryFor(productId: string): Promise<StockSummary> {
-  return summaryOf(productId);
+  return summaryOf((await load()).index, productId);
 }
 
 export async function stockRowsFor(productId: string): Promise<StockRow[]> {
-  return index.rowsByProduct.get(productId) ?? [];
+  return (await load()).index.rowsByProduct.get(productId) ?? [];
 }
 
 export async function allStockRows(): Promise<StockRow[]> {
-  return db.stockRows;
+  return (await load()).stockRows;
 }
 
 export async function allSummaries(): Promise<StockSummary[]> {
-  return [...index.summaries.values()];
+  return [...(await load()).index.summaries.values()];
 }
 
 /* -------------------------------------------------------------- joins ---- */
@@ -156,18 +198,64 @@ export interface ProductRow extends Product {
   stock: StockSummary;
 }
 
-let productRowsCache: ProductRow[] | null = null;
+/** One query: products joined to their category and their stock-row totals. */
+export const productRows = cache(async (): Promise<ProductRow[]> => {
+  const pg = getDb();
+  const agg = pg
+    .select({
+      productId: schema.stockRows.productId,
+      onHand: sql<number>`sum(${schema.stockRows.onHand})::int`.as("agg_on_hand"),
+      reserved: sql<number>`sum(${schema.stockRows.reserved})::int`.as("agg_reserved"),
+      damaged: sql<number>`sum(${schema.stockRows.damaged})::int`.as("agg_damaged"),
+      incoming: sql<number>`sum(${schema.stockRows.incoming})::int`.as("agg_incoming"),
+      inTransit: sql<number>`sum(${schema.stockRows.inTransit})::int`.as("agg_in_transit"),
+      warehouseCount: sql<number>`count(*)::int`.as("agg_wc"),
+    })
+    .from(schema.stockRows)
+    .groupBy(schema.stockRows.productId)
+    .as("agg");
 
-export async function productRows(): Promise<ProductRow[]> {
-  if (productRowsCache) return productRowsCache;
-  productRowsCache = db.products.map((p) => ({
-    ...p,
-    categoryName: categoryByIdMap.get(p.categoryId)?.name ?? "—",
-    supplierName: supplierByIdMap.get(p.primarySupplierId)?.name ?? "—",
-    stock: summaryOf(p.id),
-  }));
-  return productRowsCache;
-}
+  const rows = await pg
+    .select({
+      ...getTableColumns(schema.products),
+      categoryName: schema.categories.name,
+      aggOnHand: agg.onHand,
+      aggReserved: agg.reserved,
+      aggDamaged: agg.damaged,
+      aggIncoming: agg.incoming,
+      aggInTransit: agg.inTransit,
+      aggWc: agg.warehouseCount,
+    })
+    .from(schema.products)
+    .innerJoin(schema.categories, eq(schema.categories.id, schema.products.categoryId))
+    .leftJoin(agg, eq(agg.productId, schema.products.id))
+    .orderBy(schema.products.id);
+
+  return rows.map((r) => {
+    const { categoryName, aggOnHand, aggReserved, aggDamaged, aggIncoming, aggInTransit, aggWc, ...product } = r;
+    const onHand = aggOnHand ?? 0;
+    const reserved = aggReserved ?? 0;
+    const damaged = aggDamaged ?? 0;
+    const available = Math.max(0, onHand - reserved - damaged);
+    return {
+      ...product,
+      categoryName,
+      supplierName: supplierByIdMap.get(product.primarySupplierId)?.name ?? "—",
+      stock: {
+        productId: product.id,
+        onHand,
+        reserved,
+        damaged,
+        incoming: aggIncoming ?? 0,
+        inTransit: aggInTransit ?? 0,
+        available,
+        value: Math.round(onHand * product.unitCost * 100) / 100,
+        health: healthOf(available, product.reorderPoint),
+        warehouseCount: aggWc ?? 0,
+      },
+    };
+  });
+});
 
 export interface StockLevelRow {
   id: string;
@@ -198,71 +286,110 @@ export interface StockLevelRow {
   lastCountedAt: string | null;
 }
 
-let stockLevelCache: StockLevelRow[] | null = null;
+/** One query: every stock row joined to its product, warehouse and location. */
+export const stockLevelRows = cache(async (): Promise<StockLevelRow[]> => {
+  const pg = getDb();
+  const rows = await pg
+    .select({
+      productId: schema.stockRows.productId,
+      warehouseId: schema.stockRows.warehouseId,
+      onHand: schema.stockRows.onHand,
+      reserved: schema.stockRows.reserved,
+      damaged: schema.stockRows.damaged,
+      incoming: schema.stockRows.incoming,
+      inTransit: schema.stockRows.inTransit,
+      expiresAt: schema.stockRows.expiresAt,
+      lotNumber: schema.stockRows.lotNumber,
+      lastCountedAt: schema.stockRows.lastCountedAt,
+      sku: schema.products.sku,
+      name: schema.products.name,
+      productStatus: schema.products.status,
+      reorderPoint: schema.products.reorderPoint,
+      unitCost: schema.products.unitCost,
+      warehouseCode: schema.warehouses.code,
+      warehouseName: schema.warehouses.name,
+      locationCode: schema.locations.code,
+      categoryName: schema.categories.name,
+    })
+    .from(schema.stockRows)
+    .innerJoin(schema.products, eq(schema.products.id, schema.stockRows.productId))
+    .innerJoin(schema.warehouses, eq(schema.warehouses.id, schema.stockRows.warehouseId))
+    .innerJoin(schema.locations, eq(schema.locations.id, schema.stockRows.locationId))
+    .innerJoin(schema.categories, eq(schema.categories.id, schema.products.categoryId))
+    .orderBy(schema.stockRows.seq);
 
-export async function stockLevelRows(): Promise<StockLevelRow[]> {
-  if (stockLevelCache) return stockLevelCache;
-  stockLevelCache = db.stockRows.map((row, i) => {
-    const product = productByIdMap.get(row.productId)!;
-    const warehouse = warehouseByIdMap.get(row.warehouseId)!;
-    const location = locationByIdMap.get(row.locationId);
-    const available = Math.max(0, row.onHand - row.reserved - row.damaged);
-    const summary = summaryOf(row.productId);
+  // available + health are SKU-wide (reorder points are per product): sum the
+  // product's rows first, exactly as the phase 1 index did.
+  const totals = new Map<string, { onHand: number; reserved: number; damaged: number }>();
+  for (const r of rows) {
+    const t = totals.get(r.productId) ?? { onHand: 0, reserved: 0, damaged: 0 };
+    t.onHand += r.onHand;
+    t.reserved += r.reserved;
+    t.damaged += r.damaged;
+    totals.set(r.productId, t);
+  }
+
+  return rows.map((r, i) => {
+    const t = totals.get(r.productId)!;
+    const productAvailable = Math.max(0, t.onHand - t.reserved - t.damaged);
+    const available = Math.max(0, r.onHand - r.reserved - r.damaged);
     return {
-      id: `${row.productId}:${row.warehouseId}:${i}`,
-      productId: row.productId,
-      sku: product.sku,
-      name: product.name,
-      categoryName: categoryByIdMap.get(product.categoryId)?.name ?? "—",
-      productAvailable: summary.available,
-      productStatus: product.status,
-      warehouseId: warehouse.id,
-      warehouseCode: warehouse.code,
-      warehouseName: warehouse.name,
-      locationCode: location?.code ?? "—",
-      onHand: row.onHand,
-      reserved: row.reserved,
-      damaged: row.damaged,
+      id: `${r.productId}:${r.warehouseId}:${i}`,
+      productId: r.productId,
+      sku: r.sku,
+      name: r.name,
+      categoryName: r.categoryName,
+      productAvailable,
+      productStatus: r.productStatus,
+      warehouseId: r.warehouseId,
+      warehouseCode: r.warehouseCode,
+      warehouseName: r.warehouseName,
+      locationCode: r.locationCode,
+      onHand: r.onHand,
+      reserved: r.reserved,
+      damaged: r.damaged,
       available,
-      incoming: row.incoming,
-      inTransit: row.inTransit,
-      reorderPoint: product.reorderPoint,
-      unitCost: product.unitCost,
-      value: Math.round(row.onHand * product.unitCost * 100) / 100,
-      health: summary.health,
-      expiresAt: row.expiresAt,
-      daysToExpiry: daysUntil(row.expiresAt),
-      lotNumber: row.lotNumber,
-      lastCountedAt: row.lastCountedAt,
+      incoming: r.incoming,
+      inTransit: r.inTransit,
+      reorderPoint: r.reorderPoint,
+      unitCost: r.unitCost,
+      value: Math.round(r.onHand * r.unitCost * 100) / 100,
+      health: healthOf(productAvailable, r.reorderPoint),
+      expiresAt: r.expiresAt,
+      daysToExpiry: daysUntil(r.expiresAt),
+      lotNumber: r.lotNumber,
+      lastCountedAt: r.lastCountedAt,
     };
   });
-  return stockLevelCache;
-}
+});
 
 /* ------------------------------------------------------------ rollups ---- */
 
 export async function totalInventoryValue(): Promise<number> {
-  return Math.round([...index.summaries.values()].reduce((s, x) => s + x.value, 0));
+  const s = await load();
+  return Math.round([...s.index.summaries.values()].reduce((acc, x) => acc + x.value, 0));
 }
 
 export async function healthCounts(): Promise<Record<StockHealth, number>> {
+  const s = await load();
   const out: Record<StockHealth, number> = {
     healthy: 0, low: 0, critical: 0, "out-of-stock": 0, overstock: 0,
   };
-  for (const s of index.summaries.values()) {
-    const product = productByIdMap.get(s.productId);
+  for (const summary of s.index.summaries.values()) {
+    const product = s.productByIdMap.get(summary.productId);
     if (product?.status !== "active") continue;
-    out[s.health]++;
+    out[summary.health]++;
   }
   return out;
 }
 
 export async function valueByCategory(): Promise<{ name: string; value: number; skus: number }[]> {
+  const s = await load();
   const acc = new Map<string, { value: number; skus: number }>();
-  for (const p of db.products) {
-    const name = categoryByIdMap.get(p.categoryId)?.name ?? "—";
+  for (const p of s.products) {
+    const name = s.categoryByIdMap.get(p.categoryId)?.name ?? "—";
     const cur = acc.get(name) ?? { value: 0, skus: 0 };
-    cur.value += summaryOf(p.id).value;
+    cur.value += summaryOf(s.index, p.id).value;
     cur.skus += 1;
     acc.set(name, cur);
   }
@@ -281,57 +408,47 @@ export interface WarehouseRollup extends Warehouse {
   openTransfers: number;
 }
 
-export async function warehouseRollups(): Promise<WarehouseRollup[]> {
-  return db.warehouses.map((w) => {
-    const rows = db.stockRows.filter((r) => r.warehouseId === w.id);
-    const skus = new Set(rows.map((r) => r.productId));
-    let value = 0;
-    let units = 0;
-    for (const row of rows) {
-      const p = productByIdMap.get(row.productId)!;
-      value += row.onHand * p.unitCost;
-      units += row.onHand;
-    }
+/** One query: each warehouse with its stock totals and location count. */
+export const warehouseRollups = cache(async (): Promise<WarehouseRollup[]> => {
+  const pg = getDb();
+  const rows = await pg
+    .select({
+      ...getTableColumns(schema.warehouses),
+      unitCount: sql<number>`coalesce(sum(${schema.stockRows.onHand}), 0)::int`.as("unit_count"),
+      skuCount: sql<number>`count(distinct ${schema.stockRows.productId})::int`.as("sku_count"),
+      inventoryValue: sql<number>`coalesce(round(sum(${schema.stockRows.onHand} * ${schema.products.unitCost})), 0)::int`.as("inventory_value"),
+      locationCount: sql<number>`(select count(*) from ${schema.locations} where ${schema.locations.warehouseId} = ${schema.warehouses.id})::int`.as("location_count"),
+    })
+    .from(schema.warehouses)
+    .leftJoin(schema.stockRows, eq(schema.stockRows.warehouseId, schema.warehouses.id))
+    .leftJoin(schema.products, eq(schema.products.id, schema.stockRows.productId))
+    .groupBy(schema.warehouses.id)
+    .orderBy(schema.warehouses.id);
+
+  return rows.map((r) => {
+    const { unitCount, skuCount, inventoryValue, locationCount, ...warehouse } = r;
     return {
-      ...w,
-      managerName: userByIdMap.get(w.managerId)?.name ?? "—",
-      skuCount: skus.size,
-      unitCount: units,
-      inventoryValue: Math.round(value),
-      utilization: w.usedPallets / w.capacityPallets,
-      locationCount: db.locations.filter((l) => l.warehouseId === w.id).length,
+      ...warehouse,
+      managerName: userByIdMap.get(warehouse.managerId)?.name ?? "—",
+      skuCount,
+      unitCount,
+      inventoryValue,
+      utilization: warehouse.usedPallets / warehouse.capacityPallets,
+      locationCount,
       openTransfers: db.transfers.filter(
         (t) =>
-          (t.fromWarehouseId === w.id || t.toWarehouseId === w.id) &&
+          (t.fromWarehouseId === warehouse.id || t.toWarehouseId === warehouse.id) &&
           !["received", "cancelled"].includes(t.status),
       ).length,
     };
   });
-}
+});
 
 export async function locationsFor(warehouseId: string): Promise<StockLocation[]> {
-  return db.locations.filter((l) => l.warehouseId === warehouseId);
+  return (await load()).locations.filter((l) => l.warehouseId === warehouseId);
 }
 
 /* ------------------------------------------------------------- filters --- */
-
-export const STOCK_VIEWS = {
-  all: {
-    label: "All stock",
-    description: "Every stock record across all warehouses, at every site and bin.",
-  },
-  "low-stock": {
-    label: "Low stock",
-    description:
-      "SKUs whose total available quantity has fallen below their reorder point, shown per location so you can see where the remaining stock is.",
-  },
-  critical: { label: "Critical", description: "Under 40% of the reorder point." },
-  "out-of-stock": { label: "Out of stock", description: "Nothing available to allocate." },
-  overstock: { label: "Overstock", description: "More than 6× the reorder point — capital sitting still." },
-  expiring: { label: "Expiring", description: "Lots reaching their expiry date within 30 days." },
-} as const;
-
-export type StockViewKey = keyof typeof STOCK_VIEWS;
 
 /** Pure filter over an already-fetched array — no dataset input, stays synchronous. */
 export function applyStockView(rows: StockLevelRow[], view: StockViewKey): StockLevelRow[] {

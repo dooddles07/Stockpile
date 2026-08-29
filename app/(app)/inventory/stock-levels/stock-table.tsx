@@ -24,7 +24,7 @@ import { EmptyState } from "@/components/states";
 import { useRole } from "@/components/providers/role-provider";
 import { money, plural, qty, relative } from "@/lib/format";
 import { statusMeta } from "@/lib/status";
-import { STOCK_VIEWS, type StockViewKey } from "@/lib/repo/inventory";
+import { STOCK_VIEWS, type StockViewKey } from "@/lib/repo/stock-views";
 import type { StockHealth } from "@/lib/types";
 
 export interface StockTableRow {

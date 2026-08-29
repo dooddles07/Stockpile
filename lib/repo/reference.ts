@@ -7,24 +7,30 @@
  * `inventory.ts`.
  */
 
+import { cache } from "react";
+
 import { db } from "@/lib/data/store";
+import { getDb } from "@/lib/db/client";
+import * as schema from "@/lib/db/schema";
 import type { Category, Customer, Product, StockLocation, Supplier, User, Warehouse } from "@/lib/types";
 
-export async function products(): Promise<Product[]> {
-  return db.products;
-}
+// Migrated tables — one ordered query each, deduped per request. Ordered by id
+// to match the generator's order the recorded assertions were taken against.
+export const products = cache(
+  (): Promise<Product[]> => getDb().select().from(schema.products).orderBy(schema.products.id),
+);
 
-export async function categories(): Promise<Category[]> {
-  return db.categories;
-}
+export const categories = cache(
+  (): Promise<Category[]> => getDb().select().from(schema.categories).orderBy(schema.categories.id),
+);
 
-export async function warehouses(): Promise<Warehouse[]> {
-  return db.warehouses;
-}
+export const warehouses = cache(
+  (): Promise<Warehouse[]> => getDb().select().from(schema.warehouses).orderBy(schema.warehouses.id),
+);
 
-export async function locations(): Promise<StockLocation[]> {
-  return db.locations;
-}
+export const locations = cache(
+  (): Promise<StockLocation[]> => getDb().select().from(schema.locations).orderBy(schema.locations.id),
+);
 
 export async function suppliers(): Promise<Supplier[]> {
   return db.suppliers;

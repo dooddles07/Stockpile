@@ -5,12 +5,8 @@ import { PageHeader } from "@/components/shell/page-header";
 import { PermissionDenied } from "@/components/states";
 import { StatTile } from "@/components/record/field-grid";
 import { StockTable, type StockTableRow } from "./stock-table";
-import {
-  STOCK_VIEWS,
-  applyStockView,
-  stockLevelRows,
-  type StockViewKey,
-} from "@/lib/repo/inventory";
+import { applyStockView, stockLevelRows } from "@/lib/repo/inventory";
+import { STOCK_VIEWS, type StockViewKey } from "@/lib/repo/stock-views";
 import { categories as allCategories, warehouses as allWarehouses } from "@/lib/repo/reference";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
