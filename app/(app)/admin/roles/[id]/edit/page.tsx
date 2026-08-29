@@ -8,18 +8,19 @@ import {
   ALL_MODULE_KEYS,
   MODULE_GROUP,
   MODULE_LABEL,
-  ROLES,
   ROLE_BY_ID,
   can,
   levelFor,
 } from "@/lib/auth/permissions";
 import { users as allUsers } from "@/lib/repo/reference";
-import { getRole } from "@/lib/auth/session";
+import { ensureRoles, getRole } from "@/lib/auth/session";
 import { plural } from "@/lib/format";
 import type { Role } from "@/lib/types";
 
+// Roles are Postgres rows and the build has no DATABASE_URL, so these render on
+// demand rather than prerendered — 7 admin pages, nothing gained by prerender.
 export async function generateStaticParams() {
-  return ROLES.map((r) => ({ id: r.id }));
+  return [];
 }
 
 export async function generateMetadata({
@@ -27,6 +28,7 @@ export async function generateMetadata({
 }: {
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
+  await ensureRoles();
   const { id } = await params;
   const meta = ROLE_BY_ID.get(id as Role);
   return meta

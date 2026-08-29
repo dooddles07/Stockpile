@@ -38,8 +38,6 @@ const STATUS_OPTIONS = (["active", "invited", "suspended"] as const).map((value)
   tone: statusMeta(value).tone,
 }));
 
-const ROLE_OPTIONS = ROLES.map((r) => ({ value: r.label, label: r.label }));
-
 export function UsersTable({
   rows,
   departments,
@@ -49,6 +47,10 @@ export function UsersTable({
 }) {
   const { can } = useRole();
   const canManage = can("users", "manage");
+
+  // Read inside the component, not at module scope: `ROLES` is empty until
+  // `<RoleProvider>` (an ancestor) hydrates it from Postgres.
+  const roleOptions = useMemo(() => ROLES.map((r) => ({ value: r.label, label: r.label })), []);
 
   const columns = useMemo<ColumnDef<UserTableRow, unknown>[]>(
     () => [
@@ -194,7 +196,7 @@ export function UsersTable({
       defaultSort={[{ id: "name", desc: false }]}
       defaultVisibility={{ createdAt: false }}
       facets={[
-        { columnId: "roleLabel", title: "Role", options: ROLE_OPTIONS },
+        { columnId: "roleLabel", title: "Role", options: roleOptions },
         { columnId: "status", title: "Status", options: STATUS_OPTIONS },
         {
           columnId: "department",

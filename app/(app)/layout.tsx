@@ -8,20 +8,22 @@ import { OfflineBanner } from "@/components/states/offline-banner";
 import { getCurrentUser, getRole } from "@/lib/auth/session";
 import { navCounts } from "@/lib/repo/metrics";
 import { notifications as allNotifications } from "@/lib/repo/ops";
+import { roles as allRoles } from "@/lib/repo/reference";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const [role, user, cookieStore, counts, notifications] = await Promise.all([
+  const [role, user, cookieStore, counts, notifications, roles] = await Promise.all([
     getRole(),
     getCurrentUser(),
     cookies(),
     navCounts(),
     allNotifications(),
+    allRoles(),
   ]);
   const unread = notifications.filter((n) => !n.read).length;
   const sidebarOpen = cookieStore.get("sidebar_state")?.value !== "false";
 
   return (
-    <AppProviders role={role} user={user}>
+    <AppProviders role={role} user={user} roles={roles}>
       <SidebarProvider defaultOpen={sidebarOpen}>
         <a
           href="#main"

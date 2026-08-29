@@ -9,10 +9,18 @@
 
 import { cache } from "react";
 
-import { db } from "@/lib/data/store";
 import { getDb } from "@/lib/db/client";
 import * as schema from "@/lib/db/schema";
-import type { Category, Customer, Product, StockLocation, Supplier, User, Warehouse } from "@/lib/types";
+import type {
+  Category,
+  Customer,
+  Product,
+  RoleRow,
+  StockLocation,
+  Supplier,
+  User,
+  Warehouse,
+} from "@/lib/types";
 
 // Migrated tables — one ordered query each, deduped per request. Ordered by id
 // to match the generator's order the recorded assertions were taken against.
@@ -40,9 +48,14 @@ export const customers = cache(
   (): Promise<Customer[]> => getDb().select().from(schema.customers).orderBy(schema.customers.id),
 );
 
-export async function users(): Promise<User[]> {
-  return db.users;
-}
+export const users = cache(
+  (): Promise<User[]> => getDb().select().from(schema.users).orderBy(schema.users.id),
+);
+
+/** Role rows for the permission engine and the admin screens, in matrix order. */
+export const roles = cache(
+  (): Promise<RoleRow[]> => getDb().select().from(schema.roles).orderBy(schema.roles.sortOrder),
+);
 
 /**
  * Index a list accessor by `id`. A screen doing many lookups against one

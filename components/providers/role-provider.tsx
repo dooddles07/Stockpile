@@ -3,8 +3,8 @@
 import { createContext, useCallback, useContext, useMemo, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
-import { ROLE_BY_ID, can, isReadOnly, levelFor } from "@/lib/auth/permissions";
-import type { ModuleKey, PermissionAction, Role, User } from "@/lib/types";
+import { ROLE_BY_ID, can, hydrateRoles, isReadOnly, levelFor } from "@/lib/auth/permissions";
+import type { ModuleKey, PermissionAction, Role, RoleRow, User } from "@/lib/types";
 
 const ROLE_COOKIE = "stockpile-role";
 
@@ -23,12 +23,20 @@ const RoleContext = createContext<RoleContextValue | null>(null);
 export function RoleProvider({
   initialRole,
   user,
+  roles,
   children,
 }: {
   initialRole: Role;
   user: User;
+  /** The role rows, from Postgres. Feeds the client-side permission engine so
+   *  `can()` / `levelFor()` stay synchronous in components as they were. */
+  roles: RoleRow[];
   children: React.ReactNode;
 }) {
+  // Runs before any descendant renders, so components reading `ROLES` / the
+  // matrix from `@/lib/auth/permissions` see it populated. Idempotent.
+  hydrateRoles(roles);
+
   const router = useRouter();
   const [switching, startTransition] = useTransition();
 

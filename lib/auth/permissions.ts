@@ -4,17 +4,17 @@
  * Access is declared per role as one level per module rather than a 7×28×7
  * matrix of booleans — the levels expand into actions below. The admin
  * permission editor renders the expanded matrix; this is its source.
+ *
+ * The role rows are no longer hardcoded here (ADR-0004): they live in the
+ * `roles` table. `hydrateRoles` fills `ROLES`, `ROLE_BY_ID` and `MATRIX` from
+ * those rows — the server calls it in `getRole()` (`lib/auth/session.ts`), the
+ * client in `<RoleProvider>` from a prop, so every `can()` / `levelFor()` caller
+ * still sees a populated matrix synchronously and unchanged.
  */
 
-import type { ModuleKey, PermissionAction, Role } from "@/lib/types";
+import type { AccessLevel, ModuleKey, PermissionAction, Role, RoleRow } from "@/lib/types";
 
-export type AccessLevel =
-  | "none"
-  | "read"
-  | "read-export"
-  | "write"
-  | "approve"
-  | "manage";
+export type { AccessLevel };
 
 const LEVEL_ACTIONS: Record<AccessLevel, PermissionAction[]> = {
   none: [],
@@ -34,62 +34,38 @@ export const LEVEL_LABEL: Record<AccessLevel, string> = {
   manage: "Full control",
 };
 
-export interface RoleMeta {
-  id: Role;
-  label: string;
-  summary: string;
-  /** What this role is accountable for, shown in the switcher and role admin. */
-  responsibilities: string[];
-}
-
-export const ROLES: RoleMeta[] = [
-  {
-    id: "super-admin",
-    label: "Super Admin",
-    summary: "Unrestricted access to every module and setting.",
-    responsibilities: ["System configuration", "Users and roles", "Integrations", "All operational modules"],
-  },
-  {
-    id: "inventory-manager",
-    label: "Inventory Manager",
-    summary: "Owns stock accuracy across every site.",
-    responsibilities: ["Stock levels", "Warehouses and transfers", "Adjustments and counts", "Inventory reporting"],
-  },
-  {
-    id: "warehouse-staff",
-    label: "Warehouse Staff",
-    summary: "Executes the physical work on the floor.",
-    responsibilities: ["Receiving", "Picking and packing", "Transfer execution", "Counting"],
-  },
-  {
-    id: "purchasing-manager",
-    label: "Purchasing Manager",
-    summary: "Owns supply, cost and supplier relationships.",
-    responsibilities: ["Purchase orders", "Suppliers", "Goods receiving", "Purchase returns"],
-  },
-  {
-    id: "sales-manager",
-    label: "Sales Manager",
-    summary: "Owns demand, orders and customer outcomes.",
-    responsibilities: ["Sales orders", "Customers", "Fulfillment", "Sales returns"],
-  },
-  {
-    id: "finance",
-    label: "Finance",
-    summary: "Values the inventory and reconciles the cost of it.",
-    responsibilities: ["Inventory valuation", "Purchase costs", "Financial reporting", "Export"],
-  },
-  {
-    id: "auditor",
-    label: "Auditor",
-    summary: "Read-only across the transaction record. Cannot change anything.",
-    responsibilities: ["Inventory movements", "Adjustments", "Audit logs", "Transaction history"],
-  },
-];
-
-export const ROLE_BY_ID = new Map(ROLES.map((r) => [r.id, r]));
+/** A role without its permission map — what the switcher and role admin show. */
+export type RoleMeta = Pick<RoleRow, "id" | "label" | "summary" | "responsibilities">;
 
 type Matrix = Record<Role, Partial<Record<ModuleKey, AccessLevel>>>;
+
+/**
+ * Populated by `hydrateRoles` from the `roles` table — empty until then.
+ * `let` rather than `const` so the ESM live binding updates for importers; a
+ * caller that reads these at module scope (rather than inside a render) will
+ * see the empty value, so read them inside the function that uses them.
+ *
+ * ponytail: process-global, last-write-wins. Fine while roles are a static
+ * fixture the seed loads once. When the admin write path lands (ticket 09) and
+ * one request can edit roles mid-flight, this needs to become per-request state
+ * (a matrix passed down, or an AsyncLocalStorage store) instead of a singleton.
+ */
+export let ROLES: RoleMeta[] = [];
+export let ROLE_BY_ID = new Map<Role, RoleMeta>();
+let MATRIX: Matrix = {} as Matrix;
+
+/** Load the role rows into the permission engine. Idempotent; last call wins. */
+export function hydrateRoles(rows: RoleRow[]): void {
+  const sorted = [...rows].sort((a, b) => a.sortOrder - b.sortOrder);
+  ROLES = sorted.map(({ id, label, summary, responsibilities }) => ({
+    id,
+    label,
+    summary,
+    responsibilities,
+  }));
+  ROLE_BY_ID = new Map(ROLES.map((r) => [r.id, r]));
+  MATRIX = Object.fromEntries(sorted.map((r) => [r.id, r.permissions])) as Matrix;
+}
 
 const ALL_MODULES: ModuleKey[] = [
   "dashboard", "approvals", "products", "categories", "stock", "movements",
@@ -143,90 +119,10 @@ export const MODULE_GROUP: Record<ModuleKey, string> = {
   automation: "Administration", integrations: "Administration", settings: "Administration",
 };
 
-const MATRIX: Matrix = {
-  "super-admin": Object.fromEntries(ALL_MODULES.map((m) => [m, "manage"])) as Matrix["super-admin"],
-
-  "inventory-manager": {
-    dashboard: "read-export", approvals: "approve",
-    products: "write", categories: "write", stock: "write",
-    movements: "read-export", adjustments: "approve", counts: "approve",
-    warehouses: "write", locations: "write", transfers: "approve",
-    receiving: "write", fulfillment: "read",
-    "purchase-orders": "read-export", suppliers: "read", "purchase-returns": "read",
-    "sales-orders": "read", customers: "read", "sales-returns": "read",
-    analytics: "read-export", valuation: "read-export", reports: "read-export",
-    users: "none", roles: "none", audit: "read",
-    automation: "read", integrations: "none", settings: "read",
-  },
-
-  "warehouse-staff": {
-    dashboard: "read", approvals: "none",
-    products: "read", categories: "read", stock: "read",
-    movements: "read", adjustments: "write", counts: "write",
-    warehouses: "read", locations: "read", transfers: "write",
-    receiving: "write", fulfillment: "write",
-    "purchase-orders": "read", suppliers: "none", "purchase-returns": "none",
-    "sales-orders": "read", customers: "none", "sales-returns": "none",
-    analytics: "none", valuation: "none", reports: "none",
-    users: "none", roles: "none", audit: "none",
-    automation: "none", integrations: "none", settings: "none",
-  },
-
-  "purchasing-manager": {
-    dashboard: "read-export", approvals: "approve",
-    products: "read-export", categories: "read", stock: "read-export",
-    movements: "read", adjustments: "read", counts: "none",
-    warehouses: "read", locations: "read", transfers: "read",
-    receiving: "write", fulfillment: "none",
-    "purchase-orders": "approve", suppliers: "approve", "purchase-returns": "approve",
-    "sales-orders": "none", customers: "none", "sales-returns": "none",
-    analytics: "read-export", valuation: "read-export", reports: "read-export",
-    users: "none", roles: "none", audit: "none",
-    automation: "read", integrations: "none", settings: "read",
-  },
-
-  "sales-manager": {
-    dashboard: "read-export", approvals: "read",
-    products: "read-export", categories: "read", stock: "read",
-    movements: "none", adjustments: "none", counts: "none",
-    warehouses: "read", locations: "none", transfers: "none",
-    receiving: "none", fulfillment: "write",
-    "purchase-orders": "none", suppliers: "none", "purchase-returns": "none",
-    "sales-orders": "approve", customers: "write", "sales-returns": "approve",
-    analytics: "read-export", valuation: "none", reports: "read-export",
-    users: "none", roles: "none", audit: "none",
-    automation: "read", integrations: "none", settings: "read",
-  },
-
-  finance: {
-    dashboard: "read-export", approvals: "read",
-    products: "read-export", categories: "read", stock: "read-export",
-    movements: "read-export", adjustments: "read-export", counts: "read-export",
-    warehouses: "read-export", locations: "read", transfers: "read-export",
-    receiving: "read", fulfillment: "read",
-    "purchase-orders": "read-export", suppliers: "read-export", "purchase-returns": "read-export",
-    "sales-orders": "read-export", customers: "read-export", "sales-returns": "read-export",
-    analytics: "read-export", valuation: "read-export", reports: "write",
-    users: "none", roles: "none", audit: "read-export",
-    automation: "none", integrations: "none", settings: "read",
-  },
-
-  auditor: {
-    dashboard: "read", approvals: "read",
-    products: "read-export", categories: "read", stock: "read-export",
-    movements: "read-export", adjustments: "read-export", counts: "read-export",
-    warehouses: "read", locations: "read", transfers: "read-export",
-    receiving: "read", fulfillment: "read",
-    "purchase-orders": "read-export", suppliers: "read", "purchase-returns": "read-export",
-    "sales-orders": "read-export", customers: "read", "sales-returns": "read-export",
-    analytics: "read", valuation: "read-export", reports: "read-export",
-    users: "read", roles: "read", audit: "read-export",
-    automation: "read", integrations: "read", settings: "read",
-  },
-};
-
 export function levelFor(role: Role, module: ModuleKey): AccessLevel {
-  return MATRIX[role][module] ?? "none";
+  // `?.` covers the window before `hydrateRoles` has run (matrix still `{}`) and
+  // an unknown role id — both resolve to no access rather than throwing.
+  return MATRIX[role]?.[module] ?? "none";
 }
 
 export function can(role: Role, module: ModuleKey, action: PermissionAction = "view"): boolean {

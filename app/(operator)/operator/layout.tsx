@@ -7,7 +7,7 @@ import { OperatorTabs } from "./operator-tabs";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser, getRole } from "@/lib/auth/session";
 import { purchaseOrders as allPurchaseOrders, transfers as allTransfers } from "@/lib/repo/documents";
-import { warehouses as allWarehouses } from "@/lib/repo/reference";
+import { roles as allRoles, warehouses as allWarehouses } from "@/lib/repo/reference";
 import { pendingApprovals } from "@/lib/repo/metrics";
 import { can } from "@/lib/auth/permissions";
 import { ROLE_BY_ID } from "@/lib/auth/permissions";
@@ -21,7 +21,7 @@ import { ROLE_BY_ID } from "@/lib/auth/permissions";
  * targets, and a bottom tab bar where a thumb actually reaches.
  */
 export default async function OperatorLayout({ children }: { children: React.ReactNode }) {
-  const [role, user] = await Promise.all([getRole(), getCurrentUser()]);
+  const [role, user, roles] = await Promise.all([getRole(), getCurrentUser(), allRoles()]);
 
   // A site is assumed rather than asked for: the handheld belongs to a building.
   const warehouses = await allWarehouses();
@@ -40,7 +40,7 @@ export default async function OperatorLayout({ children }: { children: React.Rea
     : 0;
 
   return (
-    <AppProviders role={role} user={user}>
+    <AppProviders role={role} user={user} roles={roles}>
       <div className="flex min-h-screen flex-col bg-background pb-16">
         <header className="sticky top-0 z-30 border-b bg-surface">
           <div className="flex items-center gap-3 px-4 py-2.5">
