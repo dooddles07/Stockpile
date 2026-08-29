@@ -429,3 +429,88 @@ export const salesOrderLines = pgTable("sales_order_lines", {
   lineTotal: numeric("line_total", { mode: "number" }).notNull(),
   note: text("note").$type<OrderLine["note"]>(),
 });
+
+/* ------------------------------------------------------ warehousing: transfers ---
+ *
+ * Ticket 05. A Transfer is the one Document with two ends: stock has left a
+ * source Location and not yet arrived at a destination. Both ends are explicit
+ * columns — `from_warehouse_id` / `to_warehouse_id` on the parent, and
+ * `from_location_id` / `to_location_id` on each line — rather than implied by
+ * the status. `status` is a real Postgres enum over the state machine the
+ * screens display (`WORKFLOWS.transfer` in `lib/status.ts`), not free text
+ * (ADR-0002: Documents are state machines). Lines are their own table
+ * (`quantity` requested, `shipped` despatched-so-far, `received` booked-in-so-far),
+ * keyed by an identity `seq` because the dataset's line ids (`TL-001`) repeat
+ * across parents; the seed inserts in array order so `ORDER BY seq` reproduces it.
+ *
+ * Picking, packing and receiving of Sales Orders are already Postgres-backed
+ * through ticket 04's `sales_orders` — the picking / packing screens read
+ * `documents.salesOrders`, the receiving screen reads `documents.purchaseOrders`
+ * plus `documents.transferRows`. This ticket moves the last of those.
+ *
+ * The in-transit balance is projected from open Transfer state — `sum(shipped -
+ * received)` over the lines of Transfers in `OPEN_TRANSFER_STATUSES`
+ * (`in-transit` / `partially-received`) — never the Movement ledger, which
+ * settles a transfer as paired `transfer-out` / `transfer-in` Movements once it
+ * lands and so cannot express the gap in between (ADR-0002, CONTEXT.md
+ * "In Transit"). `documents.inTransitByProduct` is that query.
+ */
+
+export const transferStatus = pgEnum("transfer_status", [
+  "draft",
+  "pending-approval",
+  "approved",
+  "in-transit",
+  "partially-received",
+  "received",
+  "cancelled",
+]);
+
+export const transfers = pgTable("transfers", {
+  id: text("id").primaryKey(),
+  number: text("number").notNull(),
+  fromWarehouseId: text("from_warehouse_id")
+    .notNull()
+    .references(() => warehouses.id),
+  toWarehouseId: text("to_warehouse_id")
+    .notNull()
+    .references(() => warehouses.id),
+  status: transferStatus("status").notNull(),
+  createdAt: text("created_at").notNull(),
+  approvedAt: text("approved_at"),
+  shippedAt: text("shipped_at"),
+  expectedAt: text("expected_at").notNull(),
+  receivedAt: text("received_at"),
+  /** A User id (ADR-0004); Users are not a table yet, so no FK. */
+  requestedBy: text("requested_by").notNull(),
+  approvedBy: text("approved_by"),
+  approvals: jsonb("approvals").$type<ApprovalEvent[]>().notNull(),
+  carrier: text("carrier"),
+  trackingNumber: text("tracking_number"),
+  reason: text("reason").notNull(),
+  notes: text("notes").notNull(),
+});
+
+export const transferLines = pgTable("transfer_lines", {
+  seq: integer("seq").generatedAlwaysAsIdentity().primaryKey(),
+  transferId: text("transfer_id")
+    .notNull()
+    .references(() => transfers.id),
+  /** The dataset's own line id (`TL-001`); unique only within its transfer. */
+  id: text("id").notNull(),
+  productId: text("product_id")
+    .notNull()
+    .references(() => products.id),
+  sku: text("sku").notNull(),
+  name: text("name").notNull(),
+  quantity: integer("quantity").notNull(),
+  /** Despatched-so-far quantity — what has actually left the source. */
+  shipped: integer("shipped").notNull(),
+  /** Booked-in-so-far quantity at the destination. */
+  received: integer("received").notNull(),
+  fromLocationId: text("from_location_id")
+    .notNull()
+    .references(() => locations.id),
+  /** Null until the line is put away at the destination. */
+  toLocationId: text("to_location_id").references(() => locations.id),
+});
