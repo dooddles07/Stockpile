@@ -36,7 +36,12 @@ const eslintConfig = defineConfig([
     // The repository layer, plus the seed script — the sanctioned bridge that
     // loads the generated dataset into Postgres once.
     files: ["lib/repo/**", "lib/db/seed.ts"],
-    rules: { "no-restricted-imports": "off" },
+    rules: {
+      "no-restricted-imports": "off",
+      // Stitching Postgres rows back into domain shapes routinely drops a
+      // column (`seq`, a parent FK, a nested array) with `const { seq, ...rest }`.
+      "@typescript-eslint/no-unused-vars": ["warn", { ignoreRestSiblings: true }],
+    },
   },
   {
     // Playwright fixtures take a `use` callback that the React hooks rules

@@ -32,9 +32,9 @@ export const locations = cache(
   (): Promise<StockLocation[]> => getDb().select().from(schema.locations).orderBy(schema.locations.id),
 );
 
-export async function suppliers(): Promise<Supplier[]> {
-  return db.suppliers;
-}
+export const suppliers = cache(
+  (): Promise<Supplier[]> => getDb().select().from(schema.suppliers).orderBy(schema.suppliers.id),
+);
 
 export async function customers(): Promise<Customer[]> {
   return db.customers;

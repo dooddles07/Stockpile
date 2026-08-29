@@ -25,6 +25,7 @@ import { db } from "@/lib/data/store";
 import { getDb } from "@/lib/db/client";
 import * as schema from "@/lib/db/schema";
 import { daysUntil } from "@/lib/format";
+import { indexById, suppliers as allSuppliers } from "./reference";
 import type { StockViewKey } from "./stock-views";
 import type {
   Category,
@@ -128,8 +129,9 @@ const load = cache(async () => {
   };
 });
 
-// Suppliers / Users / Customers are not tables yet — still the generated dataset.
-const supplierByIdMap = new Map(db.suppliers.map((s) => [s.id, s]));
+// Suppliers moved to Postgres in ticket 03; indexed per request via `cache`.
+// Users / Customers are not tables yet — still the generated dataset.
+const supplierIndex = cache(() => indexById(allSuppliers));
 const customerByIdMap = new Map(db.customers.map((c) => [c.id, c]));
 const userByIdMap = new Map(db.users.map((u) => [u.id, u]));
 
@@ -159,7 +161,7 @@ export async function locationById(id: string): Promise<StockLocation | undefine
 }
 
 export async function supplierById(id: string): Promise<Supplier | undefined> {
-  return supplierByIdMap.get(id);
+  return (await supplierIndex()).get(id);
 }
 
 export async function customerById(id: string): Promise<Customer | undefined> {
@@ -201,6 +203,7 @@ export interface ProductRow extends Product {
 /** One query: products joined to their category and their stock-row totals. */
 export const productRows = cache(async (): Promise<ProductRow[]> => {
   const pg = getDb();
+  const supplierById = await supplierIndex();
   const agg = pg
     .select({
       productId: schema.stockRows.productId,
@@ -240,7 +243,7 @@ export const productRows = cache(async (): Promise<ProductRow[]> => {
     return {
       ...product,
       categoryName,
-      supplierName: supplierByIdMap.get(product.primarySupplierId)?.name ?? "—",
+      supplierName: supplierById.get(product.primarySupplierId)?.name ?? "—",
       stock: {
         productId: product.id,
         onHand,
