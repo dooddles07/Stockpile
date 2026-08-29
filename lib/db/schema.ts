@@ -28,15 +28,22 @@ import {
 } from "drizzle-orm/pg-core";
 
 import type {
+  AccessLevel,
   ApprovalEvent,
   Attachment,
+  AuditEntry as AuditEntryModel,
+  AutomationRun as AutomationRunModel,
   Customer as CustomerModel,
+  Integration as IntegrationModel,
   ItemCondition,
   LocationType,
+  ModuleKey,
   OrderLine,
   ProductStatus,
+  Role,
   SalesOrder as SalesOrderModel,
   Supplier as SupplierModel,
+  User as UserModel,
   Warehouse as WarehouseModel,
   WarehouseType,
 } from "@/lib/types";
@@ -513,4 +520,113 @@ export const transferLines = pgTable("transfer_lines", {
     .references(() => locations.id),
   /** Null until the line is put away at the destination. */
   toLocationId: text("to_location_id").references(() => locations.id),
+});
+
+/* ------------------------------------------------------- admin & settings ---
+ *
+ * Ticket 06. Users are Auth.js's own table under ADR-0004; the identity flows
+ * (passwords, sessions) are a later ticket, so this is just the profile the
+ * admin screens list. Roles carry their whole permission matrix in one
+ * `permissions` jsonb column rather than a `role_permissions` join table: 7
+ * rows, no runtime write path against them yet (ticket 09), and the permission
+ * engine wants the map shape back anyway. `sort_order` preserves the column /
+ * switcher order the hardcoded `ROLES` array fixed by position. `users.role` is
+ * now a real foreign key into it.
+ *
+ * Audit entries and automation runs use an identity `seq` like the line tables
+ * — the seed inserts them in the generator's already-sorted order (newest
+ * first) and `ORDER BY seq` reproduces it. `automation_rules.trigger`,
+ * `conditions` and `actions` stay free text / free-text arrays: ADR-0008 says
+ * the vocabulary is undefined and modelling it is not this phase.
+ *
+ * There is no `settings` table. The settings screens render company / security
+ * / product numbers derived from `users`, `warehouses` and `products` — all
+ * Postgres-backed now — and otherwise show static copy; the dataset carries no
+ * settings entity to seed.
+ */
+
+export const roles = pgTable("roles", {
+  id: text("id").$type<Role>().primaryKey(),
+  label: text("label").notNull(),
+  summary: text("summary").notNull(),
+  responsibilities: jsonb("responsibilities").$type<string[]>().notNull(),
+  sortOrder: integer("sort_order").notNull(),
+  permissions: jsonb("permissions").$type<Partial<Record<ModuleKey, AccessLevel>>>().notNull(),
+});
+
+export const users = pgTable("users", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  email: text("email").notNull().unique(),
+  role: text("role")
+    .$type<Role>()
+    .notNull()
+    .references(() => roles.id),
+  department: text("department").notNull(),
+  status: text("status").$type<UserModel["status"]>().notNull(),
+  lastLoginAt: text("last_login_at"),
+  createdAt: text("created_at").notNull(),
+  /** Set for warehouse staff, null for roaming roles. */
+  warehouseId: text("warehouse_id").references(() => warehouses.id),
+  phone: text("phone").notNull(),
+  twoFactor: boolean("two_factor").notNull(),
+});
+
+export const auditEntries = pgTable("audit_entries", {
+  seq: integer("seq").generatedAlwaysAsIdentity().primaryKey(),
+  id: text("id").notNull(),
+  ts: text("ts").notNull(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id),
+  action: text("action").$type<AuditEntryModel["action"]>().notNull(),
+  entity: text("entity").notNull(),
+  entityId: text("entity_id").notNull(),
+  entityLabel: text("entity_label").notNull(),
+  field: text("field"),
+  before: text("before"),
+  after: text("after"),
+  ip: text("ip").notNull(),
+  device: text("device").notNull(),
+});
+
+export const automationRules = pgTable("automation_rules", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description").notNull(),
+  trigger: text("trigger").notNull(),
+  conditions: jsonb("conditions").$type<string[]>().notNull(),
+  actions: jsonb("actions").$type<string[]>().notNull(),
+  enabled: boolean("enabled").notNull(),
+  lastRunAt: text("last_run_at"),
+  runCount: integer("run_count").notNull(),
+  successRate: numeric("success_rate", { mode: "number" }).notNull(),
+  createdBy: text("created_by")
+    .notNull()
+    .references(() => users.id),
+  scope: text("scope").notNull(),
+});
+
+export const automationRuns = pgTable("automation_runs", {
+  seq: integer("seq").generatedAlwaysAsIdentity().primaryKey(),
+  id: text("id").notNull(),
+  ruleId: text("rule_id")
+    .notNull()
+    .references(() => automationRules.id),
+  ts: text("ts").notNull(),
+  outcome: text("outcome").$type<AutomationRunModel["outcome"]>().notNull(),
+  affected: integer("affected").notNull(),
+  durationMs: integer("duration_ms").notNull(),
+  message: text("message").notNull(),
+});
+
+export const integrations = pgTable("integrations", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  vendor: text("vendor").notNull(),
+  category: text("category").$type<IntegrationModel["category"]>().notNull(),
+  status: text("status").$type<IntegrationModel["status"]>().notNull(),
+  lastSyncAt: text("last_sync_at"),
+  recordsSynced: integer("records_synced").notNull(),
+  description: text("description").notNull(),
 });

@@ -64,6 +64,34 @@ export type ModuleKey =
   | "integrations"
   | "settings";
 
+/**
+ * Access to a module, one level per role. The levels expand into
+ * `PermissionAction`s (see `LEVEL_ACTIONS` in `lib/auth/permissions.ts`).
+ */
+export type AccessLevel =
+  | "none"
+  | "read"
+  | "read-export"
+  | "write"
+  | "approve"
+  | "manage";
+
+/**
+ * A Role as a database row (ADR-0004). The permission engine hydrates its
+ * matrix from these; `permissions` is the per-module level map, stored as one
+ * jsonb column rather than a join table — there is no write path against it
+ * yet, and 7 rows do not need normalising.
+ */
+export interface RoleRow {
+  id: Role;
+  label: string;
+  summary: string;
+  responsibilities: string[];
+  /** Preserves the column / switcher order the hardcoded array used to fix. */
+  sortOrder: number;
+  permissions: Partial<Record<ModuleKey, AccessLevel>>;
+}
+
 /* --------------------------------------------------------------- entities */
 
 export type ProductStatus = "active" | "draft" | "discontinued" | "archived";
