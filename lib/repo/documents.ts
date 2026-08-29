@@ -7,17 +7,18 @@
  * than screen-shaped joins.
  *
  * Ticket 03 moved Purchase Orders and Returns onto Postgres; ticket 04 moved
- * Sales Orders. Each is two queries — the parent rows and the line rows —
- * stitched back into the nested shape the screens expect, deduped per request
- * via React `cache`.
+ * Sales Orders; ticket 05 moves Transfers. Each is two queries — the parent
+ * rows and the line rows — stitched back into the nested shape the screens
+ * expect, deduped per request via React `cache`.
  *
- * `incomingByProduct` / `reservedByProduct` are the incoming and reserved
- * balances projected from open Purchase Order / Sales Order state (ADR-0002,
- * CONTEXT.md, spec story 21): never from the Movement ledger, which has no
- * movement type that produces either.
+ * `incomingByProduct` / `reservedByProduct` / `inTransitByProduct` are the
+ * incoming, reserved and in-transit balances projected from open Purchase
+ * Order / Sales Order / Transfer state (ADR-0002, CONTEXT.md, spec story 21):
+ * never from the Movement ledger, which has no movement type that produces
+ * incoming or reserved and settles a transfer only once it lands.
  *
  * The remaining accessors still read the generated dataset until their ticket
- * (05 transfers, 10/15 adjustments and counts).
+ * (10/15 adjustments and counts).
  */
 
 import { cache } from "react";
@@ -54,6 +55,14 @@ const OPEN_PO_STATUSES = ["submitted", "approved", "ordered", "partially-receive
  * `backorder` could not be reserved from stock in the first place.
  */
 const OPEN_SO_STATUSES = ["confirmed", "reserved", "picking", "packing"] as const;
+
+/**
+ * Transfer statuses that hold stock in transit: despatched from the source and
+ * not yet fully landed. `draft` / `pending-approval` / `approved` have not
+ * shipped; `received` / `cancelled` are settled — the ledger carries their
+ * `transfer-out` / `transfer-in` Movements and nothing is still moving.
+ */
+const OPEN_TRANSFER_STATUSES = ["in-transit", "partially-received"] as const;
 
 /** Group rows by a key, preserving input order within each group. */
 function groupBy<T>(rows: T[], keyOf: (row: T) => string): Map<string, T[]> {
@@ -154,9 +163,44 @@ export const reservedByProduct = cache(async (): Promise<Map<string, number>> =>
   return new Map(rows.map((r) => [r.productId, r.reserved]));
 });
 
-export async function transfers(): Promise<Transfer[]> {
-  return db.transfers;
-}
+export const transfers = cache(async (): Promise<Transfer[]> => {
+  const pg = getDb();
+  const [docs, lineRows] = await Promise.all([
+    pg.select().from(schema.transfers).orderBy(schema.transfers.id),
+    pg.select().from(schema.transferLines).orderBy(schema.transferLines.seq),
+  ]);
+
+  const linesByTransfer = groupBy(lineRows, (r) => r.transferId);
+  return docs.map((doc) => ({
+    ...doc,
+    // Drop the identity PK and parent FK; the nullable `to_location_id` column
+    // stays as `string | null`, which is what `TransferLine` already declares.
+    lines: (linesByTransfer.get(doc.id) ?? []).map(({ seq, transferId, ...line }) => line),
+  }));
+});
+
+/**
+ * In-transit quantity per Product: `sum(shipped - received)` across the lines
+ * of every open Transfer — the in-transit balance projected from open Document
+ * state, per ADR-0002 and CONTEXT.md ("In Transit" is derived from open
+ * Documents, never from Movements).
+ *
+ * The read-phase stock screens still render the seeded `stock_rows.in_transit`
+ * projection; the write path (ticket 09) is what rebuilds that projection, and
+ * this is the query it is rebuilt from.
+ */
+export const inTransitByProduct = cache(async (): Promise<Map<string, number>> => {
+  const rows = await getDb()
+    .select({
+      productId: schema.transferLines.productId,
+      inTransit: sql<number>`sum(${schema.transferLines.shipped} - ${schema.transferLines.received})::int`,
+    })
+    .from(schema.transferLines)
+    .innerJoin(schema.transfers, eq(schema.transfers.id, schema.transferLines.transferId))
+    .where(inArray(schema.transfers.status, [...OPEN_TRANSFER_STATUSES]))
+    .groupBy(schema.transferLines.productId);
+  return new Map(rows.map((r) => [r.productId, r.inTransit]));
+});
 
 export interface TransferRow extends Transfer {
   /** Requested quantity across every line. */

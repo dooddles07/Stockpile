@@ -13,8 +13,9 @@
  * share `load()`, one batched read of the five tables per request via React
  * `cache`.
  *
- * Users, Transfers and Movements are not tables yet, so the few functions that
- * need them still read the generated dataset.
+ * Users and Movements are not tables yet, so the few functions that need them
+ * still read the generated dataset. Transfers moved to Postgres in ticket 05;
+ * `warehouseRollups` reads its open-transfer count through `documents.transfers`.
  */
 
 import { cache } from "react";
@@ -25,6 +26,7 @@ import { db } from "@/lib/data/store";
 import { getDb } from "@/lib/db/client";
 import * as schema from "@/lib/db/schema";
 import { daysUntil } from "@/lib/format";
+import { transfers as allTransfers } from "./documents";
 import { customers as allCustomers, indexById, suppliers as allSuppliers } from "./reference";
 import type { StockViewKey } from "./stock-views";
 import type {
@@ -414,19 +416,22 @@ export interface WarehouseRollup extends Warehouse {
 /** One query: each warehouse with its stock totals and location count. */
 export const warehouseRollups = cache(async (): Promise<WarehouseRollup[]> => {
   const pg = getDb();
-  const rows = await pg
-    .select({
-      ...getTableColumns(schema.warehouses),
-      unitCount: sql<number>`coalesce(sum(${schema.stockRows.onHand}), 0)::int`.as("unit_count"),
-      skuCount: sql<number>`count(distinct ${schema.stockRows.productId})::int`.as("sku_count"),
-      inventoryValue: sql<number>`coalesce(round(sum(${schema.stockRows.onHand} * ${schema.products.unitCost})), 0)::int`.as("inventory_value"),
-      locationCount: sql<number>`(select count(*) from ${schema.locations} where ${schema.locations.warehouseId} = ${schema.warehouses.id})::int`.as("location_count"),
-    })
-    .from(schema.warehouses)
-    .leftJoin(schema.stockRows, eq(schema.stockRows.warehouseId, schema.warehouses.id))
-    .leftJoin(schema.products, eq(schema.products.id, schema.stockRows.productId))
-    .groupBy(schema.warehouses.id)
-    .orderBy(schema.warehouses.id);
+  const [transfers, rows] = await Promise.all([
+    allTransfers(),
+    pg
+      .select({
+        ...getTableColumns(schema.warehouses),
+        unitCount: sql<number>`coalesce(sum(${schema.stockRows.onHand}), 0)::int`.as("unit_count"),
+        skuCount: sql<number>`count(distinct ${schema.stockRows.productId})::int`.as("sku_count"),
+        inventoryValue: sql<number>`coalesce(round(sum(${schema.stockRows.onHand} * ${schema.products.unitCost})), 0)::int`.as("inventory_value"),
+        locationCount: sql<number>`(select count(*) from ${schema.locations} where ${schema.locations.warehouseId} = ${schema.warehouses.id})::int`.as("location_count"),
+      })
+      .from(schema.warehouses)
+      .leftJoin(schema.stockRows, eq(schema.stockRows.warehouseId, schema.warehouses.id))
+      .leftJoin(schema.products, eq(schema.products.id, schema.stockRows.productId))
+      .groupBy(schema.warehouses.id)
+      .orderBy(schema.warehouses.id),
+  ]);
 
   return rows.map((r) => {
     const { unitCount, skuCount, inventoryValue, locationCount, ...warehouse } = r;
@@ -438,7 +443,7 @@ export const warehouseRollups = cache(async (): Promise<WarehouseRollup[]> => {
       inventoryValue,
       utilization: warehouse.usedPallets / warehouse.capacityPallets,
       locationCount,
-      openTransfers: db.transfers.filter(
+      openTransfers: transfers.filter(
         (t) =>
           (t.fromWarehouseId === warehouse.id || t.toWarehouseId === warehouse.id) &&
           !["received", "cancelled"].includes(t.status),
