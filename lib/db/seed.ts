@@ -38,13 +38,17 @@ import ws from "ws";
 import { hydrateRoles, levelFor } from "@/lib/auth/permissions";
 import { db as dataset } from "@/lib/data/store";
 import {
+  adjustmentLines,
+  adjustments,
   auditEntries,
   automationRules,
   automationRuns,
   categories,
+  countLines,
   customers,
   integrations,
   locations,
+  movements,
   products,
   purchaseOrderLines,
   purchaseOrders,
@@ -53,6 +57,7 @@ import {
   roles,
   salesOrderLines,
   salesOrders,
+  stockCounts,
   stockRows,
   suppliers,
   transferLines,
@@ -74,7 +79,7 @@ export async function seed() {
     // re-seed reproduces the same seq values; CASCADE covers the foreign keys
     // between the tables.
     await db.execute(
-      sql`TRUNCATE TABLE ${automationRuns}, ${automationRules}, ${auditEntries}, ${integrations}, ${roles}, ${users}, ${transferLines}, ${transfers}, ${salesOrderLines}, ${salesOrders}, ${customers}, ${returnLines}, ${returns}, ${purchaseOrderLines}, ${purchaseOrders}, ${suppliers}, ${stockRows}, ${products}, ${locations}, ${warehouses}, ${categories} RESTART IDENTITY CASCADE`,
+      sql`TRUNCATE TABLE ${automationRuns}, ${automationRules}, ${auditEntries}, ${integrations}, ${roles}, ${users}, ${countLines}, ${stockCounts}, ${adjustmentLines}, ${adjustments}, ${movements}, ${transferLines}, ${transfers}, ${salesOrderLines}, ${salesOrders}, ${customers}, ${returnLines}, ${returns}, ${purchaseOrderLines}, ${purchaseOrders}, ${suppliers}, ${stockRows}, ${products}, ${locations}, ${warehouses}, ${categories} RESTART IDENTITY CASCADE`,
     );
 
     // FK order: categories -> warehouses -> locations -> products -> stock_rows,
@@ -117,6 +122,28 @@ export async function seed() {
       dataset.transfers.flatMap((tr) => tr.lines.map((line) => ({ ...line, transferId: tr.id }))),
     );
 
+    // Movements, Adjustments and Stock Counts (ticket 07). Movements is one flat
+    // table inserted newest-first so ORDER BY seq reproduces the ledger order;
+    // Adjustments and Counts split their lines off the parent like the order
+    // tables above. They reference only products, warehouses and locations.
+    // ~3,400 rows × 17 columns is close to Postgres's 65,535-parameter ceiling,
+    // so this one insert is chunked where the others are not.
+    for (let i = 0; i < dataset.movements.length; i += 2000) {
+      await db.insert(movements).values(dataset.movements.slice(i, i + 2000));
+    }
+    await db.insert(adjustments).values(dataset.adjustments.map(({ lines, ...adj }) => adj));
+    await db.insert(adjustmentLines).values(
+      dataset.adjustments.flatMap((adj) =>
+        adj.lines.map((line) => ({ ...line, adjustmentId: adj.id })),
+      ),
+    );
+    await db.insert(stockCounts).values(dataset.stockCounts.map(({ lines, ...cnt }) => cnt));
+    await db.insert(countLines).values(
+      dataset.stockCounts.flatMap((cnt) =>
+        cnt.lines.map((line) => ({ ...line, stockCountId: cnt.id })),
+      ),
+    );
+
     // Admin & settings. Roles then users (`users.role` is an FK into `roles`);
     // audit entries and automation rules key into users. audit_entries /
     // automation_runs carry a generated `seq` and the dataset arrays are already
@@ -145,6 +172,8 @@ export async function seed() {
     const returnLineCount = dataset.returns.reduce((s, ret) => s + ret.lines.length, 0);
     const soLineCount = dataset.salesOrders.reduce((s, so) => s + so.lines.length, 0);
     const transferLineCount = dataset.transfers.reduce((s, tr) => s + tr.lines.length, 0);
+    const adjustmentLineCount = dataset.adjustments.reduce((s, a) => s + a.lines.length, 0);
+    const countLineCount = dataset.stockCounts.reduce((s, c) => s + c.lines.length, 0);
     const checks = [
       ["categories", categories, dataset.categories.length],
       ["warehouses", warehouses, dataset.warehouses.length],
@@ -161,6 +190,11 @@ export async function seed() {
       ["sales_order_lines", salesOrderLines, soLineCount],
       ["transfers", transfers, dataset.transfers.length],
       ["transfer_lines", transferLines, transferLineCount],
+      ["movements", movements, dataset.movements.length],
+      ["adjustments", adjustments, dataset.adjustments.length],
+      ["adjustment_lines", adjustmentLines, adjustmentLineCount],
+      ["stock_counts", stockCounts, dataset.stockCounts.length],
+      ["count_lines", countLines, countLineCount],
       ["users", users, dataset.users.length],
       ["roles", roles, dataset.roles.length],
       ["integrations", integrations, dataset.integrations.length],
