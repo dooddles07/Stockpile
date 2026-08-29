@@ -10,6 +10,13 @@ import { navCounts } from "@/lib/repo/metrics";
 import { notifications as allNotifications } from "@/lib/repo/ops";
 import { roles as allRoles } from "@/lib/repo/reference";
 
+/**
+ * Every screen here reads the active role from a cookie and its data from
+ * Postgres at request time, so nothing under this segment is prerenderable —
+ * and a production build carries no connection string (see the CI `build` job).
+ */
+export const dynamic = "force-dynamic";
+
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const [role, user, cookieStore, counts, notifications, roles] = await Promise.all([
     getRole(),

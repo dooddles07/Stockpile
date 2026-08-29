@@ -12,6 +12,9 @@ import { pendingApprovals } from "@/lib/repo/metrics";
 import { can } from "@/lib/auth/permissions";
 import { ROLE_BY_ID } from "@/lib/auth/permissions";
 
+/** Request-time role cookie + Postgres reads, and no connection string at build. */
+export const dynamic = "force-dynamic";
+
 /**
  * The handheld surface.
  *
