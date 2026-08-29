@@ -18,8 +18,11 @@
  * Ticket 05 adds Transfers and their lines (`transfers` / `transfer_lines`),
  * loaded after the sales area — they reference only warehouses, products and
  * locations, all seeded earlier.
- * Everything else still renders from the in-memory dataset until a later ticket
- * moves it.
+ * Ticket 06 adds the admin area — `users`, `roles`, `integrations`,
+ * `audit_entries`, `automation_rules` and `automation_runs` — loaded last;
+ * audit entries and rules key into `users`, and roles carry their whole
+ * permission matrix. Notifications and tasks still render from the in-memory
+ * dataset until a later ticket moves them.
  *
  * Its own Pool, not `lib/db/client.ts`: that module is `server-only` and this
  * runs under plain Node.
@@ -32,22 +35,29 @@ import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/neon-serverless";
 import ws from "ws";
 
+import { hydrateRoles, levelFor } from "@/lib/auth/permissions";
 import { db as dataset } from "@/lib/data/store";
 import {
+  auditEntries,
+  automationRules,
+  automationRuns,
   categories,
   customers,
+  integrations,
   locations,
   products,
   purchaseOrderLines,
   purchaseOrders,
   returnLines,
   returns,
+  roles,
   salesOrderLines,
   salesOrders,
   stockRows,
   suppliers,
   transferLines,
   transfers,
+  users,
   warehouses,
 } from "@/lib/db/schema";
 
@@ -64,7 +74,7 @@ export async function seed() {
     // re-seed reproduces the same seq values; CASCADE covers the foreign keys
     // between the tables.
     await db.execute(
-      sql`TRUNCATE TABLE ${transferLines}, ${transfers}, ${salesOrderLines}, ${salesOrders}, ${customers}, ${returnLines}, ${returns}, ${purchaseOrderLines}, ${purchaseOrders}, ${suppliers}, ${stockRows}, ${products}, ${locations}, ${warehouses}, ${categories} RESTART IDENTITY CASCADE`,
+      sql`TRUNCATE TABLE ${automationRuns}, ${automationRules}, ${auditEntries}, ${integrations}, ${roles}, ${users}, ${transferLines}, ${transfers}, ${salesOrderLines}, ${salesOrders}, ${customers}, ${returnLines}, ${returns}, ${purchaseOrderLines}, ${purchaseOrders}, ${suppliers}, ${stockRows}, ${products}, ${locations}, ${warehouses}, ${categories} RESTART IDENTITY CASCADE`,
     );
 
     // FK order: categories -> warehouses -> locations -> products -> stock_rows,
@@ -107,6 +117,29 @@ export async function seed() {
       dataset.transfers.flatMap((tr) => tr.lines.map((line) => ({ ...line, transferId: tr.id }))),
     );
 
+    // Admin & settings. Roles then users (`users.role` is an FK into `roles`);
+    // audit entries and automation rules key into users. audit_entries /
+    // automation_runs carry a generated `seq` and the dataset arrays are already
+    // sorted newest-first, so insert in array order and ORDER BY seq reproduces it.
+    await db.insert(roles).values(dataset.roles);
+    await db.insert(users).values(dataset.users);
+    await db.insert(integrations).values(dataset.integrations);
+    await db.insert(auditEntries).values(dataset.auditEntries);
+    await db.insert(automationRules).values(dataset.automationRules);
+    await db.insert(automationRuns).values(dataset.automationRuns);
+
+    // The permission engine reads these rows in the app; prove a round trip
+    // through Postgres reproduces the matrix before the Playwright suite bets
+    // on it. super-admin is `manage` everywhere; auditor cannot write anywhere.
+    const roleRows = await db.select().from(roles);
+    hydrateRoles(roleRows);
+    if (levelFor("super-admin", "settings") !== "manage") {
+      throw new Error("seed: roles round trip lost super-admin access");
+    }
+    if (levelFor("auditor", "users") !== "read" || levelFor("warehouse-staff", "users") !== "none") {
+      throw new Error("seed: roles round trip changed the permission matrix");
+    }
+
     // Fail loud if a truncate or insert silently dropped rows.
     const poLineCount = dataset.purchaseOrders.reduce((s, po) => s + po.lines.length, 0);
     const returnLineCount = dataset.returns.reduce((s, ret) => s + ret.lines.length, 0);
@@ -128,6 +161,12 @@ export async function seed() {
       ["sales_order_lines", salesOrderLines, soLineCount],
       ["transfers", transfers, dataset.transfers.length],
       ["transfer_lines", transferLines, transferLineCount],
+      ["users", users, dataset.users.length],
+      ["roles", roles, dataset.roles.length],
+      ["integrations", integrations, dataset.integrations.length],
+      ["audit_entries", auditEntries, dataset.auditEntries.length],
+      ["automation_rules", automationRules, dataset.automationRules.length],
+      ["automation_runs", automationRuns, dataset.automationRuns.length],
     ] as const;
     const counts: Record<string, number> = {};
     for (const [name, table, expected] of checks) {

@@ -20,6 +20,7 @@ import {
   type CategorySlug,
 } from "./catalog";
 import { NOW, Rng, daysFromNow, id } from "./rng";
+import { ALL_MODULE_KEYS } from "@/lib/auth/permissions";
 import type {
   Adjustment,
   AdjustmentLine,
@@ -48,6 +49,7 @@ import type {
   ReturnLine,
   ReturnStatus,
   Role,
+  RoleRow,
   SOStatus,
   SalesOrder,
   StockCount,
@@ -124,6 +126,139 @@ const users: User[] = [];
 
 const byRole = (role: Role) => users.filter((u) => u.role === role);
 const pickUser = (role: Role) => r.pick(byRole(role)).id;
+
+/* ----------------------------------------------------------------- roles */
+
+/**
+ * The role rows, formerly the hardcoded `ROLES` array plus `MATRIX` in
+ * `lib/auth/permissions.ts` (ADR-0004). `sortOrder` fixes the column and
+ * switcher order those arrays used to imply by position. Static, not
+ * RNG-driven — a role's permissions are a fixture, not sample data.
+ */
+const roles: RoleRow[] = [
+  {
+    id: "super-admin",
+    label: "Super Admin",
+    summary: "Unrestricted access to every module and setting.",
+    responsibilities: ["System configuration", "Users and roles", "Integrations", "All operational modules"],
+    sortOrder: 0,
+    permissions: Object.fromEntries(ALL_MODULE_KEYS.map((m) => [m, "manage"])) as RoleRow["permissions"],
+  },
+  {
+    id: "inventory-manager",
+    label: "Inventory Manager",
+    summary: "Owns stock accuracy across every site.",
+    responsibilities: ["Stock levels", "Warehouses and transfers", "Adjustments and counts", "Inventory reporting"],
+    sortOrder: 1,
+    permissions: {
+      dashboard: "read-export", approvals: "approve",
+      products: "write", categories: "write", stock: "write",
+      movements: "read-export", adjustments: "approve", counts: "approve",
+      warehouses: "write", locations: "write", transfers: "approve",
+      receiving: "write", fulfillment: "read",
+      "purchase-orders": "read-export", suppliers: "read", "purchase-returns": "read",
+      "sales-orders": "read", customers: "read", "sales-returns": "read",
+      analytics: "read-export", valuation: "read-export", reports: "read-export",
+      users: "none", roles: "none", audit: "read",
+      automation: "read", integrations: "none", settings: "read",
+    },
+  },
+  {
+    id: "warehouse-staff",
+    label: "Warehouse Staff",
+    summary: "Executes the physical work on the floor.",
+    responsibilities: ["Receiving", "Picking and packing", "Transfer execution", "Counting"],
+    sortOrder: 2,
+    permissions: {
+      dashboard: "read", approvals: "none",
+      products: "read", categories: "read", stock: "read",
+      movements: "read", adjustments: "write", counts: "write",
+      warehouses: "read", locations: "read", transfers: "write",
+      receiving: "write", fulfillment: "write",
+      "purchase-orders": "read", suppliers: "none", "purchase-returns": "none",
+      "sales-orders": "read", customers: "none", "sales-returns": "none",
+      analytics: "none", valuation: "none", reports: "none",
+      users: "none", roles: "none", audit: "none",
+      automation: "none", integrations: "none", settings: "none",
+    },
+  },
+  {
+    id: "purchasing-manager",
+    label: "Purchasing Manager",
+    summary: "Owns supply, cost and supplier relationships.",
+    responsibilities: ["Purchase orders", "Suppliers", "Goods receiving", "Purchase returns"],
+    sortOrder: 3,
+    permissions: {
+      dashboard: "read-export", approvals: "approve",
+      products: "read-export", categories: "read", stock: "read-export",
+      movements: "read", adjustments: "read", counts: "none",
+      warehouses: "read", locations: "read", transfers: "read",
+      receiving: "write", fulfillment: "none",
+      "purchase-orders": "approve", suppliers: "approve", "purchase-returns": "approve",
+      "sales-orders": "none", customers: "none", "sales-returns": "none",
+      analytics: "read-export", valuation: "read-export", reports: "read-export",
+      users: "none", roles: "none", audit: "none",
+      automation: "read", integrations: "none", settings: "read",
+    },
+  },
+  {
+    id: "sales-manager",
+    label: "Sales Manager",
+    summary: "Owns demand, orders and customer outcomes.",
+    responsibilities: ["Sales orders", "Customers", "Fulfillment", "Sales returns"],
+    sortOrder: 4,
+    permissions: {
+      dashboard: "read-export", approvals: "read",
+      products: "read-export", categories: "read", stock: "read",
+      movements: "none", adjustments: "none", counts: "none",
+      warehouses: "read", locations: "none", transfers: "none",
+      receiving: "none", fulfillment: "write",
+      "purchase-orders": "none", suppliers: "none", "purchase-returns": "none",
+      "sales-orders": "approve", customers: "write", "sales-returns": "approve",
+      analytics: "read-export", valuation: "none", reports: "read-export",
+      users: "none", roles: "none", audit: "none",
+      automation: "read", integrations: "none", settings: "read",
+    },
+  },
+  {
+    id: "finance",
+    label: "Finance",
+    summary: "Values the inventory and reconciles the cost of it.",
+    responsibilities: ["Inventory valuation", "Purchase costs", "Financial reporting", "Export"],
+    sortOrder: 5,
+    permissions: {
+      dashboard: "read-export", approvals: "read",
+      products: "read-export", categories: "read", stock: "read-export",
+      movements: "read-export", adjustments: "read-export", counts: "read-export",
+      warehouses: "read-export", locations: "read", transfers: "read-export",
+      receiving: "read", fulfillment: "read",
+      "purchase-orders": "read-export", suppliers: "read-export", "purchase-returns": "read-export",
+      "sales-orders": "read-export", customers: "read-export", "sales-returns": "read-export",
+      analytics: "read-export", valuation: "read-export", reports: "write",
+      users: "none", roles: "none", audit: "read-export",
+      automation: "none", integrations: "none", settings: "read",
+    },
+  },
+  {
+    id: "auditor",
+    label: "Auditor",
+    summary: "Read-only across the transaction record. Cannot change anything.",
+    responsibilities: ["Inventory movements", "Adjustments", "Audit logs", "Transaction history"],
+    sortOrder: 6,
+    permissions: {
+      dashboard: "read", approvals: "read",
+      products: "read-export", categories: "read", stock: "read-export",
+      movements: "read-export", adjustments: "read-export", counts: "read-export",
+      warehouses: "read", locations: "read", transfers: "read-export",
+      receiving: "read", fulfillment: "read",
+      "purchase-orders": "read-export", suppliers: "read", "purchase-returns": "read-export",
+      "sales-orders": "read-export", customers: "read", "sales-returns": "read-export",
+      analytics: "read", valuation: "read-export", reports: "read-export",
+      users: "read", roles: "read", audit: "read-export",
+      automation: "read", integrations: "read", settings: "read",
+    },
+  },
+];
 
 /* ------------------------------------------------------------- categories */
 
@@ -1755,6 +1890,7 @@ const integrations: Integration[] = [
 
 export const db = {
   users,
+  roles,
   categories,
   warehouses,
   locations,
