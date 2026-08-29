@@ -30,10 +30,12 @@ import {
 import type {
   ApprovalEvent,
   Attachment,
+  Customer as CustomerModel,
   ItemCondition,
   LocationType,
   OrderLine,
   ProductStatus,
+  SalesOrder as SalesOrderModel,
   Supplier as SupplierModel,
   Warehouse as WarehouseModel,
   WarehouseType,
@@ -312,4 +314,118 @@ export const returnLines = pgTable("return_lines", {
   restock: boolean("restock").notNull(),
   unitPrice: numeric("unit_price", { mode: "number" }).notNull(),
   refundAmount: numeric("refund_amount", { mode: "number" }).notNull(),
+});
+
+/* ------------------------------------------------------ sales & customers ---
+ *
+ * Ticket 04, the mirror image of ticket 03's purchasing area. Customers are
+ * Reference Data — ordinary mutable rows, same treatment as Suppliers — and
+ * carry a `credit_limit` that is reference data, not a derived value. Sales
+ * Orders are Documents: ADR-0002 makes them state machines, so `status` is a
+ * real Postgres enum over the fulfilment progression the screens display
+ * (draft -> confirmed -> reserved -> picking -> packing -> shipped ->
+ * delivered, plus cancelled and backorder), not a free-text column.
+ * `payment_status` and `fulfillment_status` are enums for the same reason —
+ * fixed, closed sets the schema should enforce — though they track alongside
+ * the state machine rather than being it. Lines are their own table
+ * (`quantity` / `fulfilled` per line), keyed by an identity `seq` because the
+ * dataset's line ids (`LN-001`) repeat across parents; the seed inserts in
+ * array order so `ORDER BY seq` reproduces it.
+ *
+ * The reserved balance is projected from open Sales Order state — never the
+ * Movement ledger (CONTEXT.md "Reserved", ADR-0002). `documents.reservedByProduct`
+ * is the query: `sum(quantity - fulfilled)` over the lines of Sales Orders in
+ * `OPEN_SO_STATUSES` — `confirmed` / `reserved` / `picking` / `packing`.
+ * Excluded: `draft` (uncommitted), `shipped` / `delivered` (released as `sale`
+ * Movements), `cancelled` (released), `backorder` (never held stock).
+ */
+
+export const soStatus = pgEnum("so_status", [
+  "draft",
+  "confirmed",
+  "reserved",
+  "picking",
+  "packing",
+  "shipped",
+  "delivered",
+  "cancelled",
+  "backorder",
+]);
+
+export const paymentStatus = pgEnum("payment_status", ["unpaid", "partial", "paid", "refunded"]);
+
+export const fulfillmentStatus = pgEnum("fulfillment_status", [
+  "unfulfilled",
+  "partial",
+  "fulfilled",
+  "returned",
+]);
+
+export const customers = pgTable("customers", {
+  id: text("id").primaryKey(),
+  code: text("code").notNull(),
+  name: text("name").notNull(),
+  type: text("type").$type<CustomerModel["type"]>().notNull(),
+  contactName: text("contact_name").notNull(),
+  email: text("email").notNull(),
+  phone: text("phone").notNull(),
+  city: text("city").notNull(),
+  country: text("country").notNull(),
+  creditLimit: numeric("credit_limit", { mode: "number" }).notNull(),
+  outstanding: numeric("outstanding", { mode: "number" }).notNull(),
+  totalOrders: integer("total_orders").notNull(),
+  totalSpend: numeric("total_spend", { mode: "number" }).notNull(),
+  status: text("status").$type<CustomerModel["status"]>().notNull(),
+  since: text("since").notNull(),
+});
+
+export const salesOrders = pgTable("sales_orders", {
+  id: text("id").primaryKey(),
+  number: text("number").notNull(),
+  customerId: text("customer_id")
+    .notNull()
+    .references(() => customers.id),
+  warehouseId: text("warehouse_id")
+    .notNull()
+    .references(() => warehouses.id),
+  status: soStatus("status").notNull(),
+  paymentStatus: paymentStatus("payment_status").notNull(),
+  fulfillmentStatus: fulfillmentStatus("fulfillment_status").notNull(),
+  channel: text("channel").$type<SalesOrderModel["channel"]>().notNull(),
+  placedAt: text("placed_at").notNull(),
+  promisedAt: text("promised_at").notNull(),
+  shippedAt: text("shipped_at"),
+  subtotal: numeric("subtotal", { mode: "number" }).notNull(),
+  taxTotal: numeric("tax_total", { mode: "number" }).notNull(),
+  discountTotal: numeric("discount_total", { mode: "number" }).notNull(),
+  shipping: numeric("shipping", { mode: "number" }).notNull(),
+  total: numeric("total", { mode: "number" }).notNull(),
+  currency: text("currency").notNull(),
+  createdBy: text("created_by").notNull(),
+  carrier: text("carrier"),
+  trackingNumber: text("tracking_number"),
+  shipToCity: text("ship_to_city").notNull(),
+  notes: text("notes").notNull(),
+});
+
+export const salesOrderLines = pgTable("sales_order_lines", {
+  seq: integer("seq").generatedAlwaysAsIdentity().primaryKey(),
+  salesOrderId: text("sales_order_id")
+    .notNull()
+    .references(() => salesOrders.id),
+  /** The dataset's own line id (`LN-001`); unique only within its order. */
+  id: text("id").notNull(),
+  productId: text("product_id")
+    .notNull()
+    .references(() => products.id),
+  sku: text("sku").notNull(),
+  name: text("name").notNull(),
+  quantity: integer("quantity").notNull(),
+  /** Picked/shipped-so-far quantity; `quantity - fulfilled` is still reserved. */
+  fulfilled: integer("fulfilled").notNull(),
+  unitPrice: numeric("unit_price", { mode: "number" }).notNull(),
+  discountPct: numeric("discount_pct", { mode: "number" }).notNull(),
+  taxPct: numeric("tax_pct", { mode: "number" }).notNull(),
+  lineTotal: numeric("line_total", { mode: "number" }).notNull(),
+  note: text("note").$type<OrderLine["note"]>(),
 });
