@@ -45,10 +45,12 @@ async function summaryMap(): Promise<Map<string, StockSummary>> {
   return new Map((await allSummaries()).map((s) => [s.productId, s]));
 }
 
-/** Statuses excluded from every sales rollup: nothing was really sold. */
-const DEAD_SO_STATUSES = ["cancelled", "draft"] as const;
-/** Statuses excluded from every purchasing rollup: spend not committed. */
-const DEAD_PO_STATUSES = ["cancelled", "draft"] as const;
+/**
+ * Statuses excluded from every sales and purchasing rollup: a draft is
+ * uncommitted and a cancelled order never happened. (Same set as
+ * `metrics.DEAD_ORDER_STATUSES`.)
+ */
+const DEAD_ORDER_STATUSES = ["cancelled", "draft"] as const;
 
 /* ------------------------------------------------------------ valuation -- */
 
@@ -172,8 +174,8 @@ export async function turnoverRows(): Promise<TurnoverRow[]> {
     getDb()
       .select({
         productId: schema.movements.productId,
-        units: sql<number>`coalesce(sum(case when ${schema.movements.type} = 'sale' and ${schema.movements.ts} >= ${YEAR_AGO_ISO} then abs(${schema.movements.qtyChange}) else 0 end), 0)::int`,
-        cost: sql<number>`coalesce(sum(case when ${schema.movements.type} = 'sale' and ${schema.movements.ts} >= ${YEAR_AGO_ISO} then abs(${schema.movements.valueChange}) else 0 end), 0)::float8`,
+        units: sql<number>`coalesce(sum(abs(${schema.movements.qtyChange})) filter (where ${schema.movements.type} = 'sale' and ${schema.movements.ts} >= ${YEAR_AGO_ISO}), 0)::int`,
+        cost: sql<number>`coalesce(sum(abs(${schema.movements.valueChange})) filter (where ${schema.movements.type} = 'sale' and ${schema.movements.ts} >= ${YEAR_AGO_ISO}), 0)::float8`,
         lastMoved: sql<string | null>`max(${schema.movements.ts})`,
       })
       .from(schema.movements)
@@ -288,7 +290,7 @@ export async function productPerformance(): Promise<ProductPerformanceRow[]> {
     .from(schema.salesOrderLines)
     .innerJoin(schema.salesOrders, eq(schema.salesOrders.id, schema.salesOrderLines.salesOrderId))
     .innerJoin(schema.products, eq(schema.products.id, schema.salesOrderLines.productId))
-    .where(notInArray(schema.salesOrders.status, [...DEAD_SO_STATUSES]))
+    .where(notInArray(schema.salesOrders.status, [...DEAD_ORDER_STATUSES]))
     .groupBy(
       schema.salesOrderLines.productId,
       schema.products.sku,
@@ -312,6 +314,8 @@ export async function productPerformance(): Promise<ProductPerformanceRow[]> {
         orders: r.orders,
       };
     })
+    // Phase 1 sorted by revenue alone and fell back to dataset array order on a
+    // tie; the grouped SQL rows have no such order, so the id is the tiebreak.
     .sort((a, b) => b.revenue - a.revenue || a.productId.localeCompare(b.productId));
 
   return performanceCache;
@@ -336,7 +340,9 @@ export async function categoryPerformance() {
       units: v.units,
       skus: v.skus.size,
     }))
-    .sort((a, b) => b.revenue - a.revenue);
+    // Name tiebreak so a tie in rounded revenue does not reorder run to run —
+    // the SQL rows underneath arrive in no guaranteed order.
+    .sort((a, b) => b.revenue - a.revenue || a.name.localeCompare(b.name));
 }
 
 export async function topCustomers(limit = 10) {
@@ -363,7 +369,7 @@ export async function topCustomers(limit = 10) {
       })
       .from(schema.salesOrders)
       .leftJoin(perOrderUnits, eq(perOrderUnits.salesOrderId, schema.salesOrders.id))
-      .where(notInArray(schema.salesOrders.status, [...DEAD_SO_STATUSES]))
+      .where(notInArray(schema.salesOrders.status, [...DEAD_ORDER_STATUSES]))
       .groupBy(schema.salesOrders.customerId),
   ]);
 
@@ -443,13 +449,14 @@ export async function spendByCategory() {
         eq(schema.purchaseOrders.id, schema.purchaseOrderLines.purchaseOrderId),
       )
       .innerJoin(schema.products, eq(schema.products.id, schema.purchaseOrderLines.productId))
-      .where(notInArray(schema.purchaseOrders.status, [...DEAD_PO_STATUSES]))
+      .where(notInArray(schema.purchaseOrders.status, [...DEAD_ORDER_STATUSES]))
       .groupBy(schema.products.categoryId),
   ]);
 
   return rows
     .map((r) => ({ name: categoryById.get(r.categoryId)?.name ?? "—", value: Math.round(r.value) }))
-    .sort((a, b) => b.value - a.value);
+    // Name tiebreak: the grouped SQL rows arrive in no guaranteed order.
+    .sort((a, b) => b.value - a.value || a.name.localeCompare(b.name));
 }
 
 /* ------------------------------------------------------- warehouse rollups */

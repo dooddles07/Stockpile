@@ -1,5 +1,7 @@
+import { can } from "@/lib/auth/permissions";
+import type { ModuleKey, Role } from "@/lib/types";
+import { adjustments, purchaseOrders, salesOrders, stockCounts, transfers } from "./documents";
 import { allSummaries } from "./inventory";
-import { purchaseOrders, salesOrders, stockCounts, transfers, adjustments } from "./documents";
 import {
   customers as allCustomers,
   indexById,
@@ -7,8 +9,6 @@ import {
   suppliers as allSuppliers,
   warehouses as allWarehouses,
 } from "./reference";
-import type { ModuleKey, Role } from "@/lib/types";
-import { can } from "@/lib/auth/permissions";
 
 export type SearchKind =
   | "product"

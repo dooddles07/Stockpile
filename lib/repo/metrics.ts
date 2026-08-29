@@ -14,7 +14,8 @@
  * the pattern the operational screens use.
  */
 
-import { inArray, notInArray, sql } from "drizzle-orm";
+import { inArray, notInArray, sql, type SQL } from "drizzle-orm";
+import type { PgTable } from "drizzle-orm/pg-core";
 
 import { getDb } from "@/lib/db/client";
 import * as schema from "@/lib/db/schema";
@@ -38,16 +39,11 @@ import {
 
 const WEEK_MS = 7 * DAY_MS;
 
+/** A contiguous time window: `[startISO, endISO)`, labelled for the chart axis. */
 interface Bucket {
-  start: number;
-  end: number;
   label: string;
   startISO: string;
   endISO: string;
-}
-
-function withISO(b: { start: number; end: number; label: string }): Bucket {
-  return { ...b, startISO: new Date(b.start).toISOString(), endISO: new Date(b.end).toISOString() };
 }
 
 function weekBuckets(count: number): Bucket[] {
@@ -55,16 +51,13 @@ function weekBuckets(count: number): Bucket[] {
   const end = NOW.getTime();
   for (let i = count - 1; i >= 0; i--) {
     const bucketEnd = end - i * WEEK_MS;
-    const bucketStart = bucketEnd - WEEK_MS;
-    out.push(
-      withISO({
-        start: bucketStart,
-        end: bucketEnd,
-        label: new Intl.DateTimeFormat("en-US", { day: "2-digit", month: "short", timeZone: "UTC" }).format(
-          new Date(bucketEnd),
-        ),
-      }),
-    );
+    out.push({
+      startISO: new Date(bucketEnd - WEEK_MS).toISOString(),
+      endISO: new Date(bucketEnd).toISOString(),
+      label: new Intl.DateTimeFormat("en-US", { day: "2-digit", month: "short", timeZone: "UTC" }).format(
+        new Date(bucketEnd),
+      ),
+    });
   }
   return out;
 }
@@ -75,16 +68,42 @@ function monthBuckets(count: number): Bucket[] {
   for (let i = count - 1; i >= 0; i--) {
     const start = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth() - i, 1));
     const end = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth() - i + 1, 1));
-    out.push(
-      withISO({
-        start: start.getTime(),
-        end: end.getTime(),
-        label: new Intl.DateTimeFormat("en-US", { month: "short", timeZone: "UTC" }).format(start),
-      }),
-    );
+    out.push({
+      startISO: start.toISOString(),
+      endISO: end.toISOString(),
+      label: new Intl.DateTimeFormat("en-US", { month: "short", timeZone: "UTC" }).format(start),
+    });
   }
   return out;
 }
+
+/**
+ * One SELECT that returns, for each named series, the aggregate per bucket:
+ * `series[name](bucket)` is the SQL for that series in that window. The whole
+ * 12-point line is one round trip rather than one query per bucket.
+ */
+async function bucketedSums<K extends string>(
+  table: PgTable,
+  buckets: Bucket[],
+  series: Record<K, (b: Bucket) => SQL<number>>,
+  where?: SQL,
+): Promise<Record<K, number[]>> {
+  const keys = Object.keys(series) as K[];
+  const cols: Record<string, SQL<number>> = {};
+  buckets.forEach((b, i) => {
+    for (const k of keys) cols[`${k}_${i}`] = series[k](b);
+  });
+
+  const query = getDb().select(cols).from(table);
+  const [row] = await (where ? query.where(where) : query);
+  const r = (row ?? {}) as Record<string, number>;
+
+  return Object.fromEntries(
+    keys.map((k) => [k, buckets.map((_, i) => Number(r[`${k}_${i}`]))]),
+  ) as Record<K, number[]>;
+}
+
+const DEAD_ORDER_STATUSES = ["cancelled", "draft"] as const;
 
 /* ------------------------------------------------------------- series ---- */
 
@@ -102,16 +121,13 @@ let valueTrendCache: Point[] | null = null;
 export async function inventoryValueTrend(): Promise<Point[]> {
   if (valueTrendCache) return valueTrendCache;
   const buckets = weekBuckets(12);
-  const current = await totalInventoryValue();
-
-  const cols = Object.fromEntries(
-    buckets.map((b, i) => [
-      `b${i}`,
-      sql<number>`coalesce(sum(${schema.movements.valueChange}) filter (where ${schema.movements.ts} >= ${b.startISO} and ${schema.movements.ts} < ${b.endISO}), 0)::float8`,
-    ]),
-  );
-  const [row] = await getDb().select(cols).from(schema.movements);
-  const deltas = buckets.map((_, i) => Number((row as Record<string, number>)[`b${i}`]));
+  const [current, { delta: deltas }] = await Promise.all([
+    totalInventoryValue(),
+    bucketedSums(schema.movements, buckets, {
+      delta: (b) =>
+        sql<number>`coalesce(sum(${schema.movements.valueChange}) filter (where ${schema.movements.ts} >= ${b.startISO} and ${schema.movements.ts} < ${b.endISO}), 0)::float8`,
+    }),
+  ]);
 
   // Value at the end of bucket i = current − every delta after bucket i.
   const points: Point[] = [];
@@ -130,20 +146,19 @@ export async function movementTrend(): Promise<Point[]> {
   if (movementTrendCache) return movementTrendCache;
   const buckets = weekBuckets(12);
 
-  const cols: Record<string, unknown> = {};
-  buckets.forEach((b, i) => {
-    cols[`in${i}`] = sql<number>`coalesce(sum(${schema.movements.qtyChange}) filter (where ${schema.movements.ts} >= ${b.startISO} and ${schema.movements.ts} < ${b.endISO} and ${schema.movements.qtyChange} > 0), 0)::int`;
-    cols[`out${i}`] = sql<number>`coalesce(sum(-${schema.movements.qtyChange}) filter (where ${schema.movements.ts} >= ${b.startISO} and ${schema.movements.ts} < ${b.endISO} and ${schema.movements.qtyChange} < 0), 0)::int`;
+  const inWindow = (b: Bucket) =>
+    sql`${schema.movements.ts} >= ${b.startISO} and ${schema.movements.ts} < ${b.endISO}`;
+  const { inbound, outbound } = await bucketedSums(schema.movements, buckets, {
+    inbound: (b) =>
+      sql<number>`coalesce(sum(${schema.movements.qtyChange}) filter (where ${inWindow(b)} and ${schema.movements.qtyChange} > 0), 0)::int`,
+    outbound: (b) =>
+      sql<number>`coalesce(sum(-${schema.movements.qtyChange}) filter (where ${inWindow(b)} and ${schema.movements.qtyChange} < 0), 0)::int`,
   });
-  const [row] = await getDb()
-    .select(cols as Record<string, ReturnType<typeof sql<number>>>)
-    .from(schema.movements);
-  const r = row as Record<string, number>;
 
   movementTrendCache = buckets.map((b, i) => ({
     label: b.label,
-    inbound: Number(r[`in${i}`]),
-    outbound: Number(r[`out${i}`]),
+    inbound: inbound[i],
+    outbound: outbound[i],
   }));
   return movementTrendCache;
 }
@@ -154,33 +169,33 @@ let purchaseSalesCache: Point[] | null = null;
 export async function purchasesVsSales(): Promise<Point[]> {
   if (purchaseSalesCache) return purchaseSalesCache;
   const buckets = monthBuckets(12);
-  const pg = getDb();
 
   const poTs = sql`coalesce(${schema.purchaseOrders.orderedAt}, ${schema.purchaseOrders.createdAt})`;
-  const poCols: Record<string, unknown> = {};
-  const soCols: Record<string, unknown> = {};
-  buckets.forEach((b, i) => {
-    poCols[`b${i}`] = sql<number>`coalesce(sum(${schema.purchaseOrders.total}) filter (where ${poTs} >= ${b.startISO} and ${poTs} < ${b.endISO}), 0)::float8`;
-    soCols[`b${i}`] = sql<number>`coalesce(sum(${schema.salesOrders.total}) filter (where ${schema.salesOrders.placedAt} >= ${b.startISO} and ${schema.salesOrders.placedAt} < ${b.endISO}), 0)::float8`;
-  });
-
-  const [[po], [so]] = await Promise.all([
-    pg
-      .select(poCols as Record<string, ReturnType<typeof sql<number>>>)
-      .from(schema.purchaseOrders)
-      .where(notInArray(schema.purchaseOrders.status, ["cancelled", "draft"])),
-    pg
-      .select(soCols as Record<string, ReturnType<typeof sql<number>>>)
-      .from(schema.salesOrders)
-      .where(notInArray(schema.salesOrders.status, ["cancelled", "draft"])),
+  const [{ spend: purchases }, { revenue: sales }] = await Promise.all([
+    bucketedSums(
+      schema.purchaseOrders,
+      buckets,
+      {
+        spend: (b) =>
+          sql<number>`coalesce(sum(${schema.purchaseOrders.total}) filter (where ${poTs} >= ${b.startISO} and ${poTs} < ${b.endISO}), 0)::float8`,
+      },
+      notInArray(schema.purchaseOrders.status, [...DEAD_ORDER_STATUSES]),
+    ),
+    bucketedSums(
+      schema.salesOrders,
+      buckets,
+      {
+        revenue: (b) =>
+          sql<number>`coalesce(sum(${schema.salesOrders.total}) filter (where ${schema.salesOrders.placedAt} >= ${b.startISO} and ${schema.salesOrders.placedAt} < ${b.endISO}), 0)::float8`,
+      },
+      notInArray(schema.salesOrders.status, [...DEAD_ORDER_STATUSES]),
+    ),
   ]);
-  const pr = po as Record<string, number>;
-  const sr = so as Record<string, number>;
 
   purchaseSalesCache = buckets.map((b, i) => ({
     label: b.label,
-    purchases: Math.round(Number(pr[`b${i}`])),
-    sales: Math.round(Number(sr[`b${i}`])),
+    purchases: Math.round(purchases[i]),
+    sales: Math.round(sales[i]),
   }));
   return purchaseSalesCache;
 }
@@ -217,20 +232,17 @@ export async function warehouseComposition(): Promise<Point[]> {
 /** Inventory turnover per month: cost of goods shipped ÷ average stock value. */
 export async function turnoverTrend(): Promise<Point[]> {
   const buckets = monthBuckets(12);
-  const value = await totalInventoryValue();
-
-  const cols = Object.fromEntries(
-    buckets.map((b, i) => [
-      `b${i}`,
-      sql<number>`coalesce(sum(abs(${schema.movements.valueChange})) filter (where ${schema.movements.type} = 'sale' and ${schema.movements.ts} >= ${b.startISO} and ${schema.movements.ts} < ${b.endISO}), 0)::float8`,
-    ]),
-  );
-  const [row] = await getDb().select(cols).from(schema.movements);
-  const r = row as Record<string, number>;
+  const [value, { cogs }] = await Promise.all([
+    totalInventoryValue(),
+    bucketedSums(schema.movements, buckets, {
+      cogs: (b) =>
+        sql<number>`coalesce(sum(abs(${schema.movements.valueChange})) filter (where ${schema.movements.type} = 'sale' and ${schema.movements.ts} >= ${b.startISO} and ${schema.movements.ts} < ${b.endISO}), 0)::float8`,
+    }),
+  ]);
 
   return buckets.map((b, i) => ({
     label: b.label,
-    turnover: Math.round((Number(r[`b${i}`]) / Math.max(1, value)) * 1200) / 100,
+    turnover: Math.round((cogs[i] / Math.max(1, value)) * 1200) / 100,
   }));
 }
 
@@ -548,7 +560,7 @@ export async function recentReceipts(limit = 6) {
 
 export async function transfersInFlight(limit = 6) {
   return (await allTransfers())
-    .filter((t) => ["in-transit", "partially-received"].includes(t.status))
+    .filter((t) => IN_FLIGHT_TRANSFER_STATUSES.includes(t.status))
     .sort((a, b) => (a.expectedAt ?? "").localeCompare(b.expectedAt ?? ""))
     .slice(0, limit);
 }
@@ -566,7 +578,7 @@ export async function navCounts() {
     approvals: approvals.length,
     // Matches the Low stock saved view exactly. Out of stock has its own view.
     lowStock: health.low + health.critical,
-    receiving: purchaseOrders.filter((p) => ["ordered", "partially-received"].includes(p.status)).length,
+    receiving: purchaseOrders.filter((p) => AWAITING_RECEIPT_STATUSES.includes(p.status)).length,
     notifications: notifications.filter((n) => !n.read).length,
     tasks: tasks.filter((t) => t.status !== "done").length,
   };

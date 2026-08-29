@@ -672,7 +672,7 @@ export const countStatus = pgEnum("count_status", [
 
 export const movements = pgTable("movements", {
   seq: integer("seq").generatedAlwaysAsIdentity().primaryKey(),
-  /** The dataset's own ledger id (`MOV-00001`); unique, but `seq` fixes order. */
+  /** The dataset's own ledger id (`MOV-00001`); `seq` is what fixes row order. */
   id: text("id").notNull(),
   ts: text("ts").notNull(),
   type: text("type").$type<MovementType>().notNull(),
