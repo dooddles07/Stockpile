@@ -29,15 +29,18 @@ import {
 
 import type {
   AccessLevel,
+  AdjustmentReason,
   ApprovalEvent,
   Attachment,
   AuditEntry as AuditEntryModel,
   AutomationRun as AutomationRunModel,
+  CountType,
   Customer as CustomerModel,
   Integration as IntegrationModel,
   ItemCondition,
   LocationType,
   ModuleKey,
+  MovementType,
   OrderLine,
   ProductStatus,
   Role,
@@ -629,4 +632,153 @@ export const integrations = pgTable("integrations", {
   lastSyncAt: text("last_sync_at"),
   recordsSynced: integer("records_synced").notNull(),
   description: text("description").notNull(),
+});
+
+/* --------------------------------------------- movements, adjustments, counts ---
+ *
+ * Ticket 07. The analytics, report, valuation and search reads span every
+ * domain, and these three are the last things they still read from the
+ * generated dataset. Movements is the Movement ledger — a projection, one flat
+ * row per recorded quantity change; Adjustments and Stock Counts are Documents
+ * (ADR-0002 state machines, so `status` is a real enum) with their lines in
+ * their own tables, keyed by an identity `seq` because the dataset's line ids
+ * (`AL-001` / `CL-001`) repeat across parents. The read swap and seed land
+ * here; the write paths that append their Events are tickets 09 / 10 / 15.
+ *
+ * `movements.seq` is an identity column like `stock_rows.seq`: the generator
+ * sorts the ledger newest-first and the seed inserts in that order, so
+ * `ORDER BY seq` reproduces it — every screen shows the ledger newest-first.
+ *
+ * People ids (`user_id`, `created_by`, `approved_by`, `assigned_to`) carry no
+ * FK, matching `warehouses.manager_id` and the Document tables above.
+ */
+
+export const adjustmentStatus = pgEnum("adjustment_status", [
+  "draft",
+  "pending-approval",
+  "approved",
+  "rejected",
+  "applied",
+]);
+
+export const countStatus = pgEnum("count_status", [
+  "scheduled",
+  "in-progress",
+  "review",
+  "approved",
+  "applied",
+  "cancelled",
+]);
+
+export const movements = pgTable("movements", {
+  seq: integer("seq").generatedAlwaysAsIdentity().primaryKey(),
+  /** The dataset's own ledger id (`MOV-00001`); unique, but `seq` fixes order. */
+  id: text("id").notNull(),
+  ts: text("ts").notNull(),
+  type: text("type").$type<MovementType>().notNull(),
+  productId: text("product_id")
+    .notNull()
+    .references(() => products.id),
+  sku: text("sku").notNull(),
+  warehouseId: text("warehouse_id")
+    .notNull()
+    .references(() => warehouses.id),
+  locationId: text("location_id")
+    .notNull()
+    .references(() => locations.id),
+  qtyBefore: integer("qty_before").notNull(),
+  qtyChange: integer("qty_change").notNull(),
+  qtyAfter: integer("qty_after").notNull(),
+  unitCost: numeric("unit_cost", { mode: "number" }).notNull(),
+  valueChange: numeric("value_change", { mode: "number" }).notNull(),
+  refType: text("ref_type").notNull(),
+  refId: text("ref_id").notNull(),
+  refNumber: text("ref_number").notNull(),
+  userId: text("user_id").notNull(),
+  reason: text("reason").notNull(),
+});
+
+export const adjustments = pgTable("adjustments", {
+  id: text("id").primaryKey(),
+  number: text("number").notNull(),
+  warehouseId: text("warehouse_id")
+    .notNull()
+    .references(() => warehouses.id),
+  reason: text("reason").$type<AdjustmentReason>().notNull(),
+  status: adjustmentStatus("status").notNull(),
+  createdAt: text("created_at").notNull(),
+  appliedAt: text("applied_at"),
+  totalDelta: integer("total_delta").notNull(),
+  totalValueImpact: numeric("total_value_impact", { mode: "number" }).notNull(),
+  createdBy: text("created_by").notNull(),
+  approvedBy: text("approved_by"),
+  approvals: jsonb("approvals").$type<ApprovalEvent[]>().notNull(),
+  note: text("note").notNull(),
+  requiresApproval: boolean("requires_approval").notNull(),
+});
+
+export const adjustmentLines = pgTable("adjustment_lines", {
+  seq: integer("seq").generatedAlwaysAsIdentity().primaryKey(),
+  adjustmentId: text("adjustment_id")
+    .notNull()
+    .references(() => adjustments.id),
+  /** The dataset's own line id (`AL-001`); unique only within its adjustment. */
+  id: text("id").notNull(),
+  productId: text("product_id")
+    .notNull()
+    .references(() => products.id),
+  sku: text("sku").notNull(),
+  name: text("name").notNull(),
+  locationId: text("location_id")
+    .notNull()
+    .references(() => locations.id),
+  qtyBefore: integer("qty_before").notNull(),
+  qtyAfter: integer("qty_after").notNull(),
+  delta: integer("delta").notNull(),
+  unitCost: numeric("unit_cost", { mode: "number" }).notNull(),
+  valueImpact: numeric("value_impact", { mode: "number" }).notNull(),
+  lotNumber: text("lot_number"),
+});
+
+export const stockCounts = pgTable("stock_counts", {
+  id: text("id").primaryKey(),
+  number: text("number").notNull(),
+  type: text("type").$type<CountType>().notNull(),
+  warehouseId: text("warehouse_id")
+    .notNull()
+    .references(() => warehouses.id),
+  scopeLabel: text("scope_label").notNull(),
+  status: countStatus("status").notNull(),
+  scheduledFor: text("scheduled_for").notNull(),
+  startedAt: text("started_at"),
+  completedAt: text("completed_at"),
+  assignedTo: jsonb("assigned_to").$type<string[]>().notNull(),
+  accuracyPct: numeric("accuracy_pct", { mode: "number" }).notNull(),
+  totalVarianceValue: numeric("total_variance_value", { mode: "number" }).notNull(),
+  createdBy: text("created_by").notNull(),
+  approvedBy: text("approved_by"),
+});
+
+export const countLines = pgTable("count_lines", {
+  seq: integer("seq").generatedAlwaysAsIdentity().primaryKey(),
+  stockCountId: text("stock_count_id")
+    .notNull()
+    .references(() => stockCounts.id),
+  /** The dataset's own line id (`CL-001`); unique only within its count. */
+  id: text("id").notNull(),
+  productId: text("product_id")
+    .notNull()
+    .references(() => products.id),
+  sku: text("sku").notNull(),
+  name: text("name").notNull(),
+  locationId: text("location_id")
+    .notNull()
+    .references(() => locations.id),
+  expected: integer("expected").notNull(),
+  counted: integer("counted"),
+  variance: integer("variance").notNull(),
+  varianceValue: numeric("variance_value", { mode: "number" }).notNull(),
+  countedBy: text("counted_by"),
+  countedAt: text("counted_at"),
+  recount: boolean("recount").notNull(),
 });
