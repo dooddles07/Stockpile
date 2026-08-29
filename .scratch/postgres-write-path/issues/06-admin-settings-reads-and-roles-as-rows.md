@@ -14,12 +14,39 @@ This ticket runs in parallel with 03, 04 and 05.
 
 **Blocked by:** 02 (Inventory schema, seed, and reads from Postgres).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Schema covers Users, Roles and their permissions, audit entries, Automation Rules, integrations and settings
-- [ ] The hardcoded role array is gone; the permission engine reads Roles from Postgres
-- [ ] The seed script loads this area, including the existing roles, from the generated dataset
-- [ ] Admin and settings repository function bodies query Postgres; their signatures are unchanged
-- [ ] Existing permission checks in pages and components behave identically, sourced from the database
-- [ ] Automation Rule trigger, condition and action fields are left untyped
-- [ ] The Playwright suite passes unmodified, including role-switching behaviour
+- [x] Schema covers Users, Roles and their permissions, audit entries, Automation Rules, integrations and settings
+- [x] The hardcoded role array is gone; the permission engine reads Roles from Postgres
+- [x] The seed script loads this area, including the existing roles, from the generated dataset
+- [x] Admin and settings repository function bodies query Postgres; their signatures are unchanged
+- [x] Existing permission checks in pages and components behave identically, sourced from the database
+- [x] Automation Rule trigger, condition and action fields are left untyped
+- [x] The Playwright suite passes unmodified, including role-switching behaviour
+
+## Comments
+
+**2026-08-29** — Done across three commits (schema / seed / reads).
+
+- Tables added: `users`, `roles`, `audit_entries`, `automation_rules`,
+  `automation_runs`, `integrations`. Roles hold their permission map in one
+  `permissions` jsonb column, not a join table — no write path against them
+  until ticket 09. `users.role` is a real FK into `roles`.
+- **No `settings` table.** The dataset carries no settings entity, so one
+  would seed empty. The settings screens already render from Postgres —
+  their company / security / product figures come from `reference.users`,
+  `warehouses` and `products` — and are otherwise static copy. Flag if a
+  real settings table is wanted anyway.
+- The permission engine keeps `can()` / `levelFor()` synchronous. It
+  hydrates a module-level matrix from the `roles` rows: the server in
+  `getRole()` via a request-cached `ensureRoles()`, the client in
+  `<RoleProvider>` from a `roles` prop. `lib/auth/permissions.ts` carries a
+  `ponytail:` note that this global becomes per-request state once roles
+  are runtime-editable.
+- `/admin/roles/[id]` and its edit page now render on demand
+  (`generateStaticParams` returns `[]`) — the build has no `DATABASE_URL`,
+  so they can't be prerendered from the table.
+- `notifications` and `tasks` in `lib/repo/ops.ts` stay on the in-memory
+  dataset — not in this ticket's entity list, no table yet.
+- typecheck clean, lint 0 errors, `db:seed` round-trips the matrix,
+  Playwright 29/29 unmodified.
