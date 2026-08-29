@@ -15,6 +15,13 @@
       "when": 1787919379266,
       "tag": "0001_wonderful_exodus",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787963287745,
+      "tag": "0002_open_thaddeus_ross",
+      "breakpoints": true
     }
   ]
 }
