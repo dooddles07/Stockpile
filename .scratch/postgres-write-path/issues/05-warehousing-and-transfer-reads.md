@@ -12,12 +12,47 @@ This ticket runs in parallel with 03, 04 and 06.
 
 **Blocked by:** 02 (Inventory schema, seed, and reads from Postgres).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Schema covers Transfers and their lines, picking, packing and receiving state
-- [ ] A Transfer's source and destination are explicit in the schema
-- [ ] Transfer states are modelled explicitly rather than as free text
-- [ ] The seed script loads this area from the generated dataset
-- [ ] Warehousing repository function bodies query Postgres; their signatures are unchanged
-- [ ] The in-transit balance is derived from open Transfer state, not from Movements
-- [ ] The Playwright suite passes unmodified
+- [x] Schema covers Transfers and their lines, picking, packing and receiving state
+- [x] A Transfer's source and destination are explicit in the schema
+- [x] Transfer states are modelled explicitly rather than as free text
+- [x] The seed script loads this area from the generated dataset
+- [x] Warehousing repository function bodies query Postgres; their signatures are unchanged
+- [x] The in-transit balance is derived from open Transfer state, not from Movements
+- [x] The Playwright suite passes unmodified
+
+## Comments
+
+`lib/db/schema.ts` adds `transfer_status` (a real Postgres enum over the
+`TransferStatus` union — `draft` through `received` plus `cancelled`, matching
+`WORKFLOWS.transfer`), `transfers`, and `transfer_lines`. Both ends of the
+Document are explicit columns, not implied by the status: `from_warehouse_id` /
+`to_warehouse_id` on the parent (real FKs to `warehouses`) and `from_location_id`
+/ `to_location_id` on each line (FKs to `locations`, the second nullable until
+put-away). Lines are their own table keyed by identity `seq` because the
+dataset's `TL-001` ids repeat across parents; the seed inserts in array order so
+`ORDER BY seq` reproduces it. `approvals` is `jsonb`, as on Purchase Orders.
+Picking and packing state is Sales-Order state, already on Postgres from ticket
+04; this ticket covers the transfer half of receiving.
+
+`lib/db/seed.ts` loads `transfers` (52) and `transfer_lines` (222) after the
+sales area — they reference only warehouses, products and locations, all seeded
+earlier — with truncate entries and row-count checks, so a re-seed stays
+idempotent.
+
+`documents.transfers()` now queries Postgres (two ordered queries stitched with
+`groupBy`, deduped per request with React `cache`); its signature is unchanged,
+and `transferRows()` still derives from it untouched. `documents.inTransitByProduct()`
+projects the in-transit balance from open Transfer state — `sum(shipped -
+received)` over the lines of Transfers in `in-transit` / `partially-received` —
+never from the Movement ledger, which settles a transfer as paired
+`transfer-out` / `transfer-in` Movements once it lands and cannot express the
+gap in between (CONTEXT.md "In Transit", ADR-0002). Like ticket 03/04's
+`incomingByProduct` / `reservedByProduct`, nothing reads it yet — the stock
+screens still render the seeded `stock_rows.in_transit`, and this is the query
+the write path (ticket 09) rebuilds it from. `inventory.warehouseRollups()`
+drops its last `db.transfers` read for the Postgres-backed `transfers()`.
+
+All 29 Playwright tests pass unmodified against the seeded database;
+`npm run typecheck` and `npm run lint` are clean.
