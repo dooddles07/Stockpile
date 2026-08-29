@@ -61,8 +61,10 @@ jobs:
         env:
           DATABASE_URL: ${{ steps.neon.outputs.db_url }}
 
+      # Only when the branch was actually created — otherwise this step crashes
+      # on an empty branch id and masks the real failure above.
       - name: Delete Neon branch
-        if: always()
+        if: always() && steps.neon.outputs.branch_id != ''
         uses: neondatabase/delete-branch-action@v3
         with:
           project_id: ${{ vars.NEON_PROJECT_ID }}
