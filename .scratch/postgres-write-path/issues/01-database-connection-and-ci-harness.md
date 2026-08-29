@@ -20,8 +20,8 @@ This ticket is deliberately not user-visible. It was split out because the alter
 - [x] The driver in use supports interactive transactions; the HTTP driver is explicitly not used
 - [x] The database client initialises lazily on first use and is not wrapped in a proxy
 - [x] A production build succeeds with no connection string present
-- [x] CI creates a Neon branch, applies migrations, runs the Playwright suite, and deletes the branch
-- [x] The branch is deleted even when the suite fails
+- [x] CI applies migrations, seeds, and runs the Playwright suite against a dedicated Neon branch — see the 2026-08-29 update below: branch-per-run was replaced with a persistent `ci` branch
+- [x] ~~The branch is deleted even when the suite fails~~ — no longer applicable; the `ci` branch is persistent (2026-08-29 update)
 - [x] The Playwright suite from phase 1 still passes, unchanged, against the generated dataset
 
 ## Comments
@@ -47,3 +47,23 @@ runs the unchanged Playwright suite, and deletes the branch in an
 The suite still renders from the generated dataset — the harness is proven
 by clean provision and teardown, not by the suite reading Postgres yet. All
 29 phase-1 tests pass unmodified.
+
+### Update (2026-08-29) — branch-per-run replaced
+
+The branch-per-run harness never ran green on GitHub: `create-branch-action`
+needs a `NEON_API_KEY` secret that was never set, so every run failed at
+"Create Neon branch" (`Input required and not supplied: api_key`) and again
+in teardown on the empty branch id.
+
+`e2e.yml` now drops both Neon actions. The `playwright` job runs
+`db:migrate`, `db:seed` and the suite against a dedicated, persistent Neon
+branch named `ci` on the same project, kept separate from `main` so the
+seed's truncate never touches the demo data (ADR-0010). It needs one secret,
+`DATABASE_URL` — the `ci` branch's pooled connection string — and nothing
+else. `db:migrate` is idempotent (drizzle records applied files) and
+`db:seed` truncates and reloads, so a long-lived branch still gives every
+run the same known-good state. A `concurrency` group serializes the job
+because the branch is shared.
+
+Green as of run 33226015699: `build` + `playwright` both pass, 29 tests
+against the seeded `ci` branch.
