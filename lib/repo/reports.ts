@@ -10,7 +10,13 @@ import {
   warehousePerformance,
 } from "./analytics";
 import { healthCounts, stockLevelRows } from "./inventory";
-import { db } from "@/lib/data/store";
+import { movements as allMovements, purchaseOrders as allPurchaseOrders } from "./documents";
+import {
+  indexById,
+  suppliers as allSuppliers,
+  users as allUsers,
+  warehouses as allWarehouses,
+} from "./reference";
 import { NOW } from "@/lib/data/rng";
 import { money, percent, qty } from "@/lib/format";
 import { humanize } from "@/lib/status";
@@ -250,8 +256,13 @@ export const REPORTS: ReportDefinition[] = [
       { key: "expected", header: "Expected" },
       { key: "daysLate", header: "Days late", align: "right", format: asText },
     ],
-    run: async () =>
-      db.purchaseOrders
+    run: async () => {
+      const [orders, supplierById, warehouseById] = await Promise.all([
+        allPurchaseOrders(),
+        indexById(allSuppliers),
+        indexById(allWarehouses),
+      ]);
+      return orders
         .filter((p) =>
           ["submitted", "approved", "ordered", "partially-received"].includes(p.status),
         )
@@ -261,8 +272,8 @@ export const REPORTS: ReportDefinition[] = [
           );
           return {
             number: p.number,
-            supplier: db.suppliers.find((s) => s.id === p.supplierId)?.name ?? "—",
-            warehouse: db.warehouses.find((w) => w.id === p.warehouseId)?.code ?? "—",
+            supplier: supplierById.get(p.supplierId)?.name ?? "—",
+            warehouse: warehouseById.get(p.warehouseId)?.code ?? "—",
             status: p.status,
             outstanding: p.lines.reduce((s, l) => s + (l.quantity - l.fulfilled), 0),
             total: p.total,
@@ -270,7 +281,8 @@ export const REPORTS: ReportDefinition[] = [
             daysLate: late > 0 ? late : null,
           };
         })
-        .sort((a, b) => (b.daysLate ?? -1) - (a.daysLate ?? -1)),
+        .sort((a, b) => (b.daysLate ?? -1) - (a.daysLate ?? -1));
+    },
   },
   {
     slug: "product-performance",
@@ -350,20 +362,26 @@ export const REPORTS: ReportDefinition[] = [
       { key: "refNumber", header: "Reference" },
       { key: "user", header: "User" },
     ],
-    run: async () =>
-      db.movements.slice(0, 500).map((m) => ({
+    run: async () => {
+      const [ledger, warehouseById, userById] = await Promise.all([
+        allMovements(),
+        indexById(allWarehouses),
+        indexById(allUsers),
+      ]);
+      return ledger.slice(0, 500).map((m) => ({
         ts: m.ts.slice(0, 16).replace("T", " "),
         type: m.type,
         sku: m.sku,
-        warehouse: db.warehouses.find((w) => w.id === m.warehouseId)?.code ?? "—",
+        warehouse: warehouseById.get(m.warehouseId)?.code ?? "—",
         qtyBefore: m.qtyBefore,
         qtyChange: m.qtyChange,
         qtyAfter: m.qtyAfter,
         refNumber: m.refNumber,
-        user: db.users.find((u) => u.id === m.userId)?.name ?? "—",
-      })),
-    summary: () => [
-      { label: "Ledger entries", value: qty(db.movements.length) },
+        user: userById.get(m.userId)?.name ?? "—",
+      }));
+    },
+    summary: async () => [
+      { label: "Ledger entries", value: qty((await allMovements()).length) },
       { label: "Shown", value: "500 most recent" },
     ],
   },

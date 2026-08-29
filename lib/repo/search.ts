@@ -1,5 +1,12 @@
-import { db } from "@/lib/data/store";
 import { allSummaries } from "./inventory";
+import { purchaseOrders, salesOrders, stockCounts, transfers, adjustments } from "./documents";
+import {
+  customers as allCustomers,
+  indexById,
+  products as allProducts,
+  suppliers as allSuppliers,
+  warehouses as allWarehouses,
+} from "./reference";
 import type { ModuleKey, Role } from "@/lib/types";
 import { can } from "@/lib/auth/permissions";
 
@@ -55,12 +62,47 @@ export function kindLabel(kind: SearchKind): string {
  * Global search. Ranks exact identifier matches (a scanned SKU, a typed PO
  * number) above name matches — an operator pasting "BCL-SCN-104" wants that
  * one row first, not every scanner in the catalogue.
+ *
+ * Ticket 07: every entity list is now a Postgres query (through the repo
+ * accessors below), not the generated dataset. The scan order and the `score`
+ * ranking are unchanged, so recorded result ordering holds; the accessors
+ * return rows in id order exactly as the in-memory arrays did.
  */
 export async function search(query: string, role: Role, limitPerKind = 5): Promise<SearchHit[]> {
   const q = query.trim().toLowerCase();
   if (q.length < 2) return [];
 
-  const summaries = new Map((await allSummaries()).map((s) => [s.productId, s]));
+  const [
+    summaryList,
+    products,
+    pos,
+    sos,
+    trs,
+    suppliers,
+    customers,
+    warehouses,
+    adjs,
+    counts,
+    supplierById,
+    customerById,
+    warehouseById,
+  ] = await Promise.all([
+    allSummaries(),
+    allProducts(),
+    purchaseOrders(),
+    salesOrders(),
+    transfers(),
+    allSuppliers(),
+    allCustomers(),
+    allWarehouses(),
+    adjustments(),
+    stockCounts(),
+    indexById(allSuppliers),
+    indexById(allCustomers),
+    indexById(allWarehouses),
+  ]);
+
+  const summaries = new Map(summaryList.map((s) => [s.productId, s]));
   const hits: (SearchHit & { score: number })[] = [];
 
   const push = (hit: SearchHit, haystacks: string[]) => {
@@ -75,7 +117,7 @@ export async function search(query: string, role: Role, limitPerKind = 5): Promi
     if (best !== Infinity) hits.push({ ...hit, score: best });
   };
 
-  for (const p of db.products) {
+  for (const p of products) {
     const stock = summaries.get(p.id)!;
     push(
       {
@@ -90,8 +132,8 @@ export async function search(query: string, role: Role, limitPerKind = 5): Promi
     );
   }
 
-  for (const po of db.purchaseOrders) {
-    const supplier = db.suppliers.find((s) => s.id === po.supplierId);
+  for (const po of pos) {
+    const supplier = supplierById.get(po.supplierId);
     push(
       {
         kind: "purchase-order",
@@ -105,8 +147,8 @@ export async function search(query: string, role: Role, limitPerKind = 5): Promi
     );
   }
 
-  for (const so of db.salesOrders) {
-    const customer = db.customers.find((c) => c.id === so.customerId);
+  for (const so of sos) {
+    const customer = customerById.get(so.customerId);
     push(
       {
         kind: "sales-order",
@@ -120,13 +162,13 @@ export async function search(query: string, role: Role, limitPerKind = 5): Promi
     );
   }
 
-  for (const t of db.transfers) {
+  for (const t of trs) {
     push(
       {
         kind: "transfer",
         id: t.id,
         title: t.number,
-        subtitle: `${db.warehouses.find((w) => w.id === t.fromWarehouseId)?.code} → ${db.warehouses.find((w) => w.id === t.toWarehouseId)?.code}`,
+        subtitle: `${warehouseById.get(t.fromWarehouseId)?.code} → ${warehouseById.get(t.toWarehouseId)?.code}`,
         meta: t.status,
         href: `/warehousing/transfers/${t.id}`,
       },
@@ -134,7 +176,7 @@ export async function search(query: string, role: Role, limitPerKind = 5): Promi
     );
   }
 
-  for (const s of db.suppliers) {
+  for (const s of suppliers) {
     push(
       {
         kind: "supplier",
@@ -148,7 +190,7 @@ export async function search(query: string, role: Role, limitPerKind = 5): Promi
     );
   }
 
-  for (const c of db.customers) {
+  for (const c of customers) {
     push(
       {
         kind: "customer",
@@ -162,7 +204,7 @@ export async function search(query: string, role: Role, limitPerKind = 5): Promi
     );
   }
 
-  for (const w of db.warehouses) {
+  for (const w of warehouses) {
     push(
       {
         kind: "warehouse",
@@ -176,7 +218,7 @@ export async function search(query: string, role: Role, limitPerKind = 5): Promi
     );
   }
 
-  for (const a of db.adjustments) {
+  for (const a of adjs) {
     push(
       {
         kind: "adjustment",
@@ -190,7 +232,7 @@ export async function search(query: string, role: Role, limitPerKind = 5): Promi
     );
   }
 
-  for (const c of db.stockCounts) {
+  for (const c of counts) {
     push(
       {
         kind: "count",

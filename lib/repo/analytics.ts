@@ -5,26 +5,50 @@
  * operational screens read, so a number on a report and the same number on a
  * list page cannot drift apart.
  *
- * Every function that reads the dataset is asynchronous — phase 2 replaces the
- * bodies with real queries. The `*ById` maps below are private synchronous
- * indexes over the in-memory dataset, an implementation detail of the current
- * bodies.
+ * Ticket 07: the bodies now read Postgres. The ledger-wide rollups — turnover,
+ * dead stock, product and category performance, category spend — are computed
+ * as SQL aggregates rather than by fetching rows and summing them, because on
+ * these screens the alternative is pulling a large fraction of the movement
+ * and order-line tables into the request. The two per-entity scorecards
+ * (`supplierScorecards`, `warehousePerformance`) stay in application code over
+ * the already-Postgres-backed document accessors: each computes a dozen
+ * heterogeneous figures per row over a few hundred documents, and expressing
+ * that as one query buys nothing.
  */
 
-import { db } from "@/lib/data/store";
+import { eq, notInArray, sql } from "drizzle-orm";
+
+import { getDb } from "@/lib/db/client";
+import * as schema from "@/lib/db/schema";
 import { DAY_MS, NOW } from "@/lib/data/rng";
+import {
+  adjustments as allAdjustments,
+  purchaseOrders as allPurchaseOrders,
+  returns as allReturns,
+  salesOrders as allSalesOrders,
+  stockCounts as allStockCounts,
+  transfers as allTransfers,
+} from "./documents";
+import {
+  categories as allCategories,
+  customers as allCustomers,
+  indexById,
+  products as allProducts,
+  suppliers as allSuppliers,
+} from "./reference";
 import { allSummaries, totalInventoryValue, warehouseRollups } from "./inventory";
 import type { StockSummary } from "@/lib/types";
 
 const round = (n: number) => Math.round(n * 100) / 100;
 
-const productById = new Map(db.products.map((p) => [p.id, p]));
-const categoryById = new Map(db.categories.map((c) => [c.id, c]));
-const customerById = new Map(db.customers.map((c) => [c.id, c]));
-
 async function summaryMap(): Promise<Map<string, StockSummary>> {
   return new Map((await allSummaries()).map((s) => [s.productId, s]));
 }
+
+/** Statuses excluded from every sales rollup: nothing was really sold. */
+const DEAD_SO_STATUSES = ["cancelled", "draft"] as const;
+/** Statuses excluded from every purchasing rollup: spend not committed. */
+const DEAD_PO_STATUSES = ["cancelled", "draft"] as const;
 
 /* ------------------------------------------------------------ valuation -- */
 
@@ -52,9 +76,15 @@ export interface ValuationRow {
  * recent receipts — which is why the two differ when purchase prices move.
  */
 export async function valuationRows(): Promise<ValuationRow[]> {
-  const summaries = await summaryMap();
+  const [summaries, products, categoryById, purchaseOrders] = await Promise.all([
+    summaryMap(),
+    allProducts(),
+    indexById(allCategories),
+    allPurchaseOrders(),
+  ]);
+
   const receiptsByProduct = new Map<string, { qty: number; price: number; ts: string }[]>();
-  for (const po of db.purchaseOrders) {
+  for (const po of purchaseOrders) {
     if (!["partially-received", "received", "closed"].includes(po.status)) continue;
     for (const line of po.lines) {
       if (line.fulfilled <= 0) continue;
@@ -68,7 +98,7 @@ export async function valuationRows(): Promise<ValuationRow[]> {
     }
   }
 
-  return db.products
+  return products
     .map((product) => {
       const stock = summaries.get(product.id)!;
       if (stock.onHand <= 0) return null;
@@ -126,33 +156,38 @@ export interface TurnoverRow {
   daysSinceMovement: number | null;
 }
 
-const YEAR_AGO = NOW.getTime() - 365 * DAY_MS;
+const YEAR_AGO_ISO = new Date(NOW.getTime() - 365 * DAY_MS).toISOString();
 
 let turnoverCache: TurnoverRow[] | null = null;
 
 export async function turnoverRows(): Promise<TurnoverRow[]> {
   if (turnoverCache) return turnoverCache;
 
-  const summaries = await summaryMap();
-  const sold = new Map<string, { units: number; cost: number }>();
-  const lastMoved = new Map<string, number>();
+  const [summaries, products, categoryById, ledger] = await Promise.all([
+    summaryMap(),
+    allProducts(),
+    indexById(allCategories),
+    // One aggregate per product: 12-month sale units and cost from the ledger,
+    // plus the timestamp of its most recent movement of any type.
+    getDb()
+      .select({
+        productId: schema.movements.productId,
+        units: sql<number>`coalesce(sum(case when ${schema.movements.type} = 'sale' and ${schema.movements.ts} >= ${YEAR_AGO_ISO} then abs(${schema.movements.qtyChange}) else 0 end), 0)::int`,
+        cost: sql<number>`coalesce(sum(case when ${schema.movements.type} = 'sale' and ${schema.movements.ts} >= ${YEAR_AGO_ISO} then abs(${schema.movements.valueChange}) else 0 end), 0)::float8`,
+        lastMoved: sql<string | null>`max(${schema.movements.ts})`,
+      })
+      .from(schema.movements)
+      .groupBy(schema.movements.productId),
+  ]);
 
-  for (const m of db.movements) {
-    const t = new Date(m.ts).getTime();
-    if (t > (lastMoved.get(m.productId) ?? 0)) lastMoved.set(m.productId, t);
-    if (m.type !== "sale" || t < YEAR_AGO) continue;
-    const cur = sold.get(m.productId) ?? { units: 0, cost: 0 };
-    cur.units += Math.abs(m.qtyChange);
-    cur.cost += Math.abs(m.valueChange);
-    sold.set(m.productId, cur);
-  }
+  const soldByProduct = new Map(ledger.map((r) => [r.productId, r]));
 
-  turnoverCache = db.products
+  turnoverCache = products
     .map((product) => {
       const stock = summaries.get(product.id)!;
-      const s = sold.get(product.id) ?? { units: 0, cost: 0 };
+      const s = soldByProduct.get(product.id) ?? { units: 0, cost: 0, lastMoved: null as string | null };
       const stockValue = stock.value;
-      const moved = lastMoved.get(product.id) ?? null;
+      const moved = s.lastMoved ? new Date(s.lastMoved).getTime() : null;
 
       // Turns = cost of goods sold ÷ the value sitting on the shelf.
       const turns = stockValue > 0 ? s.cost / stockValue : 0;
@@ -235,40 +270,49 @@ let performanceCache: ProductPerformanceRow[] | null = null;
 export async function productPerformance(): Promise<ProductPerformanceRow[]> {
   if (performanceCache) return performanceCache;
 
-  const acc = new Map<string, { units: number; revenue: number; cost: number; orders: Set<string> }>();
+  const categoryById = await indexById(allCategories);
 
-  for (const order of db.salesOrders) {
-    if (["cancelled", "draft"].includes(order.status)) continue;
-    for (const line of order.lines) {
-      const cur =
-        acc.get(line.productId) ?? { units: 0, revenue: 0, cost: 0, orders: new Set<string>() };
-      const product = productById.get(line.productId);
-      cur.units += line.quantity;
-      cur.revenue += line.lineTotal;
-      cur.cost += line.quantity * (product?.unitCost ?? 0);
-      cur.orders.add(order.id);
-      acc.set(line.productId, cur);
-    }
-  }
+  // Units, revenue, cost and order count per product, straight from the sales
+  // order lines — cost is quantity valued at the product's standard unit cost.
+  const rows = await getDb()
+    .select({
+      productId: schema.salesOrderLines.productId,
+      sku: schema.products.sku,
+      name: schema.products.shortName,
+      categoryId: schema.products.categoryId,
+      units: sql<number>`sum(${schema.salesOrderLines.quantity})::int`,
+      revenue: sql<number>`sum(${schema.salesOrderLines.lineTotal})::float8`,
+      cost: sql<number>`sum(${schema.salesOrderLines.quantity} * ${schema.products.unitCost})::float8`,
+      orders: sql<number>`count(distinct ${schema.salesOrderLines.salesOrderId})::int`,
+    })
+    .from(schema.salesOrderLines)
+    .innerJoin(schema.salesOrders, eq(schema.salesOrders.id, schema.salesOrderLines.salesOrderId))
+    .innerJoin(schema.products, eq(schema.products.id, schema.salesOrderLines.productId))
+    .where(notInArray(schema.salesOrders.status, [...DEAD_SO_STATUSES]))
+    .groupBy(
+      schema.salesOrderLines.productId,
+      schema.products.sku,
+      schema.products.shortName,
+      schema.products.categoryId,
+    );
 
-  performanceCache = [...acc.entries()]
-    .map(([productId, v]) => {
-      const product = productById.get(productId);
-      const margin = v.revenue - v.cost;
+  performanceCache = rows
+    .map((r) => {
+      const margin = r.revenue - r.cost;
       return {
-        productId,
-        sku: product?.sku ?? "—",
-        name: product?.shortName ?? "—",
-        category: product ? (categoryById.get(product.categoryId)?.name ?? "—") : "—",
-        unitsSold: v.units,
-        revenue: round(v.revenue),
-        cost: round(v.cost),
+        productId: r.productId,
+        sku: r.sku,
+        name: r.name,
+        category: categoryById.get(r.categoryId)?.name ?? "—",
+        unitsSold: r.units,
+        revenue: round(r.revenue),
+        cost: round(r.cost),
         margin: round(margin),
-        marginPct: v.revenue > 0 ? margin / v.revenue : 0,
-        orders: v.orders.size,
+        marginPct: r.revenue > 0 ? margin / r.revenue : 0,
+        orders: r.orders,
       };
     })
-    .sort((a, b) => b.revenue - a.revenue);
+    .sort((a, b) => b.revenue - a.revenue || a.productId.localeCompare(b.productId));
 
   return performanceCache;
 }
@@ -296,35 +340,59 @@ export async function categoryPerformance() {
 }
 
 export async function topCustomers(limit = 10) {
-  const acc = new Map<string, { revenue: number; orders: number; units: number }>();
-  for (const order of db.salesOrders) {
-    if (["cancelled", "draft"].includes(order.status)) continue;
-    const cur = acc.get(order.customerId) ?? { revenue: 0, orders: 0, units: 0 };
-    cur.revenue += order.total;
-    cur.orders += 1;
-    cur.units += order.lines.reduce((s, l) => s + l.quantity, 0);
-    acc.set(order.customerId, cur);
-  }
-  return [...acc.entries()]
-    .map(([id, v]) => ({
-      id,
-      name: customerById.get(id)?.name ?? "—",
-      code: customerById.get(id)?.code ?? "—",
+  const pg = getDb();
+  // Per-order unit totals, kept in a subquery so joining them to sales_orders
+  // for the customer rollup does not fan out `sum(total)`.
+  const perOrderUnits = pg
+    .select({
+      salesOrderId: schema.salesOrderLines.salesOrderId,
+      units: sql<number>`sum(${schema.salesOrderLines.quantity})::int`.as("line_units"),
+    })
+    .from(schema.salesOrderLines)
+    .groupBy(schema.salesOrderLines.salesOrderId)
+    .as("per_order_units");
+
+  const [customerById, rows] = await Promise.all([
+    indexById(allCustomers),
+    pg
+      .select({
+        customerId: schema.salesOrders.customerId,
+        revenue: sql<number>`sum(${schema.salesOrders.total})::float8`,
+        orders: sql<number>`count(*)::int`,
+        units: sql<number>`coalesce(sum(${perOrderUnits.units}), 0)::int`,
+      })
+      .from(schema.salesOrders)
+      .leftJoin(perOrderUnits, eq(perOrderUnits.salesOrderId, schema.salesOrders.id))
+      .where(notInArray(schema.salesOrders.status, [...DEAD_SO_STATUSES]))
+      .groupBy(schema.salesOrders.customerId),
+  ]);
+
+  return rows
+    .map((v) => ({
+      id: v.customerId,
+      name: customerById.get(v.customerId)?.name ?? "—",
+      code: customerById.get(v.customerId)?.code ?? "—",
       revenue: Math.round(v.revenue),
       orders: v.orders,
       units: v.units,
       averageOrder: Math.round(v.revenue / Math.max(1, v.orders)),
     }))
-    .sort((a, b) => b.revenue - a.revenue)
+    .sort((a, b) => b.revenue - a.revenue || a.id.localeCompare(b.id))
     .slice(0, limit);
 }
 
 /* ------------------------------------------------------ purchasing rollups */
 
 export async function supplierScorecards() {
-  return db.suppliers
+  const [suppliers, purchaseOrders, returns] = await Promise.all([
+    allSuppliers(),
+    allPurchaseOrders(),
+    allReturns(),
+  ]);
+
+  return suppliers
     .map((supplier) => {
-      const orders = db.purchaseOrders.filter((p) => p.supplierId === supplier.id);
+      const orders = purchaseOrders.filter((p) => p.supplierId === supplier.id);
       const settled = orders.filter((p) => ["received", "closed"].includes(p.status));
       const onTime = settled.filter(
         (p) => p.receivedAt && new Date(p.receivedAt).getTime() <= new Date(p.expectedAt).getTime(),
@@ -333,7 +401,7 @@ export async function supplierScorecards() {
         ["submitted", "approved", "ordered", "partially-received"].includes(p.status),
       );
       const overdue = open.filter((p) => new Date(p.expectedAt).getTime() < NOW.getTime());
-      const returns = db.returns.filter(
+      const supplierReturns = returns.filter(
         (r) => r.kind === "purchase" && r.partnerId === supplier.id,
       );
 
@@ -354,55 +422,73 @@ export async function supplierScorecards() {
         spend: Math.round(spend),
         openOrders: open.length,
         overdueOrders: overdue.length,
-        returns: returns.length,
-        returnValue: Math.round(returns.reduce((s, r) => s + r.refundTotal, 0)),
+        returns: supplierReturns.length,
+        returnValue: Math.round(supplierReturns.reduce((s, r) => s + r.refundTotal, 0)),
       };
     })
     .sort((a, b) => b.spend - a.spend);
 }
 
 export async function spendByCategory() {
-  const acc = new Map<string, number>();
-  for (const po of db.purchaseOrders) {
-    if (["cancelled", "draft"].includes(po.status)) continue;
-    for (const line of po.lines) {
-      const product = productById.get(line.productId);
-      const name = product ? (categoryById.get(product.categoryId)?.name ?? "—") : "—";
-      acc.set(name, (acc.get(name) ?? 0) + line.lineTotal);
-    }
-  }
-  return [...acc.entries()]
-    .map(([name, value]) => ({ name, value: Math.round(value) }))
+  const [categoryById, rows] = await Promise.all([
+    indexById(allCategories),
+    getDb()
+      .select({
+        categoryId: schema.products.categoryId,
+        value: sql<number>`sum(${schema.purchaseOrderLines.lineTotal})::float8`,
+      })
+      .from(schema.purchaseOrderLines)
+      .innerJoin(
+        schema.purchaseOrders,
+        eq(schema.purchaseOrders.id, schema.purchaseOrderLines.purchaseOrderId),
+      )
+      .innerJoin(schema.products, eq(schema.products.id, schema.purchaseOrderLines.productId))
+      .where(notInArray(schema.purchaseOrders.status, [...DEAD_PO_STATUSES]))
+      .groupBy(schema.products.categoryId),
+  ]);
+
+  return rows
+    .map((r) => ({ name: categoryById.get(r.categoryId)?.name ?? "—", value: Math.round(r.value) }))
     .sort((a, b) => b.value - a.value);
 }
 
 /* ------------------------------------------------------- warehouse rollups */
 
 export async function warehousePerformance() {
-  return (await warehouseRollups()).map((w) => {
-    const receipts = db.purchaseOrders.filter(
+  const [rollups, purchaseOrders, salesOrders, stockCounts, transfers, adjustmentDocs] =
+    await Promise.all([
+      warehouseRollups(),
+      allPurchaseOrders(),
+      allSalesOrders(),
+      allStockCounts(),
+      allTransfers(),
+      allAdjustments(),
+    ]);
+
+  return rollups.map((w) => {
+    const receipts = purchaseOrders.filter(
       (p) => p.warehouseId === w.id && ["received", "closed"].includes(p.status),
     );
     const onTimeReceipts = receipts.filter(
       (p) => p.receivedAt && new Date(p.receivedAt).getTime() <= new Date(p.expectedAt).getTime(),
     );
 
-    const orders = db.salesOrders.filter((o) => o.warehouseId === w.id);
+    const orders = salesOrders.filter((o) => o.warehouseId === w.id);
     const shipped = orders.filter((o) => o.shippedAt);
     const onTimeShipped = shipped.filter(
       (o) => new Date(o.shippedAt!).getTime() <= new Date(o.promisedAt).getTime(),
     );
 
-    const counts = db.stockCounts.filter(
+    const counts = stockCounts.filter(
       (c) => c.warehouseId === w.id && ["approved", "applied"].includes(c.status),
     );
     const accuracy =
       counts.length > 0 ? counts.reduce((s, c) => s + c.accuracyPct, 0) / counts.length / 100 : null;
 
-    const transfersOut = db.transfers.filter((t) => t.fromWarehouseId === w.id);
-    const transfersIn = db.transfers.filter((t) => t.toWarehouseId === w.id);
+    const transfersOut = transfers.filter((t) => t.fromWarehouseId === w.id);
+    const transfersIn = transfers.filter((t) => t.toWarehouseId === w.id);
 
-    const adjustments = db.adjustments.filter(
+    const adjustments = adjustmentDocs.filter(
       (a) => a.warehouseId === w.id && a.status === "applied",
     );
     const shrinkage = adjustments

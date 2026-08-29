@@ -7,9 +7,10 @@
  * than screen-shaped joins.
  *
  * Ticket 03 moved Purchase Orders and Returns onto Postgres; ticket 04 moved
- * Sales Orders; ticket 05 moves Transfers. Each is two queries — the parent
- * rows and the line rows — stitched back into the nested shape the screens
- * expect, deduped per request via React `cache`.
+ * Sales Orders; ticket 05 moved Transfers; ticket 07 moves the Movement ledger,
+ * Adjustments and Stock Counts. Each is two queries — the parent rows and the
+ * line rows — stitched back into the nested shape the screens expect, deduped
+ * per request via React `cache`. Movements is one flat query.
  *
  * `incomingByProduct` / `reservedByProduct` / `inTransitByProduct` are the
  * incoming, reserved and in-transit balances projected from open Purchase
@@ -17,15 +18,14 @@
  * never from the Movement ledger, which has no movement type that produces
  * incoming or reserved and settles a transfer only once it lands.
  *
- * The remaining accessors still read the generated dataset until their ticket
- * (10/15 adjustments and counts).
+ * Adjustments and Stock Counts get their write paths in tickets 10 / 15; the
+ * read swap and seed are done here so ticket 08 can retire the dataset.
  */
 
 import { cache } from "react";
 
 import { eq, inArray, sql } from "drizzle-orm";
 
-import { db } from "@/lib/data/store";
 import { getDb } from "@/lib/db/client";
 import * as schema from "@/lib/db/schema";
 import type {
@@ -226,13 +226,33 @@ export async function transferRows(): Promise<TransferRow[]> {
   }));
 }
 
-export async function adjustments(): Promise<Adjustment[]> {
-  return db.adjustments;
-}
+export const adjustments = cache(async (): Promise<Adjustment[]> => {
+  const pg = getDb();
+  const [docs, lineRows] = await Promise.all([
+    pg.select().from(schema.adjustments).orderBy(schema.adjustments.id),
+    pg.select().from(schema.adjustmentLines).orderBy(schema.adjustmentLines.seq),
+  ]);
 
-export async function stockCounts(): Promise<StockCount[]> {
-  return db.stockCounts;
-}
+  const linesByAdjustment = groupBy(lineRows, (r) => r.adjustmentId);
+  return docs.map((doc) => ({
+    ...doc,
+    lines: (linesByAdjustment.get(doc.id) ?? []).map(({ seq, adjustmentId, ...line }) => line),
+  }));
+});
+
+export const stockCounts = cache(async (): Promise<StockCount[]> => {
+  const pg = getDb();
+  const [docs, lineRows] = await Promise.all([
+    pg.select().from(schema.stockCounts).orderBy(schema.stockCounts.id),
+    pg.select().from(schema.countLines).orderBy(schema.countLines.seq),
+  ]);
+
+  const linesByCount = groupBy(lineRows, (r) => r.stockCountId);
+  return docs.map((doc) => ({
+    ...doc,
+    lines: (linesByCount.get(doc.id) ?? []).map(({ seq, stockCountId, ...line }) => line),
+  }));
+});
 
 export const returns = cache(async (): Promise<ReturnDoc[]> => {
   const pg = getDb();
@@ -248,6 +268,13 @@ export const returns = cache(async (): Promise<ReturnDoc[]> => {
   }));
 });
 
-export async function movements(): Promise<Movement[]> {
-  return db.movements;
-}
+/**
+ * The Movement ledger, newest first. `seq` is the generated insert order and
+ * the seed loads the generator's already-newest-first array in order, so
+ * `ORDER BY seq` reproduces it. Strip the column back off — callers expect the
+ * bare `Movement` shape.
+ */
+export const movements = cache(async (): Promise<Movement[]> => {
+  const rows = await getDb().select().from(schema.movements).orderBy(schema.movements.seq);
+  return rows.map(({ seq, ...movement }) => movement);
+});
