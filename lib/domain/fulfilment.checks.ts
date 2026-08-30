@@ -47,14 +47,12 @@ import {
   confirmSalesOrder,
   advanceSalesOrder,
   shipSalesOrder,
+  OPEN_SO_STATUSES,
   SalesOrderError,
 } from "@/lib/domain/fulfilment";
 import { applyStockChange, type Actor } from "@/lib/domain/stock";
 
 type Db = NeonDatabase<typeof schema>;
-
-/** Sales Order statuses that hold a reservation — matches `OPEN_SO_STATUSES`. */
-const OPEN_SO_STATUSES = ["confirmed", "reserved", "picking", "packing"] as const;
 
 async function eventCount(db: Db): Promise<number> {
   const [row] = await db.select({ n: sql<number>`count(*)::int` }).from(schema.events);
@@ -246,7 +244,7 @@ async function confirmReservesWithoutMovementOrDirectWrite(db: Db, c: Candidate)
     "confirming did not write to stock_rows.reserved",
   );
 
-  const cancelled = await cancelSalesOrder(operator, { salesOrderId: c.id, reason: "checks" }, db);
+  const cancelled = await cancelSalesOrder(operator, { salesOrderId: c.id }, db);
   assert.equal(cancelled.status, "cancelled", "order is cancelled");
   assert.equal(
     await projectedReserved(db, c.productId),

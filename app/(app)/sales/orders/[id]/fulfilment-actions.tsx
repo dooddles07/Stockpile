@@ -3,7 +3,11 @@
 import * as React from "react";
 import { toast } from "sonner";
 
-import { advanceSalesOrderAction, type FulfilmentFormState } from "./actions";
+import {
+  advanceSalesOrderAction,
+  type FulfilmentFormState,
+  type FulfilmentIntent,
+} from "./actions";
 import { Button } from "@/components/ui/button";
 
 const INITIAL: FulfilmentFormState = { status: "idle" };
@@ -26,7 +30,7 @@ export function FulfilmentActionButton({
   className,
 }: {
   salesOrderId: string;
-  intent: "confirm" | "reserve" | "pick" | "pack" | "ship" | "cancel";
+  intent: FulfilmentIntent;
   children: React.ReactNode;
   pendingLabel: string;
   /** Sent with `intent="ship"` so the shipment records the chosen carrier. */

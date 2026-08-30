@@ -26,6 +26,9 @@ import { StockChangeError } from "@/lib/domain/stock";
 
 const INTENTS = ["confirm", "reserve", "pick", "pack", "ship", "cancel"] as const;
 
+/** The fulfilment steps a `FulfilmentActionButton` can submit. */
+export type FulfilmentIntent = (typeof INTENTS)[number];
+
 const FormSchema = z.object({
   salesOrderId: z.string().min(1),
   intent: z.enum(INTENTS),

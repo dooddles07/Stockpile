@@ -28,6 +28,7 @@ import { eq, inArray, sql } from "drizzle-orm";
 
 import { getDb } from "@/lib/db/client";
 import * as schema from "@/lib/db/schema";
+import { OPEN_SO_STATUSES } from "@/lib/domain/fulfilment";
 import type {
   Adjustment,
   Movement,
@@ -45,16 +46,6 @@ import type {
  * nothing incoming.
  */
 const OPEN_PO_STATUSES = ["submitted", "approved", "ordered", "partially-received"] as const;
-
-/**
- * Sales Order statuses that hold stock: `confirmed` through `packing`. The
- * sales-orders screen states the rule — "Confirming an order reserves stock
- * against it" — so reservation starts at `confirmed`, not at the later
- * `reserved` step. `draft` is uncommitted; `shipped` / `delivered` have
- * released the stock as `sale` Movements; `cancelled` released it too;
- * `backorder` could not be reserved from stock in the first place.
- */
-const OPEN_SO_STATUSES = ["confirmed", "reserved", "picking", "packing"] as const;
 
 /**
  * Transfer statuses that hold stock in transit: despatched from the source and

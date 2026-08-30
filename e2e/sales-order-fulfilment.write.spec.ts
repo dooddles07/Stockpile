@@ -138,8 +138,9 @@ test.describe("sales order fulfilment", () => {
 
     // Shipping added exactly one ledger row for this order — a Sale for the
     // shipped quantity, attributed to the operator. This is on-hand leaving the
-    // building. (That on-hand falls by exactly this much, and the reconciliation
-    // invariant, are `npm run check:fulfilment`.)
+    // building. (That on-hand falls by exactly this much is `npm run
+    // check:fulfilment`; the ledger-vs-projection reconciliation invariant,
+    // which now also covers `sale` movements, is `npm run check:stock`.)
     expect(await ledgerRowsFor(page, SHIP.number)).toBe(ledgerAtStart + 1);
     const saleRow = main
       .locator("tbody tr")

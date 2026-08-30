@@ -23,9 +23,10 @@
  *    would be wrong even if the numbers looked right.
  *
  * Availability is checked at confirm: stock already promised to another open
- * order cannot be promised again. The figure used is the one the operator sees
- * on the order — `sum(max(on_hand - reserved - damaged, 0))` over the product's
- * holdings in the order's warehouse.
+ * order cannot be promised again. The figure is `sum(on_hand - damaged)` over
+ * the product's holdings in the order's warehouse minus `sum(quantity -
+ * fulfilled)` over the *other* open Sales Orders on that warehouse — the
+ * reserved balance projected from open Document state, not `stock_rows.reserved`.
  *
  * Like `lib/domain/stock.ts` this imports no `server-only` code: the caller
  * passes the Drizzle handle (`getDb()` on the request path, an own `Pool` for
@@ -47,17 +48,14 @@ type Db = NeonDatabase<typeof schema>;
 const FULFIL_PERMISSION = { module: "fulfillment", action: "edit" } as const;
 
 /**
- * The linear fulfilment progression, as `from -> to` steps. `draft -> confirmed`
- * is `confirmSalesOrder` (it also checks availability); `packing -> shipped` is
- * `shipSalesOrder` (it moves stock). `advanceSalesOrder` owns the three steps
- * in between, which have no stock effect.
+ * The no-stock steps `advanceSalesOrder` makes, as `from -> to`: everything
+ * between confirm (`draft -> confirmed`, `confirmSalesOrder`) and ship
+ * (`packing -> shipped`, `shipSalesOrder`).
  */
 const NEXT_STATUS: Partial<Record<SOStatus, SOStatus>> = {
-  draft: "confirmed",
   confirmed: "reserved",
   reserved: "picking",
   picking: "packing",
-  packing: "shipped",
 };
 
 /** The steps `advanceSalesOrder` will make — everything between confirm and ship. */
@@ -65,16 +63,16 @@ export type AdvanceTarget = "reserved" | "picking" | "packing";
 
 /**
  * Sales Order statuses that hold a reservation: the "open set" the reserved
- * projection sums (`OPEN_SO_STATUSES` in `lib/repo/documents.ts`). An order in
- * one of these can still be cancelled, and its outstanding quantity counts
- * against what is available to promise to another order.
+ * projection sums. An order in one of these can still be cancelled, and its
+ * outstanding quantity counts against what is available to promise to another
+ * order. `lib/repo/documents.ts` imports this for `reservedByProduct`.
  */
-const OPEN_SO_STATUSES: readonly SOStatus[] = [
+export const OPEN_SO_STATUSES = [
   "confirmed",
   "reserved",
   "picking",
   "packing",
-];
+] as const satisfies readonly SOStatus[];
 
 export type SalesOrderErrorCode =
   | "forbidden"
@@ -112,14 +110,23 @@ function assertCan(actor: Actor): void {
  * The second term is the reserved balance projected from open Document state
  * (CONTEXT.md "Reserved") — not `stock_rows.reserved`, which the seed populates
  * independently and which fulfilment must never write. Excluding the order being
- * confirmed keeps a re-confirm idempotent. This is what stops stock promised to
- * one customer being promised to another.
+ * confirmed keeps a re-confirm idempotent, and lets `confirmSalesOrder` net out
+ * the quantity its own earlier lines already claimed via `alreadyPlanned`.
+ *
+ * ponytail: the reads are not `FOR UPDATE` — two confirmations of *different*
+ * orders for the same product, running at once, can each see the other's
+ * outstanding as not-yet-committed and both pass. The over-promise then surfaces
+ * at ship time, where the choke point's row lock and non-negative check reject
+ * the shipment that can't be covered. A `SELECT ... FOR UPDATE` over the
+ * product's holdings here would close the window at the cost of serialising
+ * confirmations per product.
  */
 async function availableToPromise(
   db: Db,
   productId: string,
   warehouseId: string,
   excludeSalesOrderId: string,
+  alreadyPlanned: number,
 ): Promise<number> {
   const [physical] = await db
     .select({
@@ -151,7 +158,7 @@ async function availableToPromise(
       ),
     );
 
-  return (physical?.qty ?? 0) - (reserved?.qty ?? 0);
+  return (physical?.qty ?? 0) - (reserved?.qty ?? 0) - alreadyPlanned;
 }
 
 export interface ConfirmSalesOrderResult {
@@ -203,14 +210,19 @@ export async function confirmSalesOrder(
     }
 
     let reservedUnits = 0;
+    // Quantity this confirmation has already claimed per product, so a second
+    // line for the same product sees the first line's demand.
+    const plannedByProduct = new Map<string, number>();
     for (const line of lines) {
       const outstanding = line.quantity - line.fulfilled;
       if (outstanding <= 0) continue;
+      const planned = plannedByProduct.get(line.productId) ?? 0;
       const available = await availableToPromise(
         tx,
         line.productId,
         order.warehouseId,
         order.id,
+        planned,
       );
       if (outstanding > available) {
         throw new SalesOrderError(
@@ -219,6 +231,7 @@ export async function confirmSalesOrder(
           "insufficient-stock",
         );
       }
+      plannedByProduct.set(line.productId, planned + outstanding);
       reservedUnits += outstanding;
     }
 
@@ -314,7 +327,7 @@ export interface ShipSalesOrderResult {
  */
 export async function shipSalesOrder(
   actor: Actor,
-  input: { salesOrderId: string; carrier?: string | null; trackingNumber?: string | null },
+  input: { salesOrderId: string; carrier?: string | null },
   db: Db,
 ): Promise<ShipSalesOrderResult> {
   assertCan(actor);
@@ -429,7 +442,6 @@ export async function shipSalesOrder(
         fulfillmentStatus: "fulfilled",
         shippedAt: new Date().toISOString(),
         carrier: input.carrier?.trim() || order.carrier,
-        trackingNumber: input.trackingNumber?.trim() || order.trackingNumber,
       })
       .where(eq(schema.salesOrders.id, order.id));
 
@@ -458,7 +470,7 @@ export interface CancelSalesOrderResult {
  */
 export async function cancelSalesOrder(
   actor: Actor,
-  input: { salesOrderId: string; reason?: string },
+  input: { salesOrderId: string },
   db: Db,
 ): Promise<CancelSalesOrderResult> {
   assertCan(actor);
@@ -470,7 +482,7 @@ export async function cancelSalesOrder(
       .where(eq(schema.salesOrders.id, input.salesOrderId))
       .for("update");
     if (!order) throw new SalesOrderError("Sales order not found.", "not-found");
-    if (!OPEN_SO_STATUSES.includes(order.status)) {
+    if (!(OPEN_SO_STATUSES as readonly SOStatus[]).includes(order.status)) {
       throw new SalesOrderError(
         `${order.number} is ${order.status} and cannot be cancelled.`,
         "wrong-state",
