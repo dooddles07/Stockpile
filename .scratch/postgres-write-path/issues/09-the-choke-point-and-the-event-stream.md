@@ -18,14 +18,54 @@ The reconciliation check replays the Event stream and asserts the sum equals the
 
 **Blocked by:** 06 (Roles as database rows), 08 (Retire the generated dataset at runtime).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] An append-only Event table exists and nothing updates or deletes its rows
-- [ ] One function is the sole code path that appends an Event or updates a stock projection
-- [ ] Within its transaction the order is: permission check, lock, read, append, project, commit
-- [ ] The Actor is a required first argument, and a system Actor exists for automation
-- [ ] An operation that would drive on-hand below zero is rejected inside the transaction
-- [ ] A failure partway through leaves no Event and no projection change
-- [ ] A concurrency check runs two simultaneous operations on the same Product and Location and asserts the resulting balance is correct
-- [ ] A reconciliation check replays the Event stream and asserts it equals projected on-hand, for on-hand and damaged only
-- [ ] Both checks run in CI against a seeded Neon branch
+- [x] An append-only Event table exists and nothing updates or deletes its rows
+- [x] One function is the sole code path that appends an Event or updates a stock projection
+- [x] Within its transaction the order is: permission check, lock, read, append, project, commit
+- [x] The Actor is a required first argument, and a system Actor exists for automation
+- [x] An operation that would drive on-hand below zero is rejected inside the transaction
+- [x] A failure partway through leaves no Event and no projection change
+- [x] A concurrency check runs two simultaneous operations on the same Product and Location and asserts the resulting balance is correct
+- [x] A reconciliation check replays the Event stream and asserts it equals projected on-hand, for on-hand and damaged only
+- [x] Both checks run in CI against a seeded Neon branch
+
+## Comments
+
+### 2026-08-30 — done
+
+The choke point is `applyStockChange(actor, input, db)` in `lib/domain/stock.ts`.
+Order inside `db.transaction`: `can()` permission check, then reason present,
+then `SELECT ... FOR UPDATE` on the affected `stock_rows` holding, read the
+balance, reject if on-hand (or damaged) would go negative, append one `events`
+row, update the `stock_rows` projection and insert the `movements` ledger row,
+commit. It imports no `server-only` code — the caller passes the Drizzle
+handle (`getDb()` on the request path, an own `Pool` for the checks and any
+future REST caller) — so ticket 10's server action is the first place
+`server-only` re-enters.
+
+`SYSTEM_ACTOR` (id `system`, `super-admin`) is exported for automation;
+`events.actor_id` / `movements.user_id` carry no FK so it is a constant, not a
+row, until attribution needs a joinable name (ticket 17).
+
+Migration `0009_events_append_only.sql` adds a `BEFORE UPDATE OR DELETE` row
+trigger on `events` that raises — append-only is enforced by the database, not
+convention. `TRUNCATE` still works (statement-level, different trigger event),
+so the seed's re-seed reset is unaffected; `seed.ts` now truncates `events`
+too so every run starts from an empty stream.
+
+Two checks in `lib/domain/stock.checks.ts`, run by `npm run check:stock` as a
+CI step after migrate + seed (ADR-0009's named gap):
+
+- Concurrency — two `applyStockChange` calls fired with `Promise.all` against
+  the same holding, each `-1`; asserts final on-hand is exactly `before - 2`,
+  i.e. they serialized rather than lost an update.
+- Reconciliation — replays the movement-type events and asserts every
+  holding's summed `onHandDelta` / `damagedDelta` equals its projected change,
+  for on-hand and damaged only; reserved / incoming / in-transit are asserted
+  unchanged (they project from open Document state, not Movements).
+
+Verified against a real Neon branch: `check:stock` green (concurrency 56→54;
+reconciliation over 634 holdings), trigger blocks UPDATE and DELETE and allows
+TRUNCATE, `npx tsc` and `npx eslint` clean, all 29 Playwright tests pass
+unchanged.
