@@ -29,6 +29,7 @@ import { eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
 import * as schema from "@/lib/db/schema";
 import { OPEN_SO_STATUSES } from "@/lib/domain/fulfilment";
+import { OPEN_TRANSFER_STATUSES } from "@/lib/domain/transfers";
 import type {
   Adjustment,
   Movement,
@@ -47,13 +48,6 @@ import type {
  */
 const OPEN_PO_STATUSES = ["submitted", "approved", "ordered", "partially-received"] as const;
 
-/**
- * Transfer statuses that hold stock in transit: despatched from the source and
- * not yet fully landed. `draft` / `pending-approval` / `approved` have not
- * shipped; `received` / `cancelled` are settled — the ledger carries their
- * `transfer-out` / `transfer-in` Movements and nothing is still moving.
- */
-const OPEN_TRANSFER_STATUSES = ["in-transit", "partially-received"] as const;
 
 /** Group rows by a key, preserving input order within each group. */
 function groupBy<T>(rows: T[], keyOf: (row: T) => string): Map<string, T[]> {
