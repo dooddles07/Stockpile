@@ -107,7 +107,10 @@ export const incomingByProduct = cache(async (): Promise<Map<string, number>> =>
   const rows = await getDb()
     .select({
       productId: schema.purchaseOrderLines.productId,
-      incoming: sql<number>`sum(${schema.purchaseOrderLines.quantity} - ${schema.purchaseOrderLines.fulfilled})::int`,
+      // `greatest(..., 0)` per line: an over-received line records the excess in
+      // `fulfilled` (ticket 12) but still contributes zero incoming, never a
+      // negative.
+      incoming: sql<number>`sum(greatest(${schema.purchaseOrderLines.quantity} - ${schema.purchaseOrderLines.fulfilled}, 0))::int`,
     })
     .from(schema.purchaseOrderLines)
     .innerJoin(
