@@ -83,6 +83,14 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
+      # Ticket 12: the goods-receipt domain function refuses a Role that reaches
+      # it directly, and over-receipt is permitted with the excess recorded
+      # rather than clamped. Playwright only ever hits the Receive tab.
+      - name: Goods-receipt checks
+        run: npm run check:receiving
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
       - name: Run Playwright suite
         run: npm run test:e2e
         env:
