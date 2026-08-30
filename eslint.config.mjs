@@ -6,10 +6,11 @@ const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
   {
-    // The seam: the generated dataset (`lib/data/store`, one export — `db`) is
-    // reachable only from the repository layer. Every screen and component
-    // reads through an async `lib/repo/*` function instead. Phase 2 swaps the
-    // repository bodies for Drizzle queries against one module, not seventy-seven.
+    // The seam, now sealed at the seed (phase 2, ticket 08): the generated
+    // dataset (`lib/data/store`, one export — `db`) is loaded into Postgres once
+    // by `lib/db/seed.ts` and read nowhere else. Every repository function and
+    // every request path queries the database. An import of the generator from
+    // a repository function or a request path fails the build.
     rules: {
       "no-restricted-imports": [
         "error",
@@ -25,7 +26,7 @@ const eslintConfig = defineConfig([
                 "**/data/store.*",
               ],
               message:
-                "The generated dataset is private to the repository layer. Add or use an async function in lib/repo/* instead of importing lib/data/store directly.",
+                "The generated dataset is the seed's input only. Query Postgres through an async lib/repo/* function; nothing outside lib/db/seed.ts imports lib/data/store.",
             },
           ],
         },
@@ -33,13 +34,19 @@ const eslintConfig = defineConfig([
     },
   },
   {
-    // The repository layer, plus the seed script — the sanctioned bridge that
-    // loads the generated dataset into Postgres once.
-    files: ["lib/repo/**", "lib/db/seed.ts"],
+    // The seed script — the one sanctioned bridge that loads the generated
+    // dataset into Postgres.
+    files: ["lib/db/seed.ts"],
     rules: {
       "no-restricted-imports": "off",
-      // Stitching Postgres rows back into domain shapes routinely drops a
-      // column (`seq`, a parent FK, a nested array) with `const { seq, ...rest }`.
+    },
+  },
+  {
+    // The repository layer and the seed: stitching Postgres rows back into
+    // domain shapes routinely drops a column (`seq`, a parent FK, a nested
+    // array) with `const { seq, ...rest }`.
+    files: ["lib/repo/**", "lib/db/seed.ts"],
+    rules: {
       "@typescript-eslint/no-unused-vars": ["warn", { ignoreRestSiblings: true }],
     },
   },

@@ -7,7 +7,9 @@ on:
 
 jobs:
   # Proves ticket 01's "a production build succeeds with no connection string
-  # present": no DATABASE_URL in this job's env.
+  # present": no DATABASE_URL in this job's env. Also runs `npm run lint` — with
+  # Next.js 16 `next build` no longer runs ESLint, so this is what makes the
+  # `no-restricted-imports` guard on `lib/data/store` a build gate (ticket 08).
   build:
     runs-on: ubuntu-latest
     steps:
@@ -17,6 +19,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - run: npm run lint
       - run: npm run build
 
   playwright:
