@@ -31,6 +31,17 @@ import type { ModuleKey, MovementType, PermissionAction, Role, User } from "@/li
 
 type Db = NeonDatabase<typeof schema>;
 
+/**
+ * A Drizzle handle the choke point can run on: either the pool (`getDb()`, the
+ * check scripts) or an already-open transaction. A document write flow that has
+ * to advance a Document *and* move stock in one atomic unit — goods receipt
+ * (ticket 12), shipment, transfer, count — opens its own `db.transaction` and
+ * passes the `tx` here; `applyStockChange`'s inner `db.transaction` then nests
+ * as a savepoint, so the stock change commits and rolls back with the document
+ * advance rather than in a transaction of its own.
+ */
+export type StockDb = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
+
 /** The user on whose authority a change is made (CONTEXT.md "Actor"). */
 export type Actor = Pick<User, "id" | "name" | "role">;
 
@@ -108,7 +119,7 @@ export interface StockChangeResult {
 export async function applyStockChange(
   actor: Actor,
   input: StockChangeInput,
-  db: Db,
+  db: StockDb,
 ): Promise<StockChangeResult> {
   const damagedDelta = input.damagedDelta ?? 0;
 
@@ -235,6 +246,61 @@ export async function applyStockChange(
       onHand: nextOnHand,
       damaged: nextDamaged,
     };
+  });
+}
+
+/**
+ * Make sure a `(product, warehouse, location, lot)` Stock Row exists, inserting
+ * a zero-balance one if it does not. `applyStockChange` deliberately never
+ * inserts a Stock Row — it locks exactly one and moves its balance — so a flow
+ * that can put stock into a holding that has never existed (a goods receipt
+ * into a fresh put-away location, ticket 12) calls this first, on the same
+ * transaction handle, so the row is there for the choke point to lock.
+ *
+ * This lives here, beside the choke point, so that `stock_rows` is still only
+ * ever written from this one module. It creates row *structure*, not a
+ * projected balance: every quantity still moves through `applyStockChange`.
+ *
+ * ponytail: SELECT-then-INSERT with no unique constraint on the tuple, so two
+ * concurrent receipts into the same brand-new holding could both insert. That
+ * needs a partial unique index to close properly; until a flow can create the
+ * same holding twice at once it is not worth the migration.
+ */
+export async function ensureStockHolding(
+  db: StockDb,
+  holding: {
+    productId: string;
+    warehouseId: string;
+    locationId: string;
+    lotNumber: string | null;
+  },
+): Promise<void> {
+  const existing = await db
+    .select({ seq: schema.stockRows.seq })
+    .from(schema.stockRows)
+    .where(
+      and(
+        eq(schema.stockRows.productId, holding.productId),
+        eq(schema.stockRows.warehouseId, holding.warehouseId),
+        eq(schema.stockRows.locationId, holding.locationId),
+        holding.lotNumber == null
+          ? isNull(schema.stockRows.lotNumber)
+          : eq(schema.stockRows.lotNumber, holding.lotNumber),
+      ),
+    )
+    .limit(1);
+  if (existing.length > 0) return;
+
+  await db.insert(schema.stockRows).values({
+    productId: holding.productId,
+    warehouseId: holding.warehouseId,
+    locationId: holding.locationId,
+    lotNumber: holding.lotNumber,
+    onHand: 0,
+    reserved: 0,
+    damaged: 0,
+    incoming: 0,
+    inTransit: 0,
   });
 }
 
