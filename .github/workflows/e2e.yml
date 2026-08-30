@@ -67,6 +67,14 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
+      # Ticket 10: the domain function refuses a caller whose Role forbids the
+      # action even when reached directly, and writes no Event when it does.
+      # Playwright only ever hits the form, so this lives below the UI.
+      - name: Adjustment checks
+        run: npm run check:adjustments
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
       - name: Run Playwright suite
         run: npm run test:e2e
         env:
