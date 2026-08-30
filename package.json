@@ -16,7 +16,8 @@
     "check:adjustments": "tsx lib/domain/adjustments.checks.ts",
     "check:reference": "tsx lib/domain/reference.checks.ts",
     "check:receiving": "tsx lib/domain/receiving.checks.ts",
-    "check:fulfilment": "tsx lib/domain/fulfilment.checks.ts"
+    "check:fulfilment": "tsx lib/domain/fulfilment.checks.ts",
+    "check:transfers": "tsx lib/domain/transfers.checks.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

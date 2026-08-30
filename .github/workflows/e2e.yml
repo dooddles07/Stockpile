@@ -101,6 +101,16 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
+      # Ticket 14: the transfer despatch/receive domain functions refuse a Role
+      # that reaches them directly, two concurrent despatches between the same
+      # pair of Warehouses do not deadlock (consistent stock-row lock order), and
+      # a despatch that cannot be fully covered writes nothing. Playwright cannot
+      # issue simultaneous operations.
+      - name: Transfer checks
+        run: npm run check:transfers
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
       - name: Run Playwright suite
         run: npm run test:e2e
         env:
