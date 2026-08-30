@@ -14,8 +14,8 @@ import {
 
 /**
  * Reference-data write actions for Locations (ticket 11). Per ADR-0005 the
- * action re-validates at the trust boundary, derives the shelf-label code from
- * its parts, and delegates; the permission check and the row write live in the
+ * action re-validates at the trust boundary and delegates; the permission
+ * check, the shelf-label `code` derivation and the row write all live in the
  * domain function.
  */
 
@@ -37,10 +37,7 @@ export async function saveLocation(raw: unknown): Promise<SaveResult> {
     return { ok: false, code: "invalid", message: "Check the highlighted fields and try again." };
   }
 
-  const { id, zone, aisle, rack, bin, ...rest } = parsed.data;
-  const code = [zone, aisle, rack, bin].map((p) => p.toUpperCase()).join("-");
-  const input = { ...rest, zone, aisle, rack, bin, code };
-
+  const { id, ...input } = parsed.data;
   const actor = await getCurrentUser();
   const db = getDb();
 

@@ -39,8 +39,8 @@ import type { Actor } from "@/lib/domain/stock";
 
 type Db = NeonDatabase<typeof schema>;
 
-async function count(db: Db, table: typeof schema.categories | typeof schema.products): Promise<number> {
-  const [row] = await db.select({ n: sql<number>`count(*)::int` }).from(table);
+async function categoryCount(db: Db): Promise<number> {
+  const [row] = await db.select({ n: sql<number>`count(*)::int` }).from(schema.categories);
   return row?.n ?? 0;
 }
 
@@ -63,7 +63,7 @@ async function forbiddenRoleIsRefused(db: Db): Promise<void> {
     "precondition: the chosen role must not be able to write reference data",
   );
 
-  const before = await count(db, schema.categories);
+  const before = await categoryCount(db);
 
   await assert.rejects(
     () =>
@@ -108,7 +108,7 @@ async function forbiddenRoleIsRefused(db: Db): Promise<void> {
     "updateProduct must throw ReferenceWriteError('forbidden') for a role without products.edit",
   );
 
-  const after = await count(db, schema.categories);
+  const after = await categoryCount(db);
   assert.equal(after, before, `a refused write changed the category count by ${after - before}; expected 0`);
 
   console.log(`  forbidden: ${forbidden.role} refused on create and edit, nothing written (${after} categories)`);

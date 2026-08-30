@@ -5,17 +5,19 @@
  * Warehouse, Location) rather than its activity. They move no quantity and
  * advance no state machine, so — unlike every stock write — they do NOT pass
  * through the choke point and append no Events. They are ordinary
- * `INSERT` / `UPDATE` / `DELETE`.
+ * `INSERT` / `UPDATE`.
  *
  * What is still identical to the stock writes (ADR-0004): every function takes
  * an explicit `Actor` and checks permission before touching a row, so a caller
  * reaching this directly — automation, a REST layer, a check script — is
  * refused exactly as one coming through a hidden form would be.
  *
- * Referential integrity is the database's job (ticket 11). The `delete*`
- * functions issue the `DELETE` and let a foreign-key violation surface as
- * `ReferenceWriteError("in-use")`, rather than pre-checking dependents in app
- * code that a newly added dependent table could silently out-date.
+ * Referential integrity is the database's job (ticket 11). `deleteCategory` and
+ * `deleteWarehouse` — the two the ticket names, "a Warehouse that holds stock,
+ * or a Category with Products in it" — issue the `DELETE` and let the
+ * foreign-key violation surface as `ReferenceWriteError("in-use")`, rather than
+ * pre-checking dependents in app code that a newly added dependent table could
+ * silently out-date. The other entities have no delete path in this ticket.
  *
  * Like `lib/domain/stock.ts` this imports no `server-only` code: the caller
  * passes the Drizzle handle, and the permission matrix must already be
@@ -259,7 +261,6 @@ export async function deleteWarehouse(actor: Actor, id: string, db: Db): Promise
 
 export interface LocationInput {
   warehouseId: string;
-  code: string;
   zone: string;
   aisle: string;
   rack: string;
@@ -269,10 +270,14 @@ export interface LocationInput {
   restricted: boolean;
 }
 
+/** The shelf-label code — `zone-aisle-rack-bin` — derived here, not typed. */
+const locationCode = (input: LocationInput): string =>
+  [input.zone, input.aisle, input.rack, input.bin].map((p) => p.trim().toUpperCase()).join("-");
+
 export async function createLocation(actor: Actor, input: LocationInput, db: Db): Promise<string> {
   assertCan(actor, "locations", "create");
   const id = newId("LOC");
-  await db.insert(schema.locations).values({ id, ...input, occupiedUnits: 0 });
+  await db.insert(schema.locations).values({ id, ...input, code: locationCode(input), occupiedUnits: 0 });
   return id;
 }
 
@@ -285,18 +290,10 @@ export async function updateLocation(
   assertCan(actor, "locations", "edit");
   const changed = await db
     .update(schema.locations)
-    .set(input)
+    .set({ ...input, code: locationCode(input) })
     .where(eq(schema.locations.id, id))
     .returning({ id: schema.locations.id });
   if (changed.length === 0) throw new ReferenceWriteError("Location not found.", "not-found");
-}
-
-export async function deleteLocation(actor: Actor, id: string, db: Db): Promise<void> {
-  assertCan(actor, "locations", "delete");
-  await guardedDelete(
-    () => db.delete(schema.locations).where(eq(schema.locations.id, id)),
-    "location",
-  );
 }
 
 /* ------------------------------------------------------------------- suppliers --- */
@@ -349,14 +346,6 @@ export async function updateSupplier(
   if (changed.length === 0) throw new ReferenceWriteError("Supplier not found.", "not-found");
 }
 
-export async function deleteSupplier(actor: Actor, id: string, db: Db): Promise<void> {
-  assertCan(actor, "suppliers", "delete");
-  await guardedDelete(
-    () => db.delete(schema.suppliers).where(eq(schema.suppliers.id, id)),
-    "supplier",
-  );
-}
-
 /* ------------------------------------------------------------------- customers --- */
 
 export interface CustomerInput {
@@ -402,14 +391,6 @@ export async function updateCustomer(
   if (changed.length === 0) throw new ReferenceWriteError("Customer not found.", "not-found");
 }
 
-export async function deleteCustomer(actor: Actor, id: string, db: Db): Promise<void> {
-  assertCan(actor, "customers", "delete");
-  await guardedDelete(
-    () => db.delete(schema.customers).where(eq(schema.customers.id, id)),
-    "customer",
-  );
-}
-
 /* -------------------------------------------------------------------- products --- */
 
 export interface ProductInput {
@@ -438,6 +419,12 @@ export interface ProductInput {
 const shortNameOf = (name: string): string =>
   name.length <= 32 ? name : `${name.slice(0, 31).trimEnd()}…`;
 
+/**
+ * The columns the slim form owns, for both create and update. `status` and the
+ * `supplierIds` list are deliberately absent: a new product gets them set once
+ * in `createProduct`, and an edit must not reactivate a discontinued product or
+ * collapse a multi-supplier list down to the one supplier the form knows about.
+ */
 function productColumns(input: ProductInput) {
   return {
     sku: input.sku,
@@ -450,9 +437,7 @@ function productColumns(input: ProductInput) {
     unit: input.unit,
     unitCost: input.unitCost,
     sellPrice: input.sellPrice,
-    status: "active" as const,
     primarySupplierId: input.supplierId,
-    supplierIds: [input.supplierId],
     reorderPoint: input.reorderPoint,
     reorderQty: input.reorderQty,
     leadTimeDays: input.leadTimeDays,
@@ -471,6 +456,8 @@ export async function createProduct(actor: Actor, input: ProductInput, db: Db): 
     await db.insert(schema.products).values({
       id,
       ...productColumns(input),
+      status: "active",
+      supplierIds: [input.supplierId],
       // Details a slim form does not ask for; filled in on the record screen later.
       weightKg: 0,
       dimensionsCm: "",
@@ -507,12 +494,4 @@ export async function updateProduct(
     }
     throw error;
   }
-}
-
-export async function deleteProduct(actor: Actor, id: string, db: Db): Promise<void> {
-  assertCan(actor, "products", "delete");
-  await guardedDelete(
-    () => db.delete(schema.products).where(eq(schema.products.id, id)),
-    "product",
-  );
 }

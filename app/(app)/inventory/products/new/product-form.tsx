@@ -99,6 +99,7 @@ export function ProductForm({
     handleSubmit,
     control,
     watch,
+    setError,
     formState: { errors, isSubmitting },
   } = useForm<ProductFormValues>({
     resolver: zodResolver(schema),
@@ -133,7 +134,11 @@ export function ProductForm({
   const onSubmit = async (values: ProductFormValues) => {
     const result = await saveProduct({ ...values, id });
     if (!result.ok) {
-      toast.error(result.message);
+      if (result.code === "conflict") {
+        setError("sku", { message: result.message });
+      } else {
+        toast.error(result.message);
+      }
       return;
     }
     toast.success(editing ? `${values.sku} updated` : `${values.sku} created`, {
