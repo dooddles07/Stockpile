@@ -12,6 +12,9 @@ import { StatusBadge } from "@/components/status/status-badge";
 import { MeterBar } from "@/components/status/meter-bar";
 import { percent, plural, qty, signed } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { submitCountAction, type CountFormState } from "./actions";
+
+const INITIAL: CountFormState = { status: "idle" };
 
 export interface CountSheetLine {
   id: string;
@@ -34,12 +37,22 @@ const TOLERANCE = 8;
  * with the system rather than with the shelf.
  */
 export function CountSheet({
-  countNumber,
+  stockCountId,
   lines,
 }: {
-  countNumber: string;
+  stockCountId: string;
   lines: CountSheetLine[];
 }) {
+  const [state, formAction, pending] = React.useActionState(submitCountAction, INITIAL);
+
+  const seen = React.useRef<CountFormState>(INITIAL);
+  React.useEffect(() => {
+    if (state === seen.current) return;
+    seen.current = state;
+    if (state.status === "success") toast.success(state.message);
+    else if (state.status === "error") toast.error(state.message);
+  }, [state]);
+
   const [entries, setEntries] = React.useState<Record<string, string>>(() =>
     Object.fromEntries(lines.map((l) => [l.id, l.counted === null ? "" : String(l.counted)])),
   );
@@ -202,19 +215,26 @@ export function CountSheet({
         </Section>
 
         <div className="flex flex-wrap gap-2">
-          <Button
-            size="sm"
-            className="h-8"
-            disabled={done.length < lines.length || recounts.length > 0}
-            onClick={() =>
-              toast.success(`${countNumber} submitted for review`, {
-                description: `${qty(variances.length)} variance lines for an inventory manager to approve before anything posts.`,
-              })
-            }
-          >
-            <Check className="size-3.5" aria-hidden />
-            Submit for review
-          </Button>
+          <form action={formAction} className="contents">
+            <input type="hidden" name="intent" value="complete" />
+            <input type="hidden" name="stockCountId" value={stockCountId} />
+            <input
+              type="hidden"
+              name="lines"
+              value={JSON.stringify(
+                done.map((r) => ({ lineId: r.line.id, counted: r.counted })),
+              )}
+            />
+            <Button
+              type="submit"
+              size="sm"
+              className="h-8"
+              disabled={pending || done.length < lines.length || recounts.length > 0}
+            >
+              <Check className="size-3.5" aria-hidden />
+              {pending ? "Completing…" : "Complete count"}
+            </Button>
+          </form>
           <Button
             variant="outline"
             size="sm"

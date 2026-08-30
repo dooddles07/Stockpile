@@ -261,7 +261,7 @@ export default async function CountDetailPage({
         />
       </div>
     ) : (
-      <CountSheet countNumber={count.number} lines={sheetLines} />
+      <CountSheet stockCountId={count.id} lines={sheetLines} />
     );
 
   /* ------------------------------------------------------------ overview */
