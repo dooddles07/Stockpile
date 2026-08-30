@@ -2,14 +2,16 @@
  * Operational and admin reads: notifications, tasks, automation and
  * integrations config, the audit log. Raw lists — see `reference.ts` for why.
  *
- * Automation, integrations and audit entries are Postgres-backed (ticket 06).
- * Notifications and tasks still read the in-memory dataset — they belong to a
- * later ticket and have no table yet.
+ * All Postgres-backed: automation, integrations and audit entries since ticket
+ * 06, notifications and tasks since ticket 08. Notifications, tasks, audit
+ * entries and automation runs carry a generated `seq` that fixes row order (the
+ * generator's array order: newest-first for the inbox / ledger / audit log, the
+ * task list in display order) — strip it back off, callers expect the bare
+ * shape (same convention as `documents.ts`).
  */
 
 import { cache } from "react";
 
-import { db } from "@/lib/data/store";
 import { getDb } from "@/lib/db/client";
 import * as schema from "@/lib/db/schema";
 import type {
@@ -21,13 +23,19 @@ import type {
   TaskItem,
 } from "@/lib/types";
 
-export async function notifications(): Promise<AppNotification[]> {
-  return db.notifications;
-}
+export const notifications = cache(
+  async (): Promise<AppNotification[]> =>
+    (await getDb().select().from(schema.notifications).orderBy(schema.notifications.seq)).map(
+      ({ seq, ...notification }) => notification,
+    ),
+);
 
-export async function tasks(): Promise<TaskItem[]> {
-  return db.tasks;
-}
+export const tasks = cache(
+  async (): Promise<TaskItem[]> =>
+    (await getDb().select().from(schema.tasks).orderBy(schema.tasks.seq)).map(
+      ({ seq, ...task }) => task,
+    ),
+);
 
 export const automationRules = cache(
   (): Promise<AutomationRule[]> =>

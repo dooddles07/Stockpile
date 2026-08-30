@@ -13,21 +13,27 @@
  * share `load()`, one batched read of the five tables per request via React
  * `cache`.
  *
- * Users and Movements are not tables yet, so the few functions that need them
- * still read the generated dataset. Transfers moved to Postgres in ticket 05;
- * `warehouseRollups` reads its open-transfer count through `documents.transfers`.
+ * Users moved to Postgres in ticket 06 and Movements in ticket 07; the
+ * functions that need them now read `reference.users` and `documents.movements`.
+ * Transfers moved in ticket 05; `warehouseRollups` reads its open-transfer
+ * count through `documents.transfers`. Nothing here touches the generated
+ * dataset any more (ticket 08).
  */
 
 import { cache } from "react";
 
 import { eq, getTableColumns, sql } from "drizzle-orm";
 
-import { db } from "@/lib/data/store";
 import { getDb } from "@/lib/db/client";
 import * as schema from "@/lib/db/schema";
 import { daysUntil } from "@/lib/format";
-import { transfers as allTransfers } from "./documents";
-import { customers as allCustomers, indexById, suppliers as allSuppliers } from "./reference";
+import { movements as allMovements, transfers as allTransfers } from "./documents";
+import {
+  customers as allCustomers,
+  indexById,
+  suppliers as allSuppliers,
+  users as allUsers,
+} from "./reference";
 import type { StockViewKey } from "./stock-views";
 import type {
   Category,
@@ -131,11 +137,11 @@ const load = cache(async () => {
   };
 });
 
-// Suppliers moved to Postgres in ticket 03, Customers in ticket 04; each
-// indexed per request via `cache`. Users are not a table yet — still the dataset.
+// Suppliers moved to Postgres in ticket 03, Customers in ticket 04, Users in
+// ticket 06; each indexed per request via `cache`.
 const supplierIndex = cache(() => indexById(allSuppliers));
 const customerIndex = cache(() => indexById(allCustomers));
-const userByIdMap = new Map(db.users.map((u) => [u.id, u]));
+const userIndex = cache(() => indexById(allUsers));
 
 const EMPTY_SUMMARY: Omit<StockSummary, "productId"> = {
   onHand: 0, reserved: 0, damaged: 0, incoming: 0, inTransit: 0,
@@ -171,7 +177,7 @@ export async function customerById(id: string): Promise<Customer | undefined> {
 }
 
 export async function userById(id: string): Promise<User | undefined> {
-  return userByIdMap.get(id);
+  return (await userIndex()).get(id);
 }
 
 export async function categoryById(id: string): Promise<Category | undefined> {
@@ -416,8 +422,9 @@ export interface WarehouseRollup extends Warehouse {
 /** One query: each warehouse with its stock totals and location count. */
 export const warehouseRollups = cache(async (): Promise<WarehouseRollup[]> => {
   const pg = getDb();
-  const [transfers, rows] = await Promise.all([
+  const [transfers, userById, rows] = await Promise.all([
     allTransfers(),
+    userIndex(),
     pg
       .select({
         ...getTableColumns(schema.warehouses),
@@ -437,7 +444,7 @@ export const warehouseRollups = cache(async (): Promise<WarehouseRollup[]> => {
     const { unitCount, skuCount, inventoryValue, locationCount, ...warehouse } = r;
     return {
       ...warehouse,
-      managerName: userByIdMap.get(warehouse.managerId)?.name ?? "—",
+      managerName: userById.get(warehouse.managerId)?.name ?? "—",
       skuCount,
       unitCount,
       inventoryValue,
@@ -482,5 +489,5 @@ export function applyStockView(rows: StockLevelRow[], view: StockViewKey): Stock
 }
 
 export async function movementsFor(productId: string) {
-  return db.movements.filter((m) => m.productId === productId);
+  return (await allMovements()).filter((m) => m.productId === productId);
 }
