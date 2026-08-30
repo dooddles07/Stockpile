@@ -121,7 +121,16 @@ async function concurrencyCheck(db: Db, actor: Actor): Promise<void> {
     `concurrent changes did not serialize: on-hand ${before} -> ${after.onHand}, expected ${before - 2}`,
   );
 
-  console.log(`  concurrency: on-hand ${before} -> ${after.onHand} across 2 concurrent changes`);
+  // Put the 2 units back. The checks run against the same seeded branch the
+  // Playwright suite then asserts seeded totals against, so they must leave no
+  // net projection change — same courtesy `e2e/*.write.spec.ts` extends.
+  await applyStockChange(
+    actor,
+    { ...change, movementType: "count-correction", onHandDelta: 2, reason: "concurrency check: restore" },
+    db,
+  );
+
+  console.log(`  concurrency: on-hand ${before} -> ${after.onHand} across 2 concurrent changes (restored)`);
 }
 
 async function reconciliationCheck(db: Db, actor: Actor): Promise<void> {
@@ -189,7 +198,20 @@ async function reconciliationCheck(db: Db, actor: Actor): Promise<void> {
     assert.equal(proj.damaged, ev.damaged, `damaged drift at ${k}: projection ${proj.damaged}, events ${ev.damaged}`);
   }
 
-  console.log(`  reconciliation: ${keys.size} holding(s), projection equals replayed events for on-hand and damaged`);
+  // Undo the net change so the seeded branch is left exactly as found (holding
+  // a: -3 +5 = +2 on-hand; holding b: -2 on-hand, +2 damaged).
+  await applyStockChange(actor, {
+    productId: a.productId, warehouseId: a.warehouseId, locationId: a.locationId, lotNumber: null,
+    movementType: "count-correction", onHandDelta: -2, reason: "recon: restore",
+    permission: { module: "counts", action: "create" },
+  }, db);
+  await applyStockChange(actor, {
+    productId: b.productId, warehouseId: b.warehouseId, locationId: b.locationId, lotNumber: null,
+    movementType: "count-correction", onHandDelta: 2, damagedDelta: -2, reason: "recon: restore",
+    permission: { module: "counts", action: "create" },
+  }, db);
+
+  console.log(`  reconciliation: ${keys.size} holding(s), projection equals replayed events for on-hand and damaged (restored)`);
 }
 
 async function main() {
