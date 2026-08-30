@@ -25,6 +25,7 @@ import {
   type Actor,
   type StockChangeResult,
 } from "@/lib/domain/stock";
+import { runAutomation } from "@/lib/domain/automation";
 import type { AdjustmentReason } from "@/lib/types";
 
 type Db = NeonDatabase<typeof schema>;
@@ -89,7 +90,7 @@ export async function recordAdjustment(
   const isDamage = input.reason === "damaged";
   const onHandDelta = isDamage || input.direction === "remove" ? -magnitude : magnitude;
 
-  return applyStockChange(
+  const result = await applyStockChange(
     actor,
     {
       productId: input.productId,
@@ -104,4 +105,9 @@ export async function recordAdjustment(
     },
     db,
   );
+
+  // After commit: evaluate matching Automation Rules in the same request
+  // (ADR-0008). Never throws; a failing rule is recorded, not propagated.
+  await runAutomation(db, [result.eventSeq]);
+  return result;
 }

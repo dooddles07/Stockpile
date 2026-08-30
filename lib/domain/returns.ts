@@ -42,6 +42,7 @@ import type { NeonDatabase } from "drizzle-orm/neon-serverless";
 import { can } from "@/lib/auth/permissions";
 import * as schema from "@/lib/db/schema";
 import { applyStockChange, type Actor } from "@/lib/domain/stock";
+import { runAutomation } from "@/lib/domain/automation";
 import type { ModuleKey, PermissionAction, ReturnKind, ReturnStatus } from "@/lib/types";
 
 type Db = NeonDatabase<typeof schema>;
@@ -156,7 +157,8 @@ export async function processReturn(
     );
   }
 
-  return db.transaction(async (tx) => {
+  const eventSeqs: number[] = [];
+  const result = await db.transaction(async (tx) => {
     const [doc] = await tx
       .select()
       .from(schema.returns)
@@ -361,6 +363,7 @@ export async function processReturn(
         },
         tx,
       );
+      eventSeqs.push(applied.eventSeq);
       const ids = movementIdsByLine.get(change.lineIdx) ?? [];
       ids.push(applied.movementId);
       movementIdsByLine.set(change.lineIdx, ids);
@@ -392,4 +395,9 @@ export async function processReturn(
       totalUnits,
     };
   });
+
+  // After commit: evaluate matching Automation Rules in the same request
+  // (ADR-0008). Never throws; a failing rule is recorded, not propagated.
+  await runAutomation(db, eventSeqs);
+  return result;
 }

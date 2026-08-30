@@ -40,6 +40,7 @@ import {
   markCounted,
   type Actor,
 } from "@/lib/domain/stock";
+import { runAutomation } from "@/lib/domain/automation";
 import type { CountStatus } from "@/lib/types";
 
 type Db = NeonDatabase<typeof schema>;
@@ -135,7 +136,8 @@ export async function completeStockCount(
     entered.set(l.lineId, l.counted);
   }
 
-  return db.transaction(async (tx) => {
+  const eventSeqs: number[] = [];
+  const result = await db.transaction(async (tx) => {
     const [count] = await tx
       .select()
       .from(schema.stockCounts)
@@ -225,7 +227,7 @@ export async function completeStockCount(
 
       if (variance !== 0) {
         corrections += 1;
-        await applyStockChange(
+        const change = await applyStockChange(
           actor,
           {
             productId: line.productId,
@@ -242,6 +244,7 @@ export async function completeStockCount(
           },
           tx,
         );
+        eventSeqs.push(change.eventSeq);
       }
 
       const [product] = await tx
@@ -298,4 +301,9 @@ export async function completeStockCount(
       corrections,
     };
   });
+
+  // After commit: evaluate matching Automation Rules in the same request
+  // (ADR-0008). Never throws; a failing rule is recorded, not propagated.
+  await runAutomation(db, eventSeqs);
+  return result;
 }

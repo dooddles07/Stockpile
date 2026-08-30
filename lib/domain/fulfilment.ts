@@ -39,6 +39,7 @@ import type { NeonDatabase } from "drizzle-orm/neon-serverless";
 import { can } from "@/lib/auth/permissions";
 import * as schema from "@/lib/db/schema";
 import { applyStockChange, type Actor } from "@/lib/domain/stock";
+import { runAutomation } from "@/lib/domain/automation";
 import type { SOStatus } from "@/lib/types";
 
 type Db = NeonDatabase<typeof schema>;
@@ -332,7 +333,8 @@ export async function shipSalesOrder(
 ): Promise<ShipSalesOrderResult> {
   assertCan(actor);
 
-  return db.transaction(async (tx) => {
+  const eventSeqs: number[] = [];
+  const result = await db.transaction(async (tx) => {
     const [order] = await tx
       .select()
       .from(schema.salesOrders)
@@ -420,6 +422,7 @@ export async function shipSalesOrder(
           tx,
         );
         movementIds.push(change.movementId);
+        eventSeqs.push(change.eventSeq);
       }
 
       await tx
@@ -453,6 +456,11 @@ export async function shipSalesOrder(
       totalShipped: results.reduce((s, r) => s + r.shippedQty, 0),
     };
   });
+
+  // After commit: evaluate matching Automation Rules in the same request
+  // (ADR-0008). Never throws; a failing rule is recorded, not propagated.
+  await runAutomation(db, eventSeqs);
+  return result;
 }
 
 export interface CancelSalesOrderResult {

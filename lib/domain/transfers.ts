@@ -45,6 +45,7 @@ import type { NeonDatabase } from "drizzle-orm/neon-serverless";
 import { can } from "@/lib/auth/permissions";
 import * as schema from "@/lib/db/schema";
 import { applyStockChange, ensureStockHolding, type Actor } from "@/lib/domain/stock";
+import { runAutomation } from "@/lib/domain/automation";
 import type { TransferStatus } from "@/lib/types";
 
 type Db = NeonDatabase<typeof schema>;
@@ -122,7 +123,8 @@ export async function dispatchTransfer(
 ): Promise<DispatchTransferResult> {
   assertCanEdit(actor);
 
-  return db.transaction(async (tx) => {
+  const eventSeqs: number[] = [];
+  const result = await db.transaction(async (tx) => {
     const [transfer] = await tx
       .select()
       .from(schema.transfers)
@@ -226,6 +228,7 @@ export async function dispatchTransfer(
       );
       const seen = shippedByLine.get(draw.lineSeq) ?? [];
       seen.push(change.movementId);
+      eventSeqs.push(change.eventSeq);
       shippedByLine.set(draw.lineSeq, seen);
     }
 
@@ -261,6 +264,11 @@ export async function dispatchTransfer(
       totalShipped: results.reduce((s, r) => s + r.shippedQty, 0),
     };
   });
+
+  // After commit: evaluate matching Automation Rules in the same request
+  // (ADR-0008). Never throws; a failing rule is recorded, not propagated.
+  await runAutomation(db, eventSeqs);
+  return result;
 }
 
 export interface ReceiveTransferLineInput {
@@ -339,7 +347,8 @@ export async function receiveTransfer(
     }
   }
 
-  return db.transaction(async (tx) => {
+  const eventSeqs: number[] = [];
+  const result = await db.transaction(async (tx) => {
     const [transfer] = await tx
       .select()
       .from(schema.transfers)
@@ -430,6 +439,7 @@ export async function receiveTransfer(
         },
         tx,
       );
+      eventSeqs.push(change.eventSeq);
 
       const received = line.received + r.receivedQty;
       await tx
@@ -473,4 +483,9 @@ export async function receiveTransfer(
       totalReceived: results.reduce((s, r) => s + r.receivedQty, 0),
     };
   });
+
+  // After commit: evaluate matching Automation Rules in the same request
+  // (ADR-0008). Never throws; a failing rule is recorded, not propagated.
+  await runAutomation(db, eventSeqs);
+  return result;
 }

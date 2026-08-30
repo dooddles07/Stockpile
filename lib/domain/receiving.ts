@@ -33,6 +33,7 @@ import type { NeonDatabase } from "drizzle-orm/neon-serverless";
 import { can } from "@/lib/auth/permissions";
 import * as schema from "@/lib/db/schema";
 import { applyStockChange, ensureStockHolding, type Actor } from "@/lib/domain/stock";
+import { runAutomation } from "@/lib/domain/automation";
 import type { POStatus } from "@/lib/types";
 
 type Db = NeonDatabase<typeof schema>;
@@ -138,7 +139,8 @@ export async function receiveGoods(
     throw new GoodsReceiptError("Received quantities must be whole numbers.", "invalid");
   }
 
-  return db.transaction(async (tx) => {
+  const eventSeqs: number[] = [];
+  const result = await db.transaction(async (tx) => {
     const [po] = await tx
       .select()
       .from(schema.purchaseOrders)
@@ -193,6 +195,7 @@ export async function receiveGoods(
         },
         tx,
       );
+      eventSeqs.push(change.eventSeq);
 
       const fulfilled = line.fulfilled + received.receivedQty;
       await tx
@@ -237,4 +240,9 @@ export async function receiveGoods(
       totalReceived: results.reduce((s, r) => s + r.receivedQty, 0),
     };
   });
+
+  // After commit: evaluate matching Automation Rules in the same request
+  // (ADR-0008). Never throws; a failing rule is recorded, not propagated.
+  await runAutomation(db, eventSeqs);
+  return result;
 }

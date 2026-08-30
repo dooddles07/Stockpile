@@ -71,5 +71,9 @@ A named set of permissions granted to Users, editable at runtime. A User has exa
 _Avoid_: group, permission set, access level (an access level is one entry within a Role)
 
 **Automation Rule**:
-A stored rule that reacts to an Event by evaluating conditions and, if they hold, taking actions. Its trigger, condition and action vocabulary is not yet defined.
+A stored rule that reacts to an Event by evaluating conditions and, if they hold, taking actions. It evaluates in-process, immediately after the transaction that appended the Event commits — never inside that transaction, and with no scheduler (ADR-0008). Its trigger, condition and action vocabulary is not yet defined; today the one executable rule is hardcoded.
 _Avoid_: workflow, trigger (a trigger is one part of a Rule), job
+
+**Automation Run**:
+One recorded evaluation of an Automation Rule against a committed Event: its outcome, when it ran, and what it touched. A failing Run is recorded as such and never fails the operation that triggered it. Every Run is attributed to the system Actor.
+_Avoid_: execution, job run, log entry
