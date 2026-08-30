@@ -17,7 +17,7 @@
  *    `-> received`. Stock arrives at the destination: one `transfer-in` Movement
  *    per line through the choke point, raising on-hand there. In transit falls
  *    because each line's `received` rises toward its `shipped`; when nothing is
- *    still in flight the Document leaves the open set and the transfer is
+ *    still in transit the Document leaves the open set and the transfer is
  *    `received`.
  *
  * Stock in transit belongs to neither end's on-hand: `dispatchTransfer` has
@@ -39,7 +39,7 @@
  * `transfers.checks.ts`). The permission matrix must already be hydrated.
  */
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import type { NeonDatabase } from "drizzle-orm/neon-serverless";
 
 import { can } from "@/lib/auth/permissions";
@@ -308,7 +308,7 @@ export interface ReceiveTransferResult {
  * on-hand at the destination as one `transfer-in` Movement through the choke
  * point (its damaged portion goes to the damaged balance in the same Movement).
  * The line's `received` rises, so the in-transit projection falls; when nothing
- * is still in flight the transfer becomes `received`. A failure on any line
+ * is still in transit the transfer becomes `received`. A failure on any line
  * rolls the whole receipt back.
  *
  * A line cannot be received beyond what was despatched for it — receiving more
@@ -361,23 +361,49 @@ export async function receiveTransfer(
       .orderBy(schema.transferLines.seq);
     const linesById = new Map(lineRows.map((r) => [r.id, r]));
 
-    // ADR-0006: one put-away location for the whole receipt, so the Stock Rows
-    // locked differ only by product — take them in a consistent order (ascending
-    // productId) so this cannot deadlock against another receipt.
-    const ordered = [...accepted].sort((a, b) => {
-      const pa = linesById.get(a.lineId)?.productId ?? "";
-      const pb = linesById.get(b.lineId)?.productId ?? "";
-      return pa < pb ? -1 : pa > pb ? 1 : 0;
-    });
+    // Every received line is put away at the one location; make sure each holding
+    // exists so the choke point has a row to lock.
+    for (const r of accepted) {
+      const line = linesById.get(r.lineId);
+      if (!line) {
+        throw new TransferError(`Line ${r.lineId} is not on ${transfer.number}.`, "invalid");
+      }
+      await ensureStockHolding(tx, {
+        productId: line.productId,
+        warehouseId: transfer.toWarehouseId,
+        locationId: input.locationId,
+        lotNumber: null,
+      });
+    }
+
+    // ADR-0006: acquire the per-Stock-Row locks in ascending `stock_rows.seq`
+    // order — the same key `dispatchTransfer` uses — so a receipt cannot
+    // deadlock against another concurrent receipt.
+    const seqByProduct = new Map(
+      (
+        await tx
+          .select({ productId: schema.stockRows.productId, seq: schema.stockRows.seq })
+          .from(schema.stockRows)
+          .where(
+            and(
+              eq(schema.stockRows.warehouseId, transfer.toWarehouseId),
+              eq(schema.stockRows.locationId, input.locationId),
+              isNull(schema.stockRows.lotNumber),
+            ),
+          )
+      ).map((row) => [row.productId, row.seq] as const),
+    );
+    const ordered = [...accepted].sort(
+      (a, b) =>
+        (seqByProduct.get(linesById.get(a.lineId)!.productId) ?? 0) -
+        (seqByProduct.get(linesById.get(b.lineId)!.productId) ?? 0),
+    );
 
     const reason = input.note?.trim() || `Receipt of ${transfer.number}`;
     const results: ReceiveTransferLineResult[] = [];
 
     for (const r of ordered) {
-      const line = linesById.get(r.lineId);
-      if (!line) {
-        throw new TransferError(`Line ${r.lineId} is not on ${transfer.number}.`, "invalid");
-      }
+      const line = linesById.get(r.lineId)!;
       const outstanding = line.shipped - line.received;
       if (r.receivedQty > outstanding) {
         throw new TransferError(
@@ -387,13 +413,6 @@ export async function receiveTransfer(
       }
       const damagedQty = r.damagedQty ?? 0;
       const goodQty = r.receivedQty - damagedQty;
-
-      await ensureStockHolding(tx, {
-        productId: line.productId,
-        warehouseId: transfer.toWarehouseId,
-        locationId: input.locationId,
-        lotNumber: null,
-      });
 
       const change = await applyStockChange(
         actor,

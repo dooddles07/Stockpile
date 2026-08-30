@@ -3,12 +3,12 @@
  * two ends, and the only flow where one logical operation touches more than one
  * Stock Row.
  *
- * One lifecycle test walks a transfer despatch → in-flight → receipt:
+ * One lifecycle test walks a transfer despatch → in transit → receipt:
  *
  *  - Despatch (`approved -> in-transit`): on-hand falls at the source and the
  *    quantity becomes in transit. Two `transfer-out` Movements land in the
  *    ledger, attributed to the operator.
- *  - In flight: the transfer reads "In transit", its Despatched total is the
+ *  - In transit: the transfer reads "In transit", its Despatched total is the
  *    full quantity and its Received total is zero — the stock is at neither
  *    end's on-hand.
  *  - Receipt (`in-transit -> received`): on-hand rises at the destination, the

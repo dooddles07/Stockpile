@@ -44,7 +44,7 @@ The write flows are in `lib/domain/transfers.ts`, both Actor-first and checking
   raises on-hand at the destination as one `transfer-in` Movement (its damaged
   portion goes to the damaged balance in the same Movement, via the choke
   point's `damagedDelta`). `received` rises toward `shipped`, so the in-transit
-  projection falls; when no line has anything still in flight the transfer is
+  projection falls; when no line has anything still in transit the transfer is
   `received`. A line cannot be received beyond what was despatched for it —
   that would drive the in-transit projection negative — so such a receipt is
   rejected.
@@ -55,9 +55,10 @@ key `shipSalesOrder` draws in — before calling the choke point. So a despatch
 locks Stock Rows low-seq-first regardless of line order, and two concurrent
 despatches between the same pair of Warehouses whose lines name the same
 products in opposite order cannot deadlock (without the sort: A locks P1 then
-P2 while B locks P2 then P1). `receiveTransfer` uses one put-away location for
-the whole receipt, so its row locks differ only by product and it takes them in
-ascending `productId` order. Both are documented at the call site.
+P2 while B locks P2 then P1). `receiveTransfer` ensures every put-away holding
+exists, then locks them in ascending `stock_rows.seq` order too — the same key —
+so two concurrent receipts cannot deadlock either. Both are documented at the
+call site.
 
 `OPEN_TRANSFER_STATUSES` now lives in `lib/domain/transfers.ts` (as `const
 satisfies`) and `lib/repo/documents.ts` imports it, replacing a hand-kept copy.
