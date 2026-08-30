@@ -9,6 +9,7 @@ import { FieldGrid, Section, StatTile } from "@/components/record/field-grid";
 import { SimpleTable } from "@/components/record/simple-table";
 import { Timeline, type TimelineEntry } from "@/components/record/timeline";
 import { FulfilmentPanel } from "./fulfilment-panel";
+import { FulfilmentActionButton } from "./fulfilment-actions";
 import { WorkflowStepper } from "@/components/status/workflow-stepper";
 import { StatusBadge } from "@/components/status/status-badge";
 import { EmptyState, PermissionDenied } from "@/components/states";
@@ -40,7 +41,9 @@ export async function generateMetadata({
     : { title: "Sales order not found" };
 }
 
-const FULFILLABLE = ["reserved", "picking", "packing"] as const;
+/** Statuses where the order holds a reservation: the Fulfil tab is live and the
+ *  order can still be cancelled (ticket 13). Mirrors `OPEN_SO_STATUSES`. */
+const OPEN_STAGES = ["confirmed", "reserved", "picking", "packing"] as const;
 
 export default async function SalesOrderDetailPage({
   params,
@@ -63,7 +66,7 @@ export default async function SalesOrderDetailPage({
   const fulfilledUnits = order.lines.reduce((s, l) => s + l.fulfilled, 0);
   const progress = units > 0 ? fulfilledUnits / units : 0;
 
-  const stage = FULFILLABLE.find((s) => s === order.status);
+  const stage = OPEN_STAGES.find((s) => s === order.status);
   const returns = (await allReturns()).filter(
     (r) => r.kind === "sales" && r.sourceOrderId === order.id,
   );
@@ -391,7 +394,7 @@ export default async function SalesOrderDetailPage({
 
   const fulfilTab = stage ? (
     <FulfilmentPanel
-      orderNumber={order.number}
+      salesOrderId={order.id}
       stage={stage}
       customer={customer?.name ?? "the customer"}
       shipToCity={order.shipToCity}
@@ -479,6 +482,27 @@ export default async function SalesOrderDetailPage({
         }
         actions={
           <>
+            {can(role, "fulfillment", "edit") && order.status === "draft" && (
+              <FulfilmentActionButton
+                salesOrderId={order.id}
+                intent="confirm"
+                pendingLabel="Confirming…"
+                className="h-8"
+              >
+                Confirm order
+              </FulfilmentActionButton>
+            )}
+            {can(role, "fulfillment", "edit") && OPEN_STAGES.includes(order.status as (typeof OPEN_STAGES)[number]) && (
+              <FulfilmentActionButton
+                salesOrderId={order.id}
+                intent="cancel"
+                pendingLabel="Cancelling…"
+                variant="outline"
+                className="h-8"
+              >
+                Cancel order
+              </FulfilmentActionButton>
+            )}
             <Button variant="outline" size="sm" className="h-8" render={<Link href={`/warehousing/picking/${order.id}`} />}>
               <Printer className="size-3.5" aria-hidden />
               Pick list

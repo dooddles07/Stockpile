@@ -19,6 +19,7 @@ import { StatusBadge } from "@/components/status/status-badge";
 import { MeterBar } from "@/components/status/meter-bar";
 import { money, percent, plural, qty } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { FulfilmentActionButton } from "./fulfilment-actions";
 
 export interface FulfilLine {
   id: string;
@@ -49,14 +50,14 @@ const BOXES = ["Small carton", "Medium carton", "Large carton", "Pallet"];
  * stage the order is actually at decides which section is live.
  */
 export function FulfilmentPanel({
-  orderNumber,
+  salesOrderId,
   stage,
   lines,
   customer,
   shipToCity,
 }: {
-  orderNumber: string;
-  stage: "reserved" | "picking" | "packing";
+  salesOrderId: string;
+  stage: "confirmed" | "reserved" | "picking" | "packing";
   lines: FulfilLine[];
   customer: string;
   shipToCity: string;
@@ -300,55 +301,55 @@ export function FulfilmentPanel({
         </Section>
 
         <div className="flex flex-wrap gap-2">
-          {stage === "reserved" && (
-            <Button
-              size="sm"
+          {stage === "confirmed" && (
+            <FulfilmentActionButton
+              salesOrderId={salesOrderId}
+              intent="reserve"
+              pendingLabel="Reserving…"
               className="h-8"
-              onClick={() =>
-                toast.success(`${orderNumber} released to picking`, {
-                  description: `${plural(lines.length, "line")} on the pick list.`,
-                })
-              }
+            >
+              <ClipboardList className="size-3.5" aria-hidden />
+              Reserve stock
+            </FulfilmentActionButton>
+          )}
+
+          {stage === "reserved" && (
+            <FulfilmentActionButton
+              salesOrderId={salesOrderId}
+              intent="pick"
+              pendingLabel="Releasing…"
+              className="h-8"
             >
               <ClipboardList className="size-3.5" aria-hidden />
               Start picking
-            </Button>
+            </FulfilmentActionButton>
           )}
 
           {stage === "picking" && (
-            <Button
-              size="sm"
+            <FulfilmentActionButton
+              salesOrderId={salesOrderId}
+              intent="pack"
+              pendingLabel="Moving…"
               className="h-8"
               disabled={pickedUnits === 0 || blocking.length > 0}
-              onClick={() =>
-                toast.success(`${orderNumber} moved to packing`, {
-                  description: `${qty(pickedUnits)} units picked${
-                    shortLines.length > 0
-                      ? `, ${plural(shortLines.length, "line")} short and going to backorder`
-                      : " in full"
-                  }.`,
-                })
-              }
             >
               <Container className="size-3.5" aria-hidden />
               Finish picking
-            </Button>
+            </FulfilmentActionButton>
           )}
 
           {stage === "packing" && (
-            <Button
-              size="sm"
+            <FulfilmentActionButton
+              salesOrderId={salesOrderId}
+              intent="ship"
+              pendingLabel="Shipping…"
               className="h-8"
+              carrier={carrier}
               disabled={weight <= 0 || blocking.length > 0}
-              onClick={() =>
-                toast.success(`${orderNumber} shipped`, {
-                  description: `${box}, ${weight} kg, with ${carrier}. ${qty(pickedUnits)} units leave stock and the ledger is written.`,
-                })
-              }
             >
               <Truck className="size-3.5" aria-hidden />
               Ship order
-            </Button>
+            </FulfilmentActionButton>
           )}
         </div>
 
