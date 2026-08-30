@@ -130,6 +130,16 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
+      # Ticket 17: Automation Rules evaluate after a stock transaction commits
+      # (ADR-0008), never inside it; a rolled-back operation evaluates no rule; a
+      # failing rule is recorded as a failed run without failing the triggering
+      # operation; and every run is attributed to the system Actor. Playwright
+      # cannot see post-commit in-process evaluation or issue a rolled-back write.
+      - name: Automation checks
+        run: npm run check:automation
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
       - name: Run Playwright suite
         run: npm run test:e2e
         env:

@@ -19,7 +19,8 @@
     "check:fulfilment": "tsx lib/domain/fulfilment.checks.ts",
     "check:transfers": "tsx lib/domain/transfers.checks.ts",
     "check:counts": "tsx lib/domain/counts.checks.ts",
-    "check:returns": "tsx lib/domain/returns.checks.ts"
+    "check:returns": "tsx lib/domain/returns.checks.ts",
+    "check:automation": "tsx lib/domain/automation.checks.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
