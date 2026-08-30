@@ -91,6 +91,16 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
+      # Ticket 13: the sales-order fulfilment domain functions refuse a Role that
+      # reaches them directly, reserving more than is available is prevented, and
+      # confirming/cancelling move the reserved projection without appending a
+      # Movement or writing stock_rows.reserved. Playwright only ever hits the
+      # Fulfil tab.
+      - name: Sales-order fulfilment checks
+        run: npm run check:fulfilment
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
       - name: Run Playwright suite
         run: npm run test:e2e
         env:
