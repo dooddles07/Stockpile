@@ -120,6 +120,16 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
+      # Ticket 16: the return processing domain function refuses a Role that
+      # reaches it directly (keyed by the return's kind), rejects a line that
+      # takes back more than the source Document moved, and books a customer
+      # return to on-hand or the damaged balance by condition while a supplier
+      # return leaves stock. Playwright only ever hits the return screen.
+      - name: Returns checks
+        run: npm run check:returns
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
       - name: Run Playwright suite
         run: npm run test:e2e
         env:
