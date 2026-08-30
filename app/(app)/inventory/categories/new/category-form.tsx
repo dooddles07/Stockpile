@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Section } from "@/components/record/field-grid";
+import { saveCategory } from "./actions";
 
 const ROOT = "—none—";
 
@@ -45,11 +46,19 @@ const slugify = (name: string) =>
 export function CategoryForm({
   parents,
   takenSlugs,
+  id,
+  initial,
+  returnTo = "/inventory/categories",
 }: {
   parents: { id: string; name: string }[];
   takenSlugs: string[];
+  /** Present when editing. */
+  id?: string;
+  initial?: Partial<CategoryFormValues>;
+  returnTo?: string;
 }) {
   const router = useRouter();
+  const editing = id !== undefined;
 
   const {
     register,
@@ -61,7 +70,7 @@ export function CategoryForm({
   } = useForm<CategoryFormValues>({
     resolver: zodResolver(schema),
     mode: "onBlur",
-    defaultValues: { name: "", parentId: ROOT, description: "" },
+    defaultValues: { name: "", parentId: ROOT, description: "", ...initial },
   });
 
   const name = watch("name");
@@ -71,20 +80,34 @@ export function CategoryForm({
     [parents],
   );
 
-  const onSubmit = (values: CategoryFormValues) => {
+  const onSubmit = async (values: CategoryFormValues) => {
     // The slug is what every report groups by, so a collision would silently
-    // merge two categories rather than fail loudly.
+    // merge two categories rather than fail loudly. The server enforces this
+    // too; catching it here keeps the message on the field.
     if (takenSlugs.includes(slug)) {
       setError("name", { message: `${slug} is already in use. Give this one a distinct name.` });
       return;
     }
+
+    const result = await saveCategory({ ...values, id });
+    if (!result.ok) {
+      if (result.code === "conflict") {
+        setError("name", { message: result.message });
+      } else {
+        toast.error(result.message);
+      }
+      return;
+    }
+
     const parent = parents.find((p) => p.id === values.parentId);
-    toast.success(`${values.name} created`, {
-      description: parent
-        ? `Filed under ${parent.name}. Products can be assigned to it straight away.`
-        : "Added at the top level of the catalogue tree.",
+    toast.success(`${values.name} ${editing ? "updated" : "created"}`, {
+      description: editing
+        ? "The category record is saved."
+        : parent
+          ? `Filed under ${parent.name}. Products can be assigned to it straight away.`
+          : "Added at the top level of the catalogue tree.",
     });
-    router.push("/inventory/categories");
+    router.push(returnTo);
   };
 
   return (
@@ -150,14 +173,14 @@ export function CategoryForm({
       <div className="flex flex-wrap gap-2">
         <Button type="submit" size="sm" className="h-8" disabled={isSubmitting}>
           <Save className="size-3.5" aria-hidden />
-          Create category
+          {editing ? "Save changes" : "Create category"}
         </Button>
         <Button
           type="button"
           variant="outline"
           size="sm"
           className="h-8"
-          onClick={() => router.push("/inventory/categories")}
+          onClick={() => router.push(returnTo)}
         >
           Cancel
         </Button>

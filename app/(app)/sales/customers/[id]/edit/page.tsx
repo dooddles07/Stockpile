@@ -51,6 +51,7 @@ export default async function EditCustomerPage({ params }: { params: Promise<{ i
       <div className="p-4 sm:p-6">
         <CustomerForm
           suggestedCode={customer.code}
+          id={customer.id}
           returnTo={`/sales/customers/${customer.id}`}
           initial={{
             code: customer.code,

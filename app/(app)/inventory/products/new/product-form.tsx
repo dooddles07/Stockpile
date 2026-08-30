@@ -27,6 +27,7 @@ import {
 import { Section } from "@/components/record/field-grid";
 import { money, percent } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { saveProduct } from "./actions";
 
 const UNITS = ["unit", "box", "case", "pack", "roll", "pair", "bay", "kit", "set", "drum"];
 
@@ -75,12 +76,15 @@ export function ProductForm({
   categories,
   suppliers,
   suggestedSku,
+  id,
   initial,
   returnTo = "/inventory/products",
 }: {
   categories: { id: string; name: string }[];
   suppliers: { id: string; name: string }[];
   suggestedSku: string;
+  /** The product's primary key, present when editing. */
+  id?: string;
   /** Present when editing: the record as it stands today. */
   initial?: Partial<ProductFormValues>;
   returnTo?: string;
@@ -126,7 +130,12 @@ export function ProductForm({
   const hasExpiry = watch("hasExpiry");
   const margin = sellPrice > 0 ? (sellPrice - unitCost) / sellPrice : 0;
 
-  const onSubmit = (values: ProductFormValues) => {
+  const onSubmit = async (values: ProductFormValues) => {
+    const result = await saveProduct({ ...values, id });
+    if (!result.ok) {
+      toast.error(result.message);
+      return;
+    }
     toast.success(editing ? `${values.sku} updated` : `${values.sku} created`, {
       description: editing
         ? `${values.name} saved. Changes apply to future movements, not to stock already on the shelf.`

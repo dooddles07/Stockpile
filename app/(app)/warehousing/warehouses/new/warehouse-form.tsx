@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/select";
 import { Section } from "@/components/record/field-grid";
 import { qty } from "@/lib/format";
+import { saveWarehouse } from "./actions";
 
 const TYPES: Record<string, string> = {
   distribution: "Distribution centre",
@@ -77,6 +78,7 @@ export function WarehouseForm({
   managers,
   suggestedCode,
   usedPallets = 0,
+  id,
   initial,
   returnTo = "/warehousing/warehouses",
 }: {
@@ -84,6 +86,8 @@ export function WarehouseForm({
   suggestedCode: string;
   /** Pallets already occupied — capacity cannot be set below what is stored. */
   usedPallets?: number;
+  /** The site's primary key, present when editing. */
+  id?: string;
   initial?: Partial<WarehouseFormValues>;
   returnTo?: string;
 }) {
@@ -124,7 +128,12 @@ export function WarehouseForm({
   const capacity = watch("capacityPallets") || 0;
   const status = watch("status");
 
-  const onSubmit = (values: WarehouseFormValues) => {
+  const onSubmit = async (values: WarehouseFormValues) => {
+    const result = await saveWarehouse({ ...values, id });
+    if (!result.ok) {
+      toast.error(result.message);
+      return;
+    }
     toast.success(`${values.code} — ${values.name} ${editing ? "updated" : "created"}`, {
       description:
         values.status === "operational"

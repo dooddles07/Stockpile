@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { Section } from "@/components/record/field-grid";
 import { plural } from "@/lib/format";
+import { saveSupplier } from "./actions";
 
 const PAYMENT_TERMS = ["Net 15", "Net 30", "Net 45", "Net 60", "2/10 Net 30", "Prepaid"];
 const CURRENCIES = ["USD", "EUR", "GBP", "CAD", "MXN"];
@@ -67,11 +68,14 @@ export type SupplierFormValues = z.infer<typeof schema>;
 export function SupplierForm({
   categories,
   suggestedCode,
+  id,
   initial,
   returnTo = "/purchasing/suppliers",
 }: {
   categories: { id: string; name: string }[];
   suggestedCode: string;
+  /** The supplier's primary key, present when editing. */
+  id?: string;
   /** Present when editing: the record as it stands today. */
   initial?: Partial<SupplierFormValues>;
   returnTo?: string;
@@ -108,7 +112,12 @@ export function SupplierForm({
   const selected = watch("categories");
   const leadTimeDays = watch("leadTimeDays") || 0;
 
-  const onSubmit = (values: SupplierFormValues) => {
+  const onSubmit = async (values: SupplierFormValues) => {
+    const result = await saveSupplier({ ...values, id });
+    if (!result.ok) {
+      toast.error(result.message);
+      return;
+    }
     toast.success(`${values.code} — ${values.name} ${editing ? "updated" : "added"}`, {
       description: `${values.paymentTerms}, ${values.leadTimeDays}-day lead time, covering ${plural(
         values.categories.length,

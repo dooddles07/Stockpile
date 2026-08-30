@@ -51,6 +51,7 @@ export default async function EditSupplierPage({ params }: { params: Promise<{ i
         <SupplierForm
           categories={categories}
           suggestedCode={supplier.code}
+          id={supplier.id}
           returnTo={`/purchasing/suppliers/${supplier.id}`}
           initial={{
             code: supplier.code,

@@ -59,6 +59,7 @@ export default async function EditProductPage({ params }: { params: Promise<{ sk
           categories={categories}
           suppliers={suppliers}
           suggestedSku={product.sku}
+          id={product.id}
           returnTo={`/inventory/products/${product.sku}`}
           initial={{
             sku: product.sku,

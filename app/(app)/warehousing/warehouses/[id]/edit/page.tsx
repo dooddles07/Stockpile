@@ -56,6 +56,7 @@ export default async function EditWarehousePage({ params }: { params: Promise<{ 
           managers={managers}
           suggestedCode={site.code}
           usedPallets={site.usedPallets}
+          id={site.id}
           returnTo={`/warehousing/warehouses/${site.id}`}
           initial={{
             code: site.code,

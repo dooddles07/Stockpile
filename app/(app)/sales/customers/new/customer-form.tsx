@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/select";
 import { Section } from "@/components/record/field-grid";
 import { money } from "@/lib/format";
+import { saveCustomer } from "./actions";
 
 const TYPES = {
   wholesale: "Wholesale",
@@ -68,10 +69,13 @@ export type CustomerFormValues = z.infer<typeof schema>;
 
 export function CustomerForm({
   suggestedCode,
+  id,
   initial,
   returnTo = "/sales/customers",
 }: {
   suggestedCode: string;
+  /** The customer's primary key, present when editing. */
+  id?: string;
   /** Present when editing: the record as it stands today. */
   initial?: Partial<CustomerFormValues>;
   returnTo?: string;
@@ -107,7 +111,12 @@ export function CustomerForm({
   const paymentTerms = watch("paymentTerms");
   const creditLimit = watch("creditLimit") || 0;
 
-  const onSubmit = (values: CustomerFormValues) => {
+  const onSubmit = async (values: CustomerFormValues) => {
+    const result = await saveCustomer({ ...values, id });
+    if (!result.ok) {
+      toast.error(result.message);
+      return;
+    }
     toast.success(`${values.code} — ${values.name} ${editing ? "updated" : "added"}`, {
       description:
         values.paymentTerms === "Prepaid"
