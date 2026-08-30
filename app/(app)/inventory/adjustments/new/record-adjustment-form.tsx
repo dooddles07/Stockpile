@@ -19,6 +19,7 @@ import {
 import { Section, StatTile } from "@/components/record/field-grid";
 import { humanize } from "@/lib/status";
 import { cn } from "@/lib/utils";
+import { ADJUSTMENT_REASONS } from "@/lib/domain/adjustments";
 import { submitAdjustment, type AdjustmentFormState } from "./actions";
 
 export interface Holding {
@@ -32,22 +33,22 @@ export interface Holding {
   onHand: number;
 }
 
-const REASONS: { value: string; hint: string }[] = [
-  { value: "damaged", hint: "Units are physically unusable — moved into the damaged balance, not just removed." },
-  { value: "lost", hint: "Stock cannot be located after a search of the area." },
-  { value: "found", hint: "Stock located that the system did not know about." },
-  { value: "expired", hint: "Shelf life has passed; units are quarantined and written off." },
-  { value: "count-error", hint: "A count found a discrepancy against the recorded quantity." },
-  { value: "manual-correction", hint: "A known data-entry error being corrected." },
-  { value: "internal-use", hint: "Consumed by the business rather than sold." },
-  { value: "other", hint: "Anything else. Explain it in the note." },
-];
-const REASON_LABELS = Object.fromEntries(REASONS.map((r) => [r.value, humanize(r.value)]));
+/** One line of guidance per reason; the reason list itself is the domain's. */
+const REASON_HINTS: Record<(typeof ADJUSTMENT_REASONS)[number], string> = {
+  damaged: "Units are physically unusable — moved into the damaged balance, not just removed.",
+  lost: "Stock cannot be located after a search of the area.",
+  found: "Stock located that the system did not know about.",
+  expired: "Shelf life has passed; units are quarantined and written off.",
+  "count-error": "A count found a discrepancy against the recorded quantity.",
+  "manual-correction": "A known data-entry error being corrected.",
+  "internal-use": "Consumed by the business rather than sold.",
+  other: "Anything else. Explain it in the note.",
+};
+const REASON_LABELS = Object.fromEntries(ADJUSTMENT_REASONS.map((r) => [r, humanize(r)]));
 const DIRECTION_LABELS = { add: "Add to on-hand", remove: "Remove from on-hand" };
 
 /** A note is what an auditor reads six months later — insist on one here. */
 const NOTE_REQUIRED = new Set(["other", "lost"]);
-const HOLDING_SEP = "::";
 
 const INITIAL: AdjustmentFormState = { status: "idle" };
 
@@ -90,12 +91,16 @@ export function RecordAdjustmentForm({
   // Derived, not stored: a choice that no longer matches the warehouse is blank.
   const productId = products.some((p) => p.id === productChoice) ? productChoice : "";
 
+  // Keyed by position in this list, so a lot number's characters can never
+  // collide with a delimiter.
   const locationOptions = React.useMemo(
     () =>
       holdings
         .filter((h) => h.warehouseId === warehouseId && h.productId === productId)
-        .map((h) => ({
-          key: `${h.locationId}${HOLDING_SEP}${h.lotNumber ?? ""}`,
+        .map((h, i) => ({
+          key: String(i),
+          locationId: h.locationId,
+          lotNumber: h.lotNumber,
           onHand: h.onHand,
           label: `${h.locationCode}${h.lotNumber ? ` · lot ${h.lotNumber}` : ""} — ${h.onHand} on hand`,
         })),
@@ -107,7 +112,8 @@ export function RecordAdjustmentForm({
   );
   const holdingKey = locationOptions.some((o) => o.key === holdingChoice) ? holdingChoice : "";
   const selectedHolding = locationOptions.find((o) => o.key === holdingKey) ?? null;
-  const [locationId, lotNumber] = holdingKey.split(HOLDING_SEP);
+  const locationId = selectedHolding?.locationId ?? "";
+  const lotNumber = selectedHolding?.lotNumber ?? "";
 
   const noteMissing = NOTE_REQUIRED.has(reason) && note.trim().length === 0;
   const qtyValue = Number(quantity);
@@ -232,15 +238,15 @@ export function RecordAdjustmentForm({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {REASONS.map((r) => (
-                    <SelectItem key={r.value} value={r.value}>
-                      {humanize(r.value)}
+                  {ADJUSTMENT_REASONS.map((r) => (
+                    <SelectItem key={r} value={r}>
+                      {humanize(r)}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               <p className="text-caption text-muted-foreground">
-                {REASONS.find((r) => r.value === reason)?.hint}
+                {REASON_HINTS[reason as (typeof ADJUSTMENT_REASONS)[number]]}
               </p>
             </div>
 

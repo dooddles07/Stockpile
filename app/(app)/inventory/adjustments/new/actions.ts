@@ -11,12 +11,12 @@ import { StockChangeError } from "@/lib/domain/stock";
 /**
  * The first server action in Stockpile. Per ADR-0005 it holds no business
  * logic: it validates the form input with zod, resolves the Actor from the
- * session, and delegates to the domain function. The direction/reason -> delta
- * mapping and the permission check both live below this layer. A future REST
- * caller is a second thin wrapper over the same `recordAdjustment`.
+ * session, and hands the validated fields straight to `recordAdjustment`. The
+ * reason/direction rules and the permission check all live below this layer. A
+ * future REST caller is a second thin wrapper over the same domain function.
  */
 
-const Input = z.object({
+const FormSchema = z.object({
   productId: z.string().min(1),
   warehouseId: z.string().min(1),
   locationId: z.string().min(1),
@@ -35,46 +35,32 @@ const Input = z.object({
 export type AdjustmentFormState =
   | { status: "idle" }
   | { status: "error"; message: string }
-  | {
-      status: "success";
-      message: string;
-      movementId: string;
-      onHand: number;
-      damaged: number;
-    };
+  | { status: "success"; message: string; movementId: string; onHand: number; damaged: number };
 
 export async function submitAdjustment(
   _prev: AdjustmentFormState,
   formData: FormData,
 ): Promise<AdjustmentFormState> {
-  const parsed = Input.safeParse(Object.fromEntries(formData));
+  const parsed = FormSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
     return { status: "error", message: "Check the highlighted fields and try again." };
   }
 
-  const { direction, quantity, ...rest } = parsed.data;
   const actor = await getCurrentUser();
 
   try {
-    const result = await recordAdjustment(
-      actor,
-      { ...rest, quantityDelta: direction === "remove" ? -quantity : quantity },
-      getDb(),
-    );
+    const result = await recordAdjustment(actor, parsed.data, getDb());
 
-    // Every screen under (app) is force-dynamic, but the movement ledger and
-    // the stock reads are React-cached per request; drop them so the next
-    // navigation shows the change the operator just made.
+    // Every screen under (app) is force-dynamic, but the movement ledger and the
+    // stock reads are React-cached per request; drop them so the next
+    // navigation shows the change that was just made.
     revalidatePath("/inventory/movements");
     revalidatePath("/inventory/adjustments");
     revalidatePath("/inventory/stock-levels");
 
     return {
       status: "success",
-      message:
-        rest.reason === "damaged"
-          ? `${quantity} unit${quantity === 1 ? "" : "s"} moved to the damaged balance.`
-          : `On-hand is now ${result.onHand}.`,
+      message: `On-hand is now ${result.onHand}, damaged ${result.damaged}.`,
       movementId: result.movementId,
       onHand: result.onHand,
       damaged: result.damaged,

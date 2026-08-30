@@ -59,9 +59,11 @@ export interface RecordAdjustmentInput {
   /** Null targets the un-lotted holding; a string targets that lot. */
   lotNumber?: string | null;
   reason: AdjustmentReason;
-  /** Signed change to on-hand. Negative removes stock. For `"damaged"` the
-   *  sign is ignored — damage always removes on-hand and adds damaged. */
-  quantityDelta: number;
+  /** How many units. Always positive; `direction` carries the sign. */
+  quantity: number;
+  /** Whether the units are added to or removed from on-hand. Ignored for
+   *  `"damaged"` — damage always removes on-hand and adds to damaged. */
+  direction: "add" | "remove";
   /** Free-text explanation. Falls back to the reason code when blank. */
   note?: string;
 }
@@ -72,14 +74,20 @@ export interface RecordAdjustmentInput {
  * Throws `StockChangeError` (nothing written) when the Actor is not permitted,
  * the holding is not a single row, or the change would drive a balance below
  * zero.
+ *
+ * This is the one place the reason-and-direction intent becomes a stock change:
+ * `"damaged"` is the reason that moves quantity out of on-hand and into the
+ * damaged balance; every other reason is a straight on-hand correction whose
+ * sign is the caller's `direction`.
  */
 export async function recordAdjustment(
   actor: Actor,
   input: RecordAdjustmentInput,
   db: Db,
 ): Promise<StockChangeResult> {
-  const magnitude = Math.abs(input.quantityDelta);
+  const magnitude = Math.abs(input.quantity);
   const isDamage = input.reason === "damaged";
+  const onHandDelta = isDamage || input.direction === "remove" ? -magnitude : magnitude;
 
   return applyStockChange(
     actor,
@@ -89,7 +97,7 @@ export async function recordAdjustment(
       locationId: input.locationId,
       lotNumber: input.lotNumber ?? null,
       movementType: isDamage ? "damage" : "adjustment",
-      onHandDelta: isDamage ? -magnitude : input.quantityDelta,
+      onHandDelta,
       damagedDelta: isDamage ? magnitude : 0,
       reason: input.note?.trim() || input.reason,
       permission: { module: "adjustments", action: "create" },
