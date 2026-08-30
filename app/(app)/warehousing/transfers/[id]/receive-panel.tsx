@@ -4,6 +4,7 @@ import * as React from "react";
 import { PackageCheck, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 
+import { submitTransferAction, type TransferFormState } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,25 +29,33 @@ export interface ReceivableLine {
   alreadyReceived: number;
 }
 
+const INITIAL: TransferFormState = { status: "idle" };
+
 /**
- * Receiving a transfer.
+ * Receiving a transfer at its destination.
  *
  * Defaults to the outstanding quantity, but the whole point of this screen is
  * the case where the number on the pallet does not match the manifest — so a
  * short, an over-receipt and damage all have to be recordable, and each one is
- * called out before the operator confirms.
+ * called out before the operator confirms. The confirm submits to
+ * `submitTransferAction`, which raises on-hand at the destination through the
+ * choke point and clears the in-transit balance.
  */
 export function ReceivePanel({
+  transferId,
   transferNumber,
   destination,
   lines,
   locations,
 }: {
+  transferId: string;
   transferNumber: string;
   destination: string;
   lines: ReceivableLine[];
   locations: { id: string; code: string }[];
 }) {
+  const [state, formAction, pending] = React.useActionState(submitTransferAction, INITIAL);
+
   const outstanding = React.useMemo(
     () =>
       Object.fromEntries(
@@ -90,8 +99,33 @@ export function ReceivePanel({
   const noteRequired = discrepancies.length > 0;
   const noteMissing = noteRequired && note.trim().length === 0;
 
+  // One entry per counted line: the units arriving and how many of them are
+  // damaged. The domain caps each at what is still in transit for that line.
+  const payload = JSON.stringify(
+    resolved
+      .filter((r) => r.counted > 0)
+      .map((r) => ({ lineId: r.line.id, receivedQty: r.counted, damagedQty: r.damaged })),
+  );
+
+  const seen = React.useRef<TransferFormState>(INITIAL);
+  React.useEffect(() => {
+    if (state === seen.current) return;
+    seen.current = state;
+    if (state.status === "success") {
+      toast.success(`${transferNumber} received`, { description: state.message });
+    } else if (state.status === "error") {
+      toast.error(`${transferNumber} not received`, { description: state.message });
+    }
+  }, [state, transferNumber]);
+
   return (
-    <div className="grid gap-4 lg:grid-cols-3">
+    <form action={formAction} className="grid gap-4 lg:grid-cols-3">
+      <input type="hidden" name="intent" value="receive" />
+      <input type="hidden" name="transferId" value={transferId} />
+      <input type="hidden" name="locationId" value={locationId} />
+      <input type="hidden" name="note" value={note} />
+      <input type="hidden" name="lines" value={payload} />
+
       <div className="grid content-start gap-4 lg:col-span-2">
         <Section
           title="Count what arrived"
@@ -215,7 +249,7 @@ export function ReceivePanel({
                 </SelectContent>
               </Select>
               <p className="text-caption text-muted-foreground">
-                Damaged units go to the quarantine bay regardless of this setting.
+                Damaged units are booked to the damaged balance at this location.
               </p>
             </div>
 
@@ -296,29 +330,45 @@ export function ReceivePanel({
               </p>
               <p className="mt-1 text-caption leading-relaxed text-status-warning/90">
                 Short lines stay outstanding and the transfer remains partially received. Damaged
-                units are booked to quarantine, not to sellable stock, and raise a discrepancy for
-                the source site to answer.
+                units are booked to the damaged balance, not to sellable stock, and raise a
+                discrepancy for the source site to answer.
               </p>
             </div>
           </div>
         )}
 
         <Button
+          type="submit"
           size="sm"
           className="h-8"
-          disabled={totalCounted === 0 || invalid.length > 0 || noteMissing}
-          onClick={() =>
-            toast.success(`${transferNumber} received`, {
-              description: `${qty(totalCounted - totalDamaged)} units into stock at ${destination}${
-                totalDamaged > 0 ? `, ${qty(totalDamaged)} to quarantine` : ""
-              }. Each line is written to the movement ledger.`,
-            })
-          }
+          disabled={pending || totalCounted === 0 || invalid.length > 0 || noteMissing}
         >
           <PackageCheck className="size-3.5" aria-hidden />
-          Confirm receipt
+          {pending ? "Confirming…" : "Confirm receipt"}
         </Button>
+
+        {state.status === "error" && (
+          <p className="text-caption text-destructive" role="alert">
+            {state.message}
+          </p>
+        )}
+
+        {state.status === "success" && (
+          <Section title="Booked in" description={state.message}>
+            <div className="grid gap-2">
+              <StatusBadge status={state.transferStatus} size="md" />
+              <ul className="grid gap-1 text-caption text-muted-foreground">
+                {state.lines.map((l) => (
+                  <li key={l.sku} className="text-code">
+                    {l.sku}: +{qty(l.qty)}
+                    {typeof l.onHand === "number" && ` → ${qty(l.onHand)} on hand`}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </Section>
+        )}
       </div>
-    </div>
+    </form>
   );
 }

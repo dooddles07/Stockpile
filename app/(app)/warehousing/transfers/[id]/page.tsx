@@ -10,6 +10,7 @@ import { SimpleTable } from "@/components/record/simple-table";
 import { Timeline, type TimelineEntry } from "@/components/record/timeline";
 import { ApprovalActions } from "@/components/record/approval-actions";
 import { ReceivePanel } from "./receive-panel";
+import { DispatchButton } from "./transfer-actions";
 import { WorkflowStepper } from "@/components/status/workflow-stepper";
 import { StatusBadge } from "@/components/status/status-badge";
 import { EmptyState, PermissionDenied } from "@/components/states";
@@ -299,6 +300,7 @@ export default async function TransferDetailPage({
 
   const receiveTab = receivable ? (
     <ReceivePanel
+      transferId={transfer.id}
       transferNumber={transfer.number}
       destination={to?.code ?? "—"}
       locations={destinationLocations}
@@ -388,6 +390,9 @@ export default async function TransferDetailPage({
                 <Download className="size-3.5" aria-hidden />
                 Export
               </ActionButton>
+            )}
+            {transfer.status === "approved" && can(role, "transfers", "edit") && (
+              <DispatchButton transferId={transfer.id} />
             )}
             {awaitingDecision && canApprove && (
               <ApprovalActions
