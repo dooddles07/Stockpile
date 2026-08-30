@@ -59,6 +59,14 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
+      # Ticket 09's two below-the-UI checks — concurrency serialization and the
+      # event/projection reconciliation invariant. ADR-0009 named these as the
+      # gap Playwright cannot cover. Runs against the seeded "ci" branch.
+      - name: Choke-point checks
+        run: npm run check:stock
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
       - name: Run Playwright suite
         run: npm run test:e2e
         env:
