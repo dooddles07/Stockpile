@@ -71,6 +71,13 @@
       "when": 1787973000000,
       "tag": "0009_events_append_only",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1788104359565,
+      "tag": "0010_flawless_frank_castle",
+      "breakpoints": true
     }
   ]
 }

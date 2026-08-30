@@ -638,6 +638,9 @@ export interface AutomationRun {
   affected: number;
   durationMs: number;
   message: string;
+  /** The Actor the run executed as — always the system Actor (`"system"`);
+   *  automation acts as a designated Actor, not anonymously (ADR-0004). */
+  actorId: string;
 }
 
 export interface Integration {

@@ -1857,6 +1857,7 @@ const automationRuns: AutomationRun[] = [];
         outcome,
         affected: outcome === "skipped" ? 0 : r.int(1, 240),
         durationMs: r.int(40, 9400),
+        actorId: "system",
         message:
           outcome === "failed"
             ? "Downstream connector returned an error."

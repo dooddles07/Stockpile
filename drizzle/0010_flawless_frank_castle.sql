@@ -1,0 +1,1 @@
+ALTER TABLE "automation_runs" ADD COLUMN "actor_id" text DEFAULT 'system' NOT NULL;

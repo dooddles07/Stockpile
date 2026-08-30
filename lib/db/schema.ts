@@ -623,6 +623,14 @@ export const automationRuns = pgTable("automation_runs", {
   affected: integer("affected").notNull(),
   durationMs: integer("duration_ms").notNull(),
   message: text("message").notNull(),
+  /**
+   * The Actor the run executed as — always the system Actor (`"system"`,
+   * `SYSTEM_ACTOR` in `lib/domain/stock.ts`). Automation acts as a designated
+   * Actor rather than anonymously (ADR-0004, ticket 17). Defaulted so the run
+   * rows the seed loads — written before this column existed — read back
+   * attributed rather than null.
+   */
+  actorId: text("actor_id").notNull().default("system"),
 });
 
 export const integrations = pgTable("integrations", {
