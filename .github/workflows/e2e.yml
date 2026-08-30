@@ -111,6 +111,15 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
+      # Ticket 15: the stock-count completion domain function refuses a Role that
+      # reaches it directly, a completion that fails on one line leaves no
+      # corrections at all, and a count with no variances appends no Movements.
+      # Playwright only ever hits the count sheet.
+      - name: Stock-count checks
+        run: npm run check:counts
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
       - name: Run Playwright suite
         run: npm run test:e2e
         env:
