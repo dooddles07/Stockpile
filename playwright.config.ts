@@ -3,11 +3,19 @@ import { defineConfig, devices } from "@playwright/test";
 const PORT = 3100;
 
 /**
- * Smoke suite against the generated dataset (lib/data/store.ts, seeded via
- * lib/data/rng.ts). The dataset is generated once per process from a fixed
- * seed and a fixed `NOW` (lib/data/rng.ts), which is what makes the exact
- * values asserted in e2e/ stable. Changing the seed, `NOW`, or the catalog
- * fixtures in lib/data/catalog.ts invalidates these recorded assertions.
+ * The suite runs against a freshly seeded Neon branch (CI seeds before every
+ * run; see `.github/workflows/e2e.yml`). Exact rendered values — totals, row
+ * counts, row order — are stable because the seed is deterministic from a fixed
+ * generator seed and `NOW`; changing either invalidates the recorded assertions.
+ *
+ * Two kinds of spec:
+ *   - `*.spec.ts`        read-only, safe to run in parallel (the `read` project).
+ *   - `*.write.spec.ts`  exercise the write path, so they mutate stock. They run
+ *                        in the `write` project, which `dependsOn` `read` — so
+ *                        every read assertion is taken against the untouched
+ *                        seed, and only then do the write specs run (each one
+ *                        restores the stock it spends, mirroring
+ *                        `lib/domain/stock.checks.ts`).
  */
 export default defineConfig({
   testDir: "./e2e",
@@ -22,7 +30,22 @@ export default defineConfig({
     baseURL: `http://localhost:${PORT}`,
     trace: "on-first-retry",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    {
+      name: "read",
+      testIgnore: /\.write\.spec\.ts$/,
+      use: { ...devices["Desktop Chrome"] },
+    },
+    {
+      name: "write",
+      testMatch: /\.write\.spec\.ts$/,
+      dependencies: ["read"],
+      // A write drives a form, a server action and an interactive transaction;
+      // the first one after the read project can also wait on a Neon cold start.
+      timeout: 60_000,
+      use: { ...devices["Desktop Chrome"] },
+    },
+  ],
   webServer: {
     command: `npm run dev -- --port ${PORT}`,
     url: `http://localhost:${PORT}`,
