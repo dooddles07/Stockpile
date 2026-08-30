@@ -4,6 +4,8 @@ import * as React from "react";
 import { PackageCheck, ScanLine, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 
+import { submitGoodsReceipt, type GoodsReceiptFormState } from "./actions";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -41,19 +43,24 @@ export interface ReceiptLine {
  * recordable per line and each is called out before the operator confirms.
  * Batch, serial and expiry inputs appear only for the SKUs that track them.
  */
+const INITIAL: GoodsReceiptFormState = { status: "idle" };
+
 export function GoodsReceipt({
+  purchaseOrderId,
   orderNumber,
   supplier,
   destination,
   lines,
   locations,
 }: {
+  purchaseOrderId: string;
   orderNumber: string;
   supplier: string;
   destination: string;
   lines: ReceiptLine[];
   locations: { id: string; code: string }[];
 }) {
+  const [state, formAction, pending] = React.useActionState(submitGoodsReceipt, INITIAL);
   const outstanding = React.useMemo(
     () =>
       Object.fromEntries(
@@ -105,10 +112,38 @@ export function GoodsReceipt({
   const blocking = resolved.filter((r) => r.invalidReject || r.missingLot || r.missingExpiry);
   const noteRequired = discrepancies.length > 0;
   const noteMissing = noteRequired && note.trim().length === 0;
-  const canConfirm = totalReceived > 0 && blocking.length === 0 && !noteMissing;
+  const canConfirm = !pending && totalAccepted > 0 && blocking.length === 0 && !noteMissing;
+
+  // What the server action books in: one entry per line with units accepted
+  // into stock (received minus rejected). Rejected units go to quarantine and a
+  // purchase return — that is ticket 16, not booked here.
+  const payload = JSON.stringify(
+    resolved
+      .filter((r) => r.accepted > 0)
+      .map((r) => ({
+        lineId: r.line.id,
+        receivedQty: r.accepted,
+        locationId,
+        lotNumber: (lots[r.line.id] ?? "").trim() || null,
+      })),
+  );
+
+  const lastHandled = React.useRef<GoodsReceiptFormState>(INITIAL);
+  React.useEffect(() => {
+    if (state === lastHandled.current) return;
+    lastHandled.current = state;
+    if (state.status === "success") {
+      toast.success(`${orderNumber} received`, { description: state.message });
+    } else if (state.status === "error") {
+      toast.error(`${orderNumber} not received`, { description: state.message });
+    }
+  }, [state, orderNumber]);
 
   return (
-    <div className="grid gap-4 lg:grid-cols-3">
+    <form action={formAction} className="grid gap-4 lg:grid-cols-3">
+      <input type="hidden" name="purchaseOrderId" value={purchaseOrderId} />
+      <input type="hidden" name="lines" value={payload} />
+      <input type="hidden" name="note" value={note} />
       <div className="grid content-start gap-4 lg:col-span-2">
         <Section
           title="Check in the delivery"
@@ -397,20 +432,9 @@ export function GoodsReceipt({
           </div>
         )}
 
-        <Button
-          size="sm"
-          className="h-8"
-          disabled={!canConfirm}
-          onClick={() =>
-            toast.success(`${orderNumber} received`, {
-              description: `${qty(totalAccepted)} units into stock at ${destination}${
-                totalRejected > 0 ? `, ${qty(totalRejected)} quarantined` : ""
-              }. Each line is written to the movement ledger.`,
-            })
-          }
-        >
+        <Button type="submit" size="sm" className="h-8" disabled={!canConfirm}>
           <PackageCheck className="size-3.5" aria-hidden />
-          Confirm receipt
+          {pending ? "Confirming…" : "Confirm receipt"}
         </Button>
 
         {blocking.length > 0 && (
@@ -419,7 +443,29 @@ export function GoodsReceipt({
             number or expiry date before it can be put away.
           </p>
         )}
+
+        {state.status === "error" && (
+          <p className="text-caption text-destructive" role="alert">
+            {state.message}
+          </p>
+        )}
+
+        {state.status === "success" && (
+          <Section title="Booked in" description={state.message}>
+            <div className="grid gap-2">
+              <StatusBadge status={state.poStatus} size="md" />
+              <ul className="grid gap-1 text-caption text-muted-foreground">
+                {state.lines.map((l) => (
+                  <li key={l.sku} className="text-code">
+                    {l.sku}: +{qty(l.receivedQty)} → {qty(l.onHand)} on hand ({qty(l.fulfilled)} of{" "}
+                    {qty(l.ordered)} received)
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </Section>
+        )}
       </div>
-    </div>
+    </form>
   );
 }

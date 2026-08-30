@@ -10,6 +10,7 @@ import { SimpleTable } from "@/components/record/simple-table";
 import { Timeline, type TimelineEntry } from "@/components/record/timeline";
 import { ApprovalActions } from "@/components/record/approval-actions";
 import { GoodsReceipt } from "./goods-receipt";
+import { isReceivable } from "@/lib/domain/receiving";
 import { WorkflowStepper } from "@/components/status/workflow-stepper";
 import { StatusBadge } from "@/components/status/status-badge";
 import { EmptyState, PermissionDenied } from "@/components/states";
@@ -75,7 +76,7 @@ export default async function PurchaseOrderDetailPage({
   const warehouse = warehouseById.get(po.warehouseId);
   const canApprove = can(role, "purchase-orders", "approve");
   const awaitingDecision = po.status === "submitted";
-  const receivable = ["ordered", "partially-received"].includes(po.status);
+  const receivable = isReceivable(po.status);
 
   const units = po.lines.reduce((s, l) => s + l.quantity, 0);
   const receivedUnits = po.lines.reduce((s, l) => s + l.fulfilled, 0);
@@ -372,6 +373,7 @@ export default async function PurchaseOrderDetailPage({
 
   const receiveTab = receivable ? (
     <GoodsReceipt
+      purchaseOrderId={po.id}
       orderNumber={po.number}
       supplier={supplier?.name ?? "the supplier"}
       destination={warehouse?.code ?? "—"}
