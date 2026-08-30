@@ -64,6 +64,13 @@
       "when": 1787972558164,
       "tag": "0008_redundant_blob",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1787973000000,
+      "tag": "0009_events_append_only",
+      "breakpoints": true
     }
   ]
 }

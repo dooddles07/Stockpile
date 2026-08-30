@@ -47,6 +47,7 @@ import {
   categories,
   countLines,
   customers,
+  events,
   integrations,
   locations,
   movements,
@@ -80,9 +81,11 @@ export async function seed() {
 
     // One statement: RESTART IDENTITY resets the generated `seq` columns so a
     // re-seed reproduces the same seq values; CASCADE covers the foreign keys
-    // between the tables.
+    // between the tables. `events` is append-only in normal operation (ticket
+    // 09's trigger), but TRUNCATE is the sanctioned reset — like ADR-0010's
+    // daily demo reset — and every CI run starts from an empty stream.
     await db.execute(
-      sql`TRUNCATE TABLE ${tasks}, ${notifications}, ${automationRuns}, ${automationRules}, ${auditEntries}, ${integrations}, ${roles}, ${users}, ${countLines}, ${stockCounts}, ${adjustmentLines}, ${adjustments}, ${movements}, ${transferLines}, ${transfers}, ${salesOrderLines}, ${salesOrders}, ${customers}, ${returnLines}, ${returns}, ${purchaseOrderLines}, ${purchaseOrders}, ${suppliers}, ${stockRows}, ${products}, ${locations}, ${warehouses}, ${categories} RESTART IDENTITY CASCADE`,
+      sql`TRUNCATE TABLE ${events}, ${tasks}, ${notifications}, ${automationRuns}, ${automationRules}, ${auditEntries}, ${integrations}, ${roles}, ${users}, ${countLines}, ${stockCounts}, ${adjustmentLines}, ${adjustments}, ${movements}, ${transferLines}, ${transfers}, ${salesOrderLines}, ${salesOrders}, ${customers}, ${returnLines}, ${returns}, ${purchaseOrderLines}, ${purchaseOrders}, ${suppliers}, ${stockRows}, ${products}, ${locations}, ${warehouses}, ${categories} RESTART IDENTITY CASCADE`,
     );
 
     // FK order: categories -> warehouses -> locations -> products -> stock_rows,
