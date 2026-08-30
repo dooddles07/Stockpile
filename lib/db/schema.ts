@@ -30,6 +30,7 @@ import {
 import type {
   AccessLevel,
   AdjustmentReason,
+  AppNotification as AppNotificationModel,
   ApprovalEvent,
   Attachment,
   AuditEntry as AuditEntryModel,
@@ -46,6 +47,7 @@ import type {
   Role,
   SalesOrder as SalesOrderModel,
   Supplier as SupplierModel,
+  TaskItem as TaskItemModel,
   User as UserModel,
   Warehouse as WarehouseModel,
   WarehouseType,
@@ -632,6 +634,48 @@ export const integrations = pgTable("integrations", {
   lastSyncAt: text("last_sync_at"),
   recordsSynced: integer("records_synced").notNull(),
   description: text("description").notNull(),
+});
+
+/* --------------------------------------------------- notifications & tasks ---
+ *
+ * Ticket 08. The last two things a repository function still read from the
+ * generated dataset — the notification inbox and the operator task list. Both
+ * are flat lists with no state machine, so `category` / `type` / `priority` /
+ * `status` stay `text` narrowed to their union rather than Postgres enums (same
+ * treatment as `integrations.category`). `seq` is an identity column like
+ * `movements.seq`: the generator emits notifications newest-first and the task
+ * list in display order, the seed inserts in that array order, and `ORDER BY
+ * seq` reproduces it. People ids (`actor_id`, `assigned_to`) carry no FK,
+ * matching `movements.user_id` and the Document tables.
+ */
+
+export const notifications = pgTable("notifications", {
+  seq: integer("seq").generatedAlwaysAsIdentity().primaryKey(),
+  /** The dataset's own id (`NTF-001`); `seq` is what fixes row order. */
+  id: text("id").notNull(),
+  ts: text("ts").notNull(),
+  category: text("category").$type<AppNotificationModel["category"]>().notNull(),
+  priority: text("priority").$type<AppNotificationModel["priority"]>().notNull(),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  href: text("href").notNull(),
+  read: boolean("read").notNull(),
+  /** Null for system notifications; a User id otherwise. */
+  actorId: text("actor_id"),
+});
+
+export const tasks = pgTable("tasks", {
+  seq: integer("seq").generatedAlwaysAsIdentity().primaryKey(),
+  /** The dataset's own id (`TSK-001`); `seq` is what fixes row order. */
+  id: text("id").notNull(),
+  title: text("title").notNull(),
+  detail: text("detail").notNull(),
+  type: text("type").$type<TaskItemModel["type"]>().notNull(),
+  priority: text("priority").$type<TaskItemModel["priority"]>().notNull(),
+  dueAt: text("due_at").notNull(),
+  assignedTo: text("assigned_to").notNull(),
+  href: text("href").notNull(),
+  status: text("status").$type<TaskItemModel["status"]>().notNull(),
 });
 
 /* --------------------------------------------- movements, adjustments, counts ---

@@ -19,10 +19,11 @@
  * loaded after the sales area — they reference only warehouses, products and
  * locations, all seeded earlier.
  * Ticket 06 adds the admin area — `users`, `roles`, `integrations`,
- * `audit_entries`, `automation_rules` and `automation_runs` — loaded last;
- * audit entries and rules key into `users`, and roles carry their whole
- * permission matrix. Notifications and tasks still render from the in-memory
- * dataset until a later ticket moves them.
+ * `audit_entries`, `automation_rules` and `automation_runs`; audit entries and
+ * rules key into `users`, and roles carry their whole permission matrix.
+ * Ticket 08 adds the last two — `notifications` and `tasks` — loaded last. They
+ * reference nothing, and with them the generated dataset is read here and
+ * nowhere else in the codebase.
  *
  * Its own Pool, not `lib/db/client.ts`: that module is `server-only` and this
  * runs under plain Node.
@@ -49,6 +50,7 @@ import {
   integrations,
   locations,
   movements,
+  notifications,
   products,
   purchaseOrderLines,
   purchaseOrders,
@@ -60,6 +62,7 @@ import {
   stockCounts,
   stockRows,
   suppliers,
+  tasks,
   transferLines,
   transfers,
   users,
@@ -79,7 +82,7 @@ export async function seed() {
     // re-seed reproduces the same seq values; CASCADE covers the foreign keys
     // between the tables.
     await db.execute(
-      sql`TRUNCATE TABLE ${automationRuns}, ${automationRules}, ${auditEntries}, ${integrations}, ${roles}, ${users}, ${countLines}, ${stockCounts}, ${adjustmentLines}, ${adjustments}, ${movements}, ${transferLines}, ${transfers}, ${salesOrderLines}, ${salesOrders}, ${customers}, ${returnLines}, ${returns}, ${purchaseOrderLines}, ${purchaseOrders}, ${suppliers}, ${stockRows}, ${products}, ${locations}, ${warehouses}, ${categories} RESTART IDENTITY CASCADE`,
+      sql`TRUNCATE TABLE ${tasks}, ${notifications}, ${automationRuns}, ${automationRules}, ${auditEntries}, ${integrations}, ${roles}, ${users}, ${countLines}, ${stockCounts}, ${adjustmentLines}, ${adjustments}, ${movements}, ${transferLines}, ${transfers}, ${salesOrderLines}, ${salesOrders}, ${customers}, ${returnLines}, ${returns}, ${purchaseOrderLines}, ${purchaseOrders}, ${suppliers}, ${stockRows}, ${products}, ${locations}, ${warehouses}, ${categories} RESTART IDENTITY CASCADE`,
     );
 
     // FK order: categories -> warehouses -> locations -> products -> stock_rows,
@@ -155,6 +158,12 @@ export async function seed() {
     await db.insert(automationRules).values(dataset.automationRules);
     await db.insert(automationRuns).values(dataset.automationRuns);
 
+    // Notifications and tasks (ticket 08). Flat lists, `seq` generated — insert
+    // in array order so ORDER BY seq reproduces the generator's order (the inbox
+    // is already newest-first, the task list is in display order).
+    await db.insert(notifications).values(dataset.notifications);
+    await db.insert(tasks).values(dataset.tasks);
+
     // The permission engine reads these rows in the app; prove a round trip
     // through Postgres reproduces the matrix before the Playwright suite bets
     // on it. super-admin is `manage` everywhere; auditor cannot write anywhere.
@@ -201,6 +210,8 @@ export async function seed() {
       ["audit_entries", auditEntries, dataset.auditEntries.length],
       ["automation_rules", automationRules, dataset.automationRules.length],
       ["automation_runs", automationRuns, dataset.automationRuns.length],
+      ["notifications", notifications, dataset.notifications.length],
+      ["tasks", tasks, dataset.tasks.length],
     ] as const;
     const counts: Record<string, number> = {};
     for (const [name, table, expected] of checks) {

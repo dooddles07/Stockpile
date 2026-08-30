@@ -57,6 +57,13 @@
       "when": 1787970173664,
       "tag": "0007_faithful_excalibur",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1787972558164,
+      "tag": "0008_redundant_blob",
+      "breakpoints": true
     }
   ]
 }
