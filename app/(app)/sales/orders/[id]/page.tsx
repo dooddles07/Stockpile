@@ -7,6 +7,7 @@ import { RecordHeader, StatStrip } from "@/components/record/record-header";
 import { DetailTabs } from "@/components/record/detail-tabs";
 import { FieldGrid, Section, StatTile } from "@/components/record/field-grid";
 import { SimpleTable } from "@/components/record/simple-table";
+import { ReturnsAgainstOrder } from "@/components/record/returns-against-order";
 import { Timeline, type TimelineEntry } from "@/components/record/timeline";
 import { FulfilmentPanel } from "./fulfilment-panel";
 import { FulfilmentActionButton } from "./fulfilment-actions";
@@ -352,34 +353,7 @@ export default async function SalesOrderDetailPage({
           )}
         </Section>
 
-        {returns.length > 0 && (
-          <Section title="Returns against this order">
-            <ul className="grid gap-2">
-              {returns.map((r) => (
-                <li key={r.id}>
-                  <Link
-                    href={`/sales/returns/${r.id}`}
-                    className="flex items-start justify-between gap-3 rounded-md border p-2.5 transition-colors hover:bg-surface-hover"
-                  >
-                    <span className="grid min-w-0 gap-0.5">
-                      <span className="flex items-center gap-1.5">
-                        <Undo2 className="size-3 text-muted-foreground" aria-hidden />
-                        <span className="text-code font-medium">{r.number}</span>
-                      </span>
-                      <span className="truncate text-caption text-muted-foreground">{r.reason}</span>
-                    </span>
-                    <span className="grid shrink-0 justify-items-end gap-1">
-                      <StatusBadge status={r.status} />
-                      <span className="text-caption text-muted-foreground">
-                        {money(r.refundTotal)}
-                      </span>
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </Section>
-        )}
+        <ReturnsAgainstOrder returns={returns} basePath="/sales/returns" />
 
         <Section title="History" description="Every step this order has been through.">
           <Timeline entries={timeline} />

@@ -7,6 +7,7 @@ import { RecordHeader, StatStrip } from "@/components/record/record-header";
 import { DetailTabs } from "@/components/record/detail-tabs";
 import { FieldGrid, Section, StatTile } from "@/components/record/field-grid";
 import { SimpleTable } from "@/components/record/simple-table";
+import { ReturnsAgainstOrder } from "@/components/record/returns-against-order";
 import { Timeline, type TimelineEntry } from "@/components/record/timeline";
 import { ApprovalActions } from "@/components/record/approval-actions";
 import { GoodsReceipt } from "./goods-receipt";
@@ -14,7 +15,7 @@ import { isReceivable } from "@/lib/domain/receiving";
 import { WorkflowStepper } from "@/components/status/workflow-stepper";
 import { StatusBadge } from "@/components/status/status-badge";
 import { EmptyState, PermissionDenied } from "@/components/states";
-import { purchaseOrders as allPurchaseOrders } from "@/lib/repo/documents";
+import { purchaseOrders as allPurchaseOrders, returns as allReturns } from "@/lib/repo/documents";
 import {
   indexById,
   locations as allLocations,
@@ -74,6 +75,9 @@ export default async function PurchaseOrderDetailPage({
 
   const supplier = supplierById.get(po.supplierId);
   const warehouse = warehouseById.get(po.warehouseId);
+  const returns = (await allReturns()).filter(
+    (r) => r.kind === "purchase" && r.sourceOrderId === po.id,
+  );
   const canApprove = can(role, "purchase-orders", "approve");
   const awaitingDecision = po.status === "submitted";
   const receivable = isReceivable(po.status);
@@ -320,6 +324,8 @@ export default async function PurchaseOrderDetailPage({
             </div>
           )}
         </Section>
+
+        <ReturnsAgainstOrder returns={returns} basePath="/purchasing/returns" />
 
         <Section
           title="Attachments"

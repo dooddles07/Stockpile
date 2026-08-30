@@ -23,6 +23,8 @@ import { can } from "@/lib/auth/permissions";
 import { date, dateTime, money, plural, qty } from "@/lib/format";
 import type { ModuleKey } from "@/lib/types";
 import { ActionButton } from "@/components/actions/action-button";
+import { isProcessableReturn } from "@/lib/domain/returns";
+import { ProcessReturnButton } from "./process-return-button";
 
 export async function generateMetadata({
   params,
@@ -108,6 +110,13 @@ export default async function ReturnDetailPage({
         }
         actions={
           <>
+            {can(role, moduleKey, "edit") && isProcessableReturn(doc.status) && (
+              <ProcessReturnButton
+                returnId={doc.id}
+                label={isPurchase ? "Send back to supplier" : "Book goods back in"}
+                pendingLabel="Processing…"
+              />
+            )}
             <ActionButton
               variant="outline" size="sm" className="h-8"
               feedback="Sent to printer"
