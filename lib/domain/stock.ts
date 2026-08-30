@@ -305,6 +305,41 @@ export async function ensureStockHolding(
 }
 
 /**
+ * Stamp the last-counted timestamp on a set of Stock Rows (ticket 15). This is
+ * the one write to `stock_rows` that is neither a balance nor row structure — it
+ * is count metadata (CONTEXT.md: what tells an inventory manager where to count
+ * next) — and it lives here so `stock_rows` is still only ever written from this
+ * one module. A holding with no row is skipped; `completeStockCount` calls
+ * `ensureStockHolding` first, so every covered holding already exists.
+ */
+export async function markCounted(
+  db: StockDb,
+  holdings: {
+    productId: string;
+    warehouseId: string;
+    locationId: string;
+    lotNumber: string | null;
+  }[],
+  at: string,
+): Promise<void> {
+  for (const h of holdings) {
+    await db
+      .update(schema.stockRows)
+      .set({ lastCountedAt: at })
+      .where(
+        and(
+          eq(schema.stockRows.productId, h.productId),
+          eq(schema.stockRows.warehouseId, h.warehouseId),
+          eq(schema.stockRows.locationId, h.locationId),
+          h.lotNumber == null
+            ? isNull(schema.stockRows.lotNumber)
+            : eq(schema.stockRows.lotNumber, h.lotNumber),
+        ),
+      );
+  }
+}
+
+/**
  * The nine movement types as a runtime list — the Event types the
  * reconciliation check replays (the `events` table will later also hold
  * document events, which it must skip). `satisfies` plus the `Exclude` guard
