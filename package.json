@@ -13,7 +13,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx lib/db/seed.ts",
     "check:stock": "tsx lib/domain/stock.checks.ts",
-    "check:adjustments": "tsx lib/domain/adjustments.checks.ts"
+    "check:adjustments": "tsx lib/domain/adjustments.checks.ts",
+    "check:reference": "tsx lib/domain/reference.checks.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

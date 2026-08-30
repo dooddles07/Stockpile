@@ -75,6 +75,14 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
+      # Ticket 11: reference-data domain functions refuse a Role that reaches
+      # them directly, and the foreign-key constraints — not app code — stop a
+      # depended-on Category or Warehouse being deleted.
+      - name: Reference-data checks
+        run: npm run check:reference
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
       - name: Run Playwright suite
         run: npm run test:e2e
         env:
