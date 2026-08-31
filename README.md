@@ -2,7 +2,7 @@
 
 An inventory management platform for businesses that hold stock across several sites — the full lifecycle from purchase order to shelf to shipment, with the movement ledger, approvals and audit trail that make the numbers defensible.
 
-The inventory screens read from Postgres (Neon), loaded from a deterministic seed. The rest of the product still renders from the in-memory dataset that seed is generated from, and is being moved across table by table.
+The data lives in Postgres (Neon) — reads and writes both hit the database. Stock changes and the documents that cause them are event-sourced: the movement ledger is an append-only fact and the balances on every screen are projections rebuilt from it. The deterministic dataset that used to render the screens at runtime is now the seed that loads that database.
 
 ## What it covers
 
@@ -21,13 +21,15 @@ The inventory screens read from Postgres (Neon), loaded from a deterministic see
 
 - **Roles are real.** Seven roles drive a `can(role, module, action)` permission engine. Switching role in the top bar changes navigation, page actions, row actions and denied states — an Auditor cannot reach a single write action anywhere in the product.
 - **One table component.** Every list in the app is the same TanStack-based `<DataTable>`: sticky header, column resize and visibility, faceted filters, multi-sort, bulk selection, density, saved views, CSV export that matches what is on screen, and row virtualization past 60 rows.
+- **The write path is real.** Receiving a purchase order, shipping a sales order, moving stock between warehouses, adjustments, damage, stock counts and returns in both directions all commit through one choke point (`applyStockChange`): inside a single transaction it locks the stock row, appends an event and updates the projection. On-hand can never be driven negative and never disagrees with the replayed event stream.
+- **Automation runs after commit.** When an event commits, matching automation rules evaluate in-process in the same request — no scheduler — and each evaluation is recorded as an attributable run that can fail without failing the operation that triggered it.
 - **The ledger reconciles.** Each product+site movement chain is anchored to today's on-hand, so the newest row's closing balance is the number the stock pages show, and no historic balance goes negative.
 - **Every state is designed.** Loading skeletons, empty states, error boundaries, permission-denied pages and an offline banner ship for every route.
 - **Accessible by default.** Status is never colour alone, focus is visible at every stop, dialogs trap and restore focus, and text meets 4.5:1 against both surface tones in light and dark.
 
 ## Stack
 
-Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS v4 · shadcn/ui on Base UI · TanStack Table · Recharts · react-hook-form + Zod · nuqs · Lucide
+Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS v4 · shadcn/ui on Base UI · Drizzle ORM + Neon Postgres · TanStack Table · Recharts · react-hook-form + Zod · nuqs · Lucide · Playwright
 
 ## Running it
 
@@ -39,7 +41,7 @@ npm run db:seed                    # load the deterministic dataset
 npm run dev                        # http://localhost:3000
 ```
 
-`db:seed` truncates and reloads the five inventory tables; it is safe to re-run.
+`db:seed` truncates and reloads every table; it is safe to re-run.
 
 ```bash
 npm run build    # production build
@@ -54,17 +56,23 @@ app/(app)        desktop application shell and routes
 app/(operator)   handheld operator surface
 components/      shell, data-table, record, charts, states, status, ui primitives
 lib/auth         roles and the permission engine
-lib/data         seeded deterministic dataset
-lib/repo         query layer between the data and the pages
+lib/db           Drizzle schema, the Neon client, and the seed script
+lib/domain       the write path: the stock choke point and one function per flow
+lib/repo         read query layer over Postgres, shaped for the pages
+lib/data         the deterministic dataset generator — now the seed source
 ```
 
-`lib/repo` sits between the fixtures and the pages, so swapping in a real database is one file per entity rather than a rewrite of the screens.
+`lib/repo` reads; `lib/domain` writes. A server action validates its input with Zod and calls a domain function — no business logic lives in an action (ADR-0005). Every mutation takes the acting user as its first argument and checks permission before touching data (ADR-0004).
 
 ## Data
 
-The dataset is generated from a seeded PRNG against a fixed clock, so it is identical on every machine and every render — no hydration mismatches, and screenshots stay comparable. It holds roughly 270 products across 9 categories, 6 warehouses with ~180 bin locations, 24 suppliers, 140 purchase orders, 260 sales orders, 48 transfers, 90 adjustments, 14 counts, 38 users and over 6,000 movement ledger rows.
+The dataset is generated from a seeded PRNG against a fixed clock, so it loads identically on every machine — the Playwright suite depends on that determinism, and the demo reset in ADR-0010 is this same seed run again. It holds roughly 270 products across 9 categories, 6 warehouses with ~180 bin locations, 24 suppliers, 140 purchase orders, 260 sales orders, 48 transfers, 90 adjustments, 14 counts, 38 users and over 6,000 movement ledger rows. `npm run db:seed` truncates every table and reloads it, so the database returns to that known state on demand.
 
-Writes are not persisted: submitting a form validates, reports what would happen, and returns to the record.
+Writes are persisted: a form submission commits an event and updates the projection in one transaction.
+
+## Architecture
+
+The design decisions and their reasoning live as numbered ADRs in [`docs/adr/`](docs/adr/) — the event-sourcing boundary, one Postgres for both the stream and its projections, stock concurrency, and the zero-recurring-cost constraint that drives most of the rest. [`CONTEXT.md`](CONTEXT.md) is the domain glossary: Movement, Stock Row, Document, Event, Projection, Actor, Automation Rule, Automation Run.
 
 ## Licence
 
