@@ -33,6 +33,7 @@ import {
   createCategory,
   deleteCategory,
   deleteWarehouse,
+  updateCategory,
   updateProduct,
 } from "@/lib/domain/reference";
 import type { Actor } from "@/lib/domain/stock";
@@ -164,6 +165,55 @@ async function foreignKeysProtectDependents(db: Db): Promise<void> {
   console.log(`  foreign keys: category ${withProducts.id} and warehouse ${withStock.id} refused deletion while depended on`);
 }
 
+/**
+ * `assertSlugFree` and the self-parent guard in `updateCategory` had no
+ * coverage: a browser test never drives two categories to the same slug or
+ * points a category at itself, so nothing had exercised either throw. This
+ * creates two real categories and drives both guards directly.
+ */
+async function categoryGuardsRejectConflicts(db: Db): Promise<void> {
+  const admin = await actorForRole(db, "super-admin");
+  const suffix = Date.now().toString(36);
+  const nameA = `Checks Slug Guard ${suffix}`;
+  const nameB = `Checks Slug Guard Two ${suffix}`;
+
+  const idA = await createCategory(admin, { name: nameA, parentId: null, description: "checks" }, db);
+  const idB = await createCategory(admin, { name: nameB, parentId: null, description: "checks" }, db);
+
+  try {
+    const before = await categoryCount(db);
+
+    // A different name that slugifies to the same slug as A must not silently merge.
+    await assert.rejects(
+      () => createCategory(admin, { name: `${nameA}!!`, parentId: null, description: "checks" }, db),
+      (err: unknown) => err instanceof ReferenceWriteError && err.code === "conflict",
+      "createCategory must throw ReferenceWriteError('conflict') for a slug already in use",
+    );
+
+    // Renaming B onto A's slug must be rejected the same way.
+    await assert.rejects(
+      () => updateCategory(admin, idB, { name: `${nameA}!!`, parentId: null, description: "checks" }, db),
+      (err: unknown) => err instanceof ReferenceWriteError && err.code === "conflict",
+      "updateCategory must throw ReferenceWriteError('conflict') when renamed onto another category's slug",
+    );
+
+    // A category cannot become its own parent.
+    await assert.rejects(
+      () => updateCategory(admin, idA, { name: nameA, parentId: idA, description: "checks" }, db),
+      (err: unknown) => err instanceof ReferenceWriteError && err.code === "conflict",
+      "updateCategory must throw ReferenceWriteError('conflict') when parentId equals its own id",
+    );
+
+    const after = await categoryCount(db);
+    assert.equal(after, before, `a refused write changed the category count by ${after - before}; expected 0`);
+
+    console.log(`  category guards: slug clash and self-parent both refused, nothing written (${after} categories)`);
+  } finally {
+    await deleteCategory(admin, idA, db);
+    await deleteCategory(admin, idB, db);
+  }
+}
+
 async function main() {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) throw new Error("DATABASE_URL is not set");
@@ -177,6 +227,7 @@ async function main() {
     console.log("reference-data checks:");
     await forbiddenRoleIsRefused(db);
     await foreignKeysProtectDependents(db);
+    await categoryGuardsRejectConflicts(db);
     console.log("ok");
   } finally {
     await pool.end();
