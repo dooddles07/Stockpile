@@ -13,3 +13,13 @@ Correctness is verified by driving the real UI through real flows with Playwrigh
 The reconciliation invariant from ADR-0006 (projected `onHand` equals the replayed event sum) is also not covered by end-to-end tests and is worth asserting somewhere.
 
 `lib/import/validate.test.ts` exists but `package.json` has no test runner, so it does not currently run.
+
+## Amendment: a below-the-UI check tier now closes those gaps
+
+The write-path tickets (09–17) each ship a check script alongside the flow — `lib/domain/*.checks.ts`, run with `npm run check:*` under `tsx` with plain `assert` and no test framework. CI (`.github/workflows/e2e.yml`) runs all of them against the seeded "ci" Neon branch before the Playwright suite. The strategy above is unchanged — this is a targeted supplement for what Playwright structurally cannot reach, not a general unit-test tier, and domain functions are still not unit-tested in isolation.
+
+- **Concurrency** (was a known gap): `check:stock` fires two simultaneous operations at the same product and location and asserts the final balance; `check:transfers` fires two concurrent despatches between the same warehouse pair and asserts no deadlock.
+- **Reconciliation** (was a known gap): `check:stock` replays the event stream and asserts the sum equals projected `onHand` and `damaged` (ADR-0006). Reserved, incoming and in-transit are excluded — no movement produces them.
+- **Enforcement past the UI**: each per-flow check calls the domain function directly as a forbidden role and asserts it refuses and writes no event.
+
+`lib/import/validate.test.ts` no longer exists; `lib/import/validate.ts` is now exercised by `e2e/import-validation.spec.ts` in the Playwright suite.
