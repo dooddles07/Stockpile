@@ -43,6 +43,22 @@ npm run dev                        # http://localhost:3000
 
 `db:seed` truncates and reloads every table; it is safe to re-run.
 
+### Which Neon branch to point at
+
+The `stockpile` Neon project has three branches and each serves exactly one
+purpose. `db:seed` truncates every table, so pointing the wrong `DATABASE_URL`
+at the wrong branch destroys someone else's data.
+
+| Branch | Purpose | Written by |
+|---|---|---|
+| `main` (primary) | the public demo | the deployed app and the daily reset workflow (ADR-0010) |
+| `ci` | the Playwright and check runs | every CI run, which truncates and reseeds it |
+| `dev` | local development | you, from your machine |
+
+Local `.env` holds the `dev` branch's **pooled** connection string. Never point
+it at `main` — the first local `db:seed` would wipe what a demo visitor is
+looking at. CI holds the `ci` string as the `DATABASE_URL` repo secret.
+
 ```bash
 npm run build    # production build
 npm run start    # serve the build
