@@ -1,5 +1,7 @@
 # Stockpile
 
+**Live demo: https://stockpile-peach.vercel.app**
+
 An inventory management platform for businesses that hold stock across several sites — the full lifecycle from purchase order to shelf to shipment, with the movement ledger, approvals and audit trail that make the numbers defensible.
 
 The data lives in Postgres (Neon) — reads and writes both hit the database. Stock changes and the documents that cause them are event-sourced: the movement ledger is an append-only fact and the balances on every screen are projections rebuilt from it. The deterministic dataset that used to render the screens at runtime is now the seed that loads that database.
