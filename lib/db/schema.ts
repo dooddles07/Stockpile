@@ -20,12 +20,15 @@ import {
   jsonb,
   numeric,
   pgEnum,
+  pgSequence,
   pgTable,
   text,
   timestamp,
   uuid,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
+
+import { documentNumbers } from "./numbers";
 
 import type {
   AccessLevel,
@@ -240,7 +243,7 @@ export const suppliers = pgTable("suppliers", {
 
 export const purchaseOrders = pgTable("purchase_orders", {
   id: text("id").primaryKey(),
-  number: text("number").notNull(),
+  number: text("number").notNull().unique(),
   supplierId: text("supplier_id")
     .notNull()
     .references(() => suppliers.id),
@@ -290,7 +293,7 @@ export const purchaseOrderLines = pgTable("purchase_order_lines", {
 
 export const returns = pgTable("returns", {
   id: text("id").primaryKey(),
-  number: text("number").notNull(),
+  number: text("number").notNull().unique(),
   kind: returnKind("kind").notNull(),
   /** A Supplier id for purchase returns, a Customer id for sales returns — no FK. */
   partnerId: text("partner_id").notNull(),
@@ -393,7 +396,7 @@ export const customers = pgTable("customers", {
 
 export const salesOrders = pgTable("sales_orders", {
   id: text("id").primaryKey(),
-  number: text("number").notNull(),
+  number: text("number").notNull().unique(),
   customerId: text("customer_id")
     .notNull()
     .references(() => customers.id),
@@ -480,7 +483,7 @@ export const transferStatus = pgEnum("transfer_status", [
 
 export const transfers = pgTable("transfers", {
   id: text("id").primaryKey(),
-  number: text("number").notNull(),
+  number: text("number").notNull().unique(),
   fromWarehouseId: text("from_warehouse_id")
     .notNull()
     .references(() => warehouses.id),
@@ -752,7 +755,7 @@ export const movements = pgTable("movements", {
 
 export const adjustments = pgTable("adjustments", {
   id: text("id").primaryKey(),
-  number: text("number").notNull(),
+  number: text("number").notNull().unique(),
   warehouseId: text("warehouse_id")
     .notNull()
     .references(() => warehouses.id),
@@ -794,7 +797,7 @@ export const adjustmentLines = pgTable("adjustment_lines", {
 
 export const stockCounts = pgTable("stock_counts", {
   id: text("id").primaryKey(),
-  number: text("number").notNull(),
+  number: text("number").notNull().unique(),
   type: text("type").$type<CountType>().notNull(),
   warehouseId: text("warehouse_id")
     .notNull()
@@ -834,3 +837,23 @@ export const countLines = pgTable("count_lines", {
   countedAt: text("counted_at"),
   recount: boolean("recount").notNull(),
 });
+
+/**
+ * One sequence per creatable Document type (ticket 05). Declared from the
+ * registry in `./numbers` so `db:generate` writes the CREATE SEQUENCE, and
+ * allocation and migration cannot name different sequences. Each starts at the
+ * base its seeded series uses; `db:seed` then advances it past the highest
+ * number it loaded. The `number` columns above are `unique()` for the same
+ * reason: a duplicate must be an error, never a row. Exported one by one
+ * because drizzle-kit reads a schema's named exports.
+ */
+const seq = (type: keyof typeof documentNumbers) =>
+  pgSequence(documentNumbers[type].sequence, { startWith: documentNumbers[type].start });
+
+export const purchaseOrderNumberSeq = seq("purchaseOrder");
+export const salesOrderNumberSeq = seq("salesOrder");
+export const transferNumberSeq = seq("transfer");
+export const adjustmentNumberSeq = seq("adjustment");
+export const stockCountNumberSeq = seq("stockCount");
+export const salesReturnNumberSeq = seq("salesReturn");
+export const purchaseReturnNumberSeq = seq("purchaseReturn");
