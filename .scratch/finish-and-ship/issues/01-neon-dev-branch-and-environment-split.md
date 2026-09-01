@@ -1,0 +1,19 @@
+# 01: A Neon `dev` branch, and one purpose per environment
+
+**What to build:** Three Neon branches with no overlap in what writes to them, and a documented convention for which connection string belongs where.
+
+Today `.env` points local development at the primary branch of the `stockpile` Neon project — the same branch that is about to become the public demo. `npm run db:seed` truncates every table. The first time that command is run locally after the deploy exists, it wipes what a visitor is looking at. CI already got this right: it uses a dedicated persistent `ci` branch precisely so its truncate never reaches the demo data, and says so in a comment in `.github/workflows/e2e.yml`. Local development needs the same treatment.
+
+Create a `dev` branch off primary, repoint the local `.env` at it, and record the convention somewhere a future reader will find it — primary is the demo and is written only by production and the daily reset workflow, `ci` is truncated by every CI run, `dev` is the developer's. No branch serves two purposes.
+
+This ticket is first because every ticket after it runs `db:seed` locally.
+
+**Blocked by:** nothing.
+
+**Status:** open
+
+- [ ] A `dev` branch exists in the `stockpile` Neon project
+- [ ] Local `.env` points at the `dev` branch's pooled connection string
+- [ ] `npm run db:migrate && npm run db:seed` against `dev` succeeds and the app runs against it
+- [ ] The branch convention is documented in the README
+- [ ] The full Playwright suite passes locally against `dev`
