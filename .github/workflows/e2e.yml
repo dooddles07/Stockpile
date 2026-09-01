@@ -54,6 +54,14 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
+      # Temporary: drizzle-kit prints no SQL error text, so this replays 0011
+      # statement by statement and reports which one the ci branch rejects.
+      - name: Explain a migration failure
+        if: failure()
+        run: npx tsx lib/db/_explain_migration.ts
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
       - name: Seed the database
         run: npm run db:seed
         env:

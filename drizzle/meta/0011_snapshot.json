@@ -1,5 +1,5 @@
 {
-  "id": "db199357-1789-4174-8ad6-c0294f8f0c14",
+  "id": "639f5695-2648-4e78-b394-bbcaa8e62292",
   "prevId": "7e8d4a9d-4817-4fa2-b44a-2d9e71c65714",
   "version": "7",
   "dialect": "postgresql",
@@ -3563,8 +3563,8 @@
       "cache": "1",
       "cycle": false
     },
-    "public.purchase_return_number_seq": {
-      "name": "purchase_return_number_seq",
+    "public.return_number_seq": {
+      "name": "return_number_seq",
       "schema": "public",
       "increment": "1",
       "startWith": "100",
@@ -3578,16 +3578,6 @@
       "schema": "public",
       "increment": "1",
       "startWith": "4000",
-      "minValue": "1",
-      "maxValue": "9223372036854775807",
-      "cache": "1",
-      "cycle": false
-    },
-    "public.sales_return_number_seq": {
-      "name": "sales_return_number_seq",
-      "schema": "public",
-      "increment": "1",
-      "startWith": "100",
       "minValue": "1",
       "maxValue": "9223372036854775807",
       "cache": "1",

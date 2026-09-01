@@ -842,7 +842,7 @@ export const countLines = pgTable("count_lines", {
  * One sequence per creatable Document type (ticket 05). Declared from the
  * registry in `./numbers` so `db:generate` writes the CREATE SEQUENCE, and
  * allocation and migration cannot name different sequences. Each starts at the
- * base its seeded series uses; `db:seed` then advances it past the highest
+ * base its series uses; `db:seed` then advances it past the highest
  * number it loaded. The `number` columns above are `unique()` for the same
  * reason: a duplicate must be an error, never a row. Exported one by one
  * because drizzle-kit reads a schema's named exports.
@@ -855,5 +855,5 @@ export const salesOrderNumberSeq = seq("salesOrder");
 export const transferNumberSeq = seq("transfer");
 export const adjustmentNumberSeq = seq("adjustment");
 export const stockCountNumberSeq = seq("stockCount");
-export const salesReturnNumberSeq = seq("salesReturn");
-export const purchaseReturnNumberSeq = seq("purchaseReturn");
+/** Both kinds of Return share one series, as the seeded dataset does. */
+export const returnNumberSeq = seq("salesReturn");

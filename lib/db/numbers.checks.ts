@@ -27,35 +27,110 @@ import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 
 import { Pool, neonConfig } from "@neondatabase/serverless";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { drizzle, type NeonDatabase } from "drizzle-orm/neon-serverless";
 import ws from "ws";
 
-import * as schema from "@/lib/db/schema";
 import {
   allocateDocumentNumber,
+  counterOf,
   documentNumbers,
+  highestNumber,
+  NUMBER_YEAR,
   type DocumentNumberType,
 } from "@/lib/db/numbers";
+import * as schema from "@/lib/db/schema";
 
 type Db = NeonDatabase<typeof schema>;
 
-/** The counter out of `PO-2026-1100`, as a number. */
-function counterOf(number: string): number {
-  const counter = Number(number.split("-")[2]);
-  assert.ok(Number.isFinite(counter), `"${number}" has no counter`);
-  return counter;
+/** Rolls its transaction back, carrying the number it burned out with it. */
+class RolledBack extends Error {
+  constructor(readonly number: string) {
+    super(`rolled back ${number}`);
+  }
 }
 
-/** The highest counter the seed loaded for a type, or its base minus one. */
-async function seededMax(db: Db, type: DocumentNumberType): Promise<number> {
-  const spec = documentNumbers[type];
-  const result = await db.execute(sql`
-    select coalesce(max(split_part(number, '-', 3)::bigint), ${spec.start - 1})::int as value
-      from ${sql.raw(spec.table)}
-     ${spec.where ? sql`where ${spec.where}` : sql``}
-  `);
-  return (result.rows[0] as { value: number }).value;
+/** 1. Each type's next number is in the seeded shape and past the seeded max. */
+async function continuesEachSeededSeries(db: Db): Promise<void> {
+  for (const type of Object.keys(documentNumbers) as DocumentNumberType[]) {
+    const spec = documentNumbers[type];
+    const max = await highestNumber(db, type);
+    const number = await allocateDocumentNumber(db, type);
+    assert.match(
+      number,
+      new RegExp(`^${spec.prefix}-${NUMBER_YEAR}-[0-9]{${spec.pad},}$`),
+      `${type}: "${number}" is not the seeded number shape`,
+    );
+    assert.ok(
+      counterOf(number) > max,
+      `${type}: allocated ${number}, but the seed already loaded counter ${max}`,
+    );
+  }
+}
+
+/**
+ * 2. Two allocations that overlap in time get two different numbers. Each
+ * transaction waits for the other to have allocated before it returns, so the
+ * two genuinely overlap rather than running one after the other.
+ */
+async function concurrentAllocationsDiffer(db: Db): Promise<[string, string]> {
+  let allocated = 0;
+  const bothAllocated = Promise.withResolvers<void>();
+  const allocate = async (): Promise<string> =>
+    db.transaction(async (tx) => {
+      const number = await allocateDocumentNumber(tx, "purchaseOrder");
+      if (++allocated === 2) bothAllocated.resolve();
+      await bothAllocated.promise;
+      return number;
+    });
+
+  const [first, second] = await Promise.all([allocate(), allocate()]);
+  assert.notEqual(first, second, `concurrent allocations both returned ${first}`);
+  return [first, second];
+}
+
+/**
+ * 3. A creation that rolls back leaves no Document, and its number is burned
+ * rather than handed to the next caller.
+ */
+async function rollbackBurnsItsNumber(db: Db): Promise<[string, string]> {
+  const [warehouse] = await db.select().from(schema.warehouses).limit(1);
+  assert.ok(warehouse, "checks: no seeded warehouse");
+
+  const burned = await db
+    .transaction(async (tx) => {
+      const number = await allocateDocumentNumber(tx, "adjustment");
+      await tx.insert(schema.adjustments).values({
+        id: `ADJ-CHECK-${number}`,
+        number,
+        warehouseId: warehouse.id,
+        reason: "manual-correction",
+        status: "draft",
+        createdAt: new Date().toISOString(),
+        totalDelta: 0,
+        totalValueImpact: 0,
+        createdBy: "check:numbers",
+        approvals: [],
+        note: "rollback check",
+        requiresApproval: false,
+      });
+      throw new RolledBack(number);
+    })
+    .catch((err: unknown) => {
+      if (err instanceof RolledBack) return err.number;
+      throw err;
+    });
+
+  const survivors = await db
+    .select()
+    .from(schema.adjustments)
+    .where(eq(schema.adjustments.number, burned));
+  assert.equal(survivors.length, 0, `the rolled-back adjustment ${burned} was committed`);
+
+  const next = await allocateDocumentNumber(db, "adjustment");
+  assert.notEqual(next, burned, `${burned} was handed out again after its rollback`);
+  assert.ok(counterOf(next) > counterOf(burned), `${next} did not move past the burned ${burned}`);
+  return [burned, next];
 }
 
 async function run(): Promise<void> {
@@ -67,88 +142,13 @@ async function run(): Promise<void> {
   try {
     const db = drizzle({ client: pool, schema });
 
-    // 1. Each type's next number is in the seeded shape and past the seeded max.
-    for (const type of Object.keys(documentNumbers) as DocumentNumberType[]) {
-      const spec = documentNumbers[type];
-      const max = await seededMax(db, type);
-      const number = await allocateDocumentNumber(db, type);
-      assert.match(
-        number,
-        new RegExp(`^${spec.prefix}-2026-\d{${spec.pad},}$`),
-        `${type}: "${number}" is not the seeded number shape`,
-      );
-      assert.ok(
-        counterOf(number) > max,
-        `${type}: allocated ${number}, but the seed already loaded counter ${max}`,
-      );
-    }
-
-    // 2. Two allocations that overlap in time get two different numbers. Each
-    //    transaction waits for the other to have allocated before committing,
-    //    so they genuinely overlap rather than running one after the other.
-    let allocated = 0;
-    const bothAllocated = Promise.withResolvers<void>();
-    const concurrently = async (): Promise<string> =>
-      db.transaction(async (tx) => {
-        const number = await allocateDocumentNumber(tx, "purchaseOrder");
-        if (++allocated === 2) bothAllocated.resolve();
-        await bothAllocated.promise;
-        return number;
-      });
-    const [first, second] = await Promise.all([concurrently(), concurrently()]);
-    assert.notEqual(first, second, `concurrent allocations both returned ${first}`);
-
-    // 3. A creation that rolls back leaves no Document, and its number is burned
-    //    rather than handed to the next caller.
-    const [warehouse] = await db.select().from(schema.warehouses).limit(1);
-    assert.ok(warehouse, "checks: no seeded warehouse");
-    const burned = await db
-      .transaction(async (tx) => {
-        const number = await allocateDocumentNumber(tx, "adjustment");
-        await tx.insert(schema.adjustments).values({
-          id: `ADJ-CHECK-${number}`,
-          number,
-          warehouseId: warehouse.id,
-          reason: "manual-correction",
-          status: "draft",
-          createdAt: new Date().toISOString(),
-          totalDelta: 0,
-          totalValueImpact: 0,
-          createdBy: "check:numbers",
-          approvals: [],
-          note: "rollback check",
-          requiresApproval: false,
-        });
-        throw new RollBack(number);
-      })
-      .catch((err: unknown) => {
-        if (err instanceof RollBack) return err.number;
-        throw err;
-      });
-
-    const survivors = await db
-      .select()
-      .from(schema.adjustments)
-      .where(eq(schema.adjustments.number, burned));
-    assert.equal(survivors.length, 0, `the rolled-back adjustment ${burned} was committed`);
-
-    const next = await allocateDocumentNumber(db, "adjustment");
-    assert.notEqual(next, burned, `${burned} was handed out again after its rollback`);
-    assert.ok(
-      counterOf(next) > counterOf(burned),
-      `${next} did not move past the burned ${burned}`,
-    );
+    await continuesEachSeededSeries(db);
+    const [first, second] = await concurrentAllocationsDiffer(db);
+    const [burned, next] = await rollbackBurnsItsNumber(db);
 
     console.log("check:numbers ok", { first, second, burned, next });
   } finally {
     await pool.end();
-  }
-}
-
-/** Rolls its transaction back while carrying the number it burned out with it. */
-class RollBack extends Error {
-  constructor(readonly number: string) {
-    super(`rolled back ${number}`);
   }
 }
 
