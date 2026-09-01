@@ -38,6 +38,7 @@ import ws from "ws";
 
 import { hydrateRoles, levelFor } from "@/lib/auth/permissions";
 import { db as dataset } from "@/lib/data/store";
+import { advanceDocumentNumbers } from "@/lib/db/numbers";
 import {
   adjustmentLines,
   adjustments,
@@ -166,6 +167,12 @@ export async function seed() {
     // is already newest-first, the task list is in display order).
     await db.insert(notifications).values(dataset.notifications);
     await db.insert(tasks).values(dataset.tasks);
+
+    // Ticket 05: every Document number sequence is advanced past the highest
+    // number just loaded, so the first Document a visitor creates continues the
+    // seeded series instead of colliding with it. On every run — the daily
+    // reset re-loads the same numbers, and TRUNCATE does not touch a sequence.
+    await advanceDocumentNumbers(db);
 
     // The permission engine reads these rows in the app; prove a round trip
     // through Postgres reproduces the matrix before the Playwright suite bets
