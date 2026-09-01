@@ -23,13 +23,30 @@ const jetbrains = JetBrains_Mono({
   display: "swap",
 });
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: {
     default: "Stockpile",
     template: "%s · Stockpile",
   },
   description:
     "Stockpile is an inventory operating system for multi-site distributors: stock accuracy, purchasing, warehousing, fulfillment and audit in one place.",
+  openGraph: {
+    title: "Stockpile",
+    description:
+      "Purchase order to shelf to shipment — the movement ledger, role permissions and audit trail that make the numbers defensible. A public, writable demo that resets daily.",
+    url: SITE_URL,
+    siteName: "Stockpile",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Stockpile",
+    description:
+      "Purchase order to shelf to shipment — the movement ledger, role permissions and audit trail that make the numbers defensible.",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
