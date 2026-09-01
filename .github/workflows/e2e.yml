@@ -59,6 +59,16 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
+      # Finish-and-ship ticket 05: the seed advanced every Document number
+      # sequence past the numbers it loaded, two concurrent allocations of a
+      # type differ, and a rolled-back creation writes no Document and does not
+      # reuse its burned number. Runs first of the checks, against the
+      # untouched seeded state it asserts about.
+      - name: Document number checks
+        run: npm run check:numbers
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
       # Ticket 09's two below-the-UI checks — concurrency serialization and the
       # event/projection reconciliation invariant. ADR-0009 named these as the
       # gap Playwright cannot cover. Runs against the seeded "ci" branch.
