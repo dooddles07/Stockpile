@@ -59,7 +59,9 @@ at the wrong branch destroys someone else's data.
 
 Local `.env` holds the `dev` branch's **pooled** connection string. Never point
 it at `main` — the first local `db:seed` would wipe what a demo visitor is
-looking at. CI holds the `ci` string as the `DATABASE_URL` repo secret.
+looking at. CI holds the `ci` string as the `DATABASE_URL` repo secret, and the
+primary branch's string as `PRODUCTION_DATABASE_URL`, used by the
+`migrate-production` job that applies migrations on every push to `main`.
 
 ```bash
 npm run build    # production build

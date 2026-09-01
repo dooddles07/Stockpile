@@ -144,3 +144,39 @@ jobs:
         run: npm run test:e2e
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+  # Ticket 03. The same `db:migrate` the playwright job runs against the "ci"
+  # branch, pointed at the primary (production) Neon branch and gated to pushes
+  # on main — `github.event_name` keeps it off pull requests, where
+  # PRODUCTION_DATABASE_URL is not available and must not be.
+  #
+  # Ordering against the Vercel deploy is deliberate. Vercel's git integration
+  # starts building the moment the push lands; nothing here can gate it, so this
+  # job has no `needs:` and starts in the same instant. Checkout + `npm ci` +
+  # drizzle-kit is a fraction of a Next.js production build, so the schema is in
+  # place well before the new code serves its first request. Making it wait on
+  # `build` or `playwright` would invert that and let the deploy go live against
+  # the old schema — the failure this ticket exists to prevent. The trade is
+  # that a push whose tests then fail has still migrated production, which is
+  # acceptable while migrations are additive.
+  #
+  # drizzle-kit records which files it has applied, so a push with no new
+  # migration files is a no-op and a re-deploy of unchanged code is harmless.
+  migrate-production:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # One migration at a time against the production branch.
+    concurrency:
+      group: migrate-neon-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Apply migrations to production
+        run: npm run db:migrate
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
