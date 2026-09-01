@@ -165,9 +165,10 @@ jobs:
   migrate-production:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    # One migration at a time against the production branch.
+    # One write at a time against the production branch. Shared with the
+    # `reset` job in daily-reset.yml, whose seed truncates the same branch.
     concurrency:
-      group: migrate-neon-production
+      group: neon-production
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4

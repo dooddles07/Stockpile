@@ -1,0 +1,58 @@
+name: daily reset
+
+# Ticket 04. The public demo is truncated and re-seeded once a day, then proved
+# to have come back up (ADR-0010, and the amendment there for why this is a
+# workflow step running `npm run db:seed` rather than the authenticated HTTP
+# reset endpoint the ADR originally specified).
+on:
+  schedule:
+    # 03:00 UTC — quiet for a portfolio demo, and clear of a working day's
+    # pushes, which migrate the same branch.
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  reset:
+    runs-on: ubuntu-latest
+    # Shared with `migrate-production` in e2e.yml: the seed truncates the
+    # production branch, so it must not overlap a migration of it, nor another
+    # reset (the schedule and `workflow_dispatch` can collide).
+    concurrency:
+      group: neon-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - run: npx playwright install --with-deps chromium
+
+      # Migrations reach production on push to main (ticket 03), but a manual
+      # run can be triggered from any ref, so seed against the schema this
+      # checkout expects. `db:migrate` is idempotent — drizzle-kit records which
+      # files it has applied — so the scheduled run is a no-op here.
+      - name: Apply migrations
+        run: npm run db:migrate
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+
+      - name: Re-seed production
+        run: npm run db:seed
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+
+      # The reset is the one mechanism that can break the demo silently: a seed
+      # that half-fails leaves the URL up and the data wrong, and nothing else
+      # would report it. The seed is deterministic, so smoke.spec.ts's recorded
+      # assertions hold against production exactly as they hold against "ci".
+      # PLAYWRIGHT_BASE_URL points the suite at the deployed instance instead of
+      # a local dev server, and drops the write project (playwright.config.ts).
+      - name: Smoke the live instance
+        run: npm run test:e2e -- e2e/smoke.spec.ts
+        env:
+          PLAYWRIGHT_BASE_URL: https://stockpile-peach.vercel.app
