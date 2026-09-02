@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Save, Send, TriangleAlert } from "lucide-react";
+import { ArrowRight, Save, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,7 @@ import { WorkflowStepper } from "@/components/status/workflow-stepper";
 import { StatusBadge } from "@/components/status/status-badge";
 import { money, qty } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { raiseTransfer } from "./actions";
 
 export interface TransferStockRow {
   productId: string;
@@ -67,6 +68,7 @@ export function TransferForm({
   const [expectedDays, setExpectedDays] = React.useState(5);
   const [notes, setNotes] = React.useState("");
   const [lines, setLines] = React.useState<EditorLine[]>([]);
+  const [saving, setSaving] = React.useState(false);
 
   const warehouseLabels = React.useMemo(
     () => Object.fromEntries(warehouses.map((w) => [w.id, `${w.code} · ${w.name}`])),
@@ -122,27 +124,37 @@ export function TransferForm({
   const sameSite = fromId === toId;
   const canSubmit = lines.length > 0 && overCommitted.length === 0 && !sameSite;
 
-  const submit = (asDraft: boolean) => {
-    if (!asDraft && !canSubmit) return;
+  // Raising a transfer stops at `draft` (ticket 08), and a draft moves no stock
+  // and puts nothing in transit — approving it and then despatching it is what
+  // does that. So there is one button here rather than a create/draft pair, and
+  // the value threshold below is advice about the approval step ahead, not a
+  // gate on this one.
+  const create = async () => {
+    if (!canSubmit || saving) return;
+    setSaving(true);
+
+    const result = await raiseTransfer({
+      fromWarehouseId: fromId,
+      toWarehouseId: toId,
+      reason,
+      notes,
+      carrier,
+      expectedInDays: expectedDays,
+      lines: lines.map((l) => ({ productId: l.product.id, quantity: l.quantity })),
+    });
+
+    if (!result.ok) {
+      setSaving(false);
+      toast.error("Transfer not raised", { description: result.message });
+      return;
+    }
+
     const fromCode = warehouses.find((w) => w.id === fromId)?.code;
     const toCode = warehouses.find((w) => w.id === toId)?.code;
-    toast.success(
-      asDraft
-        ? "Transfer saved as a draft"
-        : needsApproval
-          ? "Transfer submitted for approval"
-          : "Transfer approved and released",
-      {
-        description: asDraft
-          ? "Nothing is reserved yet. Finish it later from the transfers list."
-          : `${qty(units)} units, ${fromCode} → ${toCode}. ${
-              needsApproval
-                ? `${money(value)} is above the ${money(APPROVAL_THRESHOLD)} threshold, so an inventory manager has to sign it off.`
-                : "Stock is reserved at the source and released for picking."
-            }`,
-      },
-    );
-    router.push("/warehousing/transfers");
+    toast.success(`${result.number} raised as a draft`, {
+      description: `${qty(units)} units, ${fromCode} → ${toCode}. Nothing moves and nothing is in transit until the transfer is approved and despatched.`,
+    });
+    router.push(`/warehousing/transfers/${result.id}`);
   };
 
   return (
@@ -273,7 +285,7 @@ export function TransferForm({
             <StatTile
               label="Value in motion"
               value={money(value)}
-              hint="Counted as in-transit until received"
+              hint="Counted as in-transit once despatched, not before"
             />
             <StatTile
               label="Approval"
@@ -288,10 +300,7 @@ export function TransferForm({
           </div>
 
           <div className="mt-4">
-            <WorkflowStepper
-              workflow="transfer"
-              status={needsApproval ? "pending-approval" : "approved"}
-            />
+            <WorkflowStepper workflow="transfer" status="draft" />
           </div>
         </Section>
 
@@ -304,8 +313,8 @@ export function TransferForm({
                 stock
               </p>
               <p className="mt-1 text-caption leading-relaxed text-status-danger/90">
-                A transfer reserves stock at the source. You cannot reserve more than is available
-                to promise there.
+                The draft itself moves nothing, but the despatch draws from what the source holds —
+                a line above what is available there could never leave the building.
               </p>
             </div>
           </div>
@@ -313,11 +322,11 @@ export function TransferForm({
 
         {lines.length > 0 && overCommitted.length === 0 && (
           <div className="rounded-lg border p-3">
-            <p className="text-caption text-muted-foreground">On approval</p>
+            <p className="text-caption text-muted-foreground">On despatch</p>
             <ul className="mt-2 grid gap-1.5 text-caption">
               <li className="flex items-center gap-2">
                 <StatusBadge label={warehouses.find((w) => w.id === fromId)?.code ?? ""} tone="info" showDot={false} />
-                <span>{qty(units)} units reserved, then despatched</span>
+                <span>{qty(units)} units leave on-hand, then sit in transit</span>
               </li>
               <li className="flex items-center gap-2">
                 <StatusBadge label={warehouses.find((w) => w.id === toId)?.code ?? ""} tone="success" showDot={false} />
@@ -328,24 +337,15 @@ export function TransferForm({
         )}
 
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" className="h-8" disabled={!canSubmit} onClick={() => submit(false)}>
-            <Send className="size-3.5" aria-hidden />
-            {needsApproval ? "Submit for approval" : "Create transfer"}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8"
-            disabled={lines.length === 0}
-            onClick={() => submit(true)}
-          >
+          <Button size="sm" className="h-8" disabled={!canSubmit || saving} onClick={create}>
             <Save className="size-3.5" aria-hidden />
-            Save draft
+            {saving ? "Creating…" : "Create transfer"}
           </Button>
           <Button
             variant="ghost"
             size="sm"
             className="h-8"
+            disabled={saving}
             onClick={() => router.push("/warehousing/transfers")}
           >
             Cancel

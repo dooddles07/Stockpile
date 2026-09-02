@@ -1,6 +1,12 @@
 /**
- * Transfer between Warehouses (ticket 14) — the only Document with two ends, and
- * the only flow where one logical operation touches more than one Stock Row.
+ * Transfer between Warehouses (ticket 14), and raising one in the first place
+ * (ticket 08) — the only Document with two ends, and the only flow where one
+ * logical operation touches more than one Stock Row.
+ *
+ *  - `createTransfer` writes a new transfer in `draft`, with its lines and an
+ *    Event. A `draft` is not in the open set, and every line starts with
+ *    `shipped = 0`, so creation puts nothing in transit and moves no stock: it
+ *    records a plan, and despatching is what enacts it.
  *
  *  - `dispatchTransfer` moves an `approved` transfer `-> in-transit`. Stock
  *    leaves the source: one or more `transfer-out` Movements per line through the
@@ -39,20 +45,26 @@
  * `transfers.checks.ts`). The permission matrix must already be hydrated.
  */
 
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { NeonDatabase } from "drizzle-orm/neon-serverless";
 
 import { can } from "@/lib/auth/permissions";
 import * as schema from "@/lib/db/schema";
+import { allocateDocumentNumber } from "@/lib/db/numbers";
 import { applyStockChange, ensureStockHolding, type Actor } from "@/lib/domain/stock";
 import { runAutomation } from "@/lib/domain/automation";
-import type { TransferStatus } from "@/lib/types";
+import { newId } from "@/lib/domain/reference";
+import type { ApprovalEvent, TransferStatus } from "@/lib/types";
 
 type Db = NeonDatabase<typeof schema>;
 
 /** Both ends of a transfer are gated on the same access (ADR-0004, in the
  *  domain — the Receive tab's render gate is only a rendering gate). */
 const TRANSFER_PERMISSION = { module: "transfers", action: "edit" } as const;
+
+/** Raising a transfer is a `create` on the same module (ADR-0004) — a different
+ *  permission from despatching or receiving one. */
+const CREATE_PERMISSION = { module: "transfers", action: "create" } as const;
 
 /**
  * Transfer statuses that still hold stock in transit — despatched from the
@@ -80,6 +92,213 @@ export class TransferError extends Error {
     super(message);
     this.name = "TransferError";
   }
+}
+
+export interface CreateTransferLineInput {
+  productId: string;
+  quantity: number;
+}
+
+export interface CreateTransferInput {
+  fromWarehouseId: string;
+  toWarehouseId: string;
+  /** Why the stock is moving; `transfers.reason` is NOT NULL. */
+  reason: string;
+  notes: string;
+  carrier: string | null;
+  /** Days from today the stock is expected to land; `expected_at` is NOT NULL. */
+  expectedInDays: number;
+  lines: CreateTransferLineInput[];
+}
+
+export interface CreateTransferResult {
+  id: string;
+  number: string;
+  /** Units the transfer plans to move — `sum(quantity)`. */
+  units: number;
+}
+
+/**
+ * Raise a Transfer between two Warehouses (ticket 08). Returns the new
+ * transfer's id and number. Throws `TransferError` — and writes nothing at all
+ * — when the Actor's Role forbids creating transfers, the transfer has no
+ * lines, the two ends are the same Warehouse, or a line's product is not held
+ * at the source.
+ *
+ * Creation moves no stock and creates no in-transit quantity. In transit is
+ * `sum(shipped - received)` over the lines of Transfers in
+ * `OPEN_TRANSFER_STATUSES`, and a `draft` is in neither that set nor any stock
+ * balance: every line starts at `shipped = 0`, so the projection cannot move.
+ * A draft is a plan; `dispatchTransfer` above is what enacts it, once the
+ * transfer has been approved.
+ *
+ * The two ends must differ — a transfer from a site to itself has no despatch
+ * and no receipt to make — and that is enforced here rather than only in the
+ * form, which is a rendering gate.
+ *
+ * Each line's product must already be held at the source, and its lowest-seq
+ * holding becomes the line's `from_location_id`: the pick location the despatch
+ * is planned against. It is a plan rather than a commitment, since
+ * `dispatchTransfer` re-plans the draw across every holding oldest-first, so
+ * stock that has moved location by then still despatches. Requiring a holding
+ * rejects the transfer that could never be despatched when it is raised rather
+ * than at despatch, and `from_location_id` is NOT NULL besides.
+ *
+ * The number, the Event, the transfer and its lines commit together or not at
+ * all, so a creation that fails partway leaves nothing behind — except its
+ * burned number, which is correct for a Document number (`lib/db/numbers.ts`).
+ *
+ * The Warehouses are not looked up: both columns carry a foreign key, so an
+ * unknown one is the database's rejection to make, and it rolls the whole
+ * transaction back like any other failure.
+ */
+export async function createTransfer(
+  actor: Actor,
+  input: CreateTransferInput,
+  db: Db,
+): Promise<CreateTransferResult> {
+  if (!can(actor.role, CREATE_PERMISSION.module, CREATE_PERMISSION.action)) {
+    throw new TransferError(
+      `Your role (${actor.role}) is not allowed to raise transfers.`,
+      "forbidden",
+    );
+  }
+  if (input.fromWarehouseId === input.toWarehouseId) {
+    throw new TransferError(
+      "A transfer needs two different sites: stock cannot move to where it already is.",
+      "invalid",
+    );
+  }
+  if (input.lines.length === 0) {
+    throw new TransferError("A transfer needs at least one line.", "invalid");
+  }
+  if (input.lines.some((l) => !Number.isInteger(l.quantity) || l.quantity <= 0)) {
+    throw new TransferError("Every line needs a whole quantity of at least one.", "invalid");
+  }
+
+  const created = await db.transaction(async (tx) => {
+    const productIds = input.lines.map((l) => l.productId);
+
+    // The line's SKU and name are copied from the catalogue, not from the
+    // client: a Document records what was moved at the time it was raised.
+    const productRows = await tx
+      .select({ id: schema.products.id, sku: schema.products.sku, name: schema.products.name })
+      .from(schema.products)
+      .where(inArray(schema.products.id, productIds));
+    const products = new Map(productRows.map((p) => [p.id, p]));
+
+    // One query for every line's source holding; the lowest `seq` per product
+    // wins, which is the holding `dispatchTransfer` would draw from first.
+    const holdings = await tx
+      .select({
+        productId: schema.stockRows.productId,
+        locationId: schema.stockRows.locationId,
+      })
+      .from(schema.stockRows)
+      .where(
+        and(
+          inArray(schema.stockRows.productId, productIds),
+          eq(schema.stockRows.warehouseId, input.fromWarehouseId),
+        ),
+      )
+      .orderBy(schema.stockRows.seq);
+    const sourceLocation = new Map<string, string>();
+    for (const holding of holdings) {
+      if (!sourceLocation.has(holding.productId)) {
+        sourceLocation.set(holding.productId, holding.locationId);
+      }
+    }
+
+    const lines = input.lines.map((line, i) => {
+      const product = products.get(line.productId);
+      if (!product) throw new TransferError(`Unknown product on line ${i + 1}.`, "not-found");
+      const fromLocationId = sourceLocation.get(line.productId);
+      if (!fromLocationId) {
+        throw new TransferError(
+          `${product.sku} is not held at the source site, so it cannot be transferred out of it.`,
+          "invalid",
+        );
+      }
+
+      return {
+        id: `TL-${String(i + 1).padStart(3, "0")}`,
+        productId: product.id,
+        sku: product.sku,
+        name: product.name,
+        quantity: line.quantity,
+        // A draft has despatched and received nothing, and in transit is
+        // derived from these two — so it starts at zero and stays there until
+        // the transfer is despatched.
+        shipped: 0,
+        received: 0,
+        fromLocationId,
+        toLocationId: null,
+      };
+    });
+
+    const number = await allocateDocumentNumber(tx, "transfer");
+    const id = newId("TR");
+    const createdAt = new Date();
+    const approvals: ApprovalEvent[] = [
+      { id: newId("APV"), ts: createdAt.toISOString(), userId: actor.id, action: "created" },
+    ];
+
+    // The Event first — it is the source of truth; the rows below are its
+    // projection and commit with it (ADR-0002, ADR-0003).
+    const [event] = await tx
+      .insert(schema.events)
+      .values({
+        type: "transfer-created",
+        actorId: actor.id,
+        payload: {
+          transferId: id,
+          number,
+          fromWarehouseId: input.fromWarehouseId,
+          toWarehouseId: input.toWarehouseId,
+          status: "draft",
+          lines: lines.map((l) => ({ sku: l.sku, quantity: l.quantity })),
+        },
+      })
+      .returning({ seq: schema.events.seq });
+
+    await tx.insert(schema.transfers).values({
+      id,
+      number,
+      fromWarehouseId: input.fromWarehouseId,
+      toWarehouseId: input.toWarehouseId,
+      status: "draft",
+      createdAt: createdAt.toISOString(),
+      approvedAt: null,
+      shippedAt: null,
+      expectedAt: new Date(
+        createdAt.getTime() + Math.max(1, input.expectedInDays) * 24 * 60 * 60 * 1000,
+      ).toISOString(),
+      receivedAt: null,
+      requestedBy: actor.id,
+      approvedBy: null,
+      approvals,
+      carrier: input.carrier?.trim() || null,
+      trackingNumber: null,
+      reason: input.reason,
+      notes: input.notes,
+    });
+
+    await tx
+      .insert(schema.transferLines)
+      .values(lines.map((line) => ({ ...line, transferId: id })));
+
+    return {
+      id,
+      number,
+      units: lines.reduce((s, l) => s + l.quantity, 0),
+      eventSeq: event.seq,
+    };
+  });
+
+  // After commit: evaluate matching Automation Rules in the same request
+  // (ADR-0008), as every other flow that appends an Event does. Never throws.
+  await runAutomation(db, [created.eventSeq]);
+  return { id: created.id, number: created.number, units: created.units };
 }
 
 function assertCanEdit(actor: Actor): void {
