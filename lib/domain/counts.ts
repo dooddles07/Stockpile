@@ -1,6 +1,10 @@
 /**
- * Stock Count completion (ticket 15) — the flow where the system admits it was
- * wrong and reconciles itself to reality.
+ * Stock Counts: scheduling one (ticket 09) and completing it (ticket 15) — the
+ * flow where the system admits it was wrong and reconciles itself to reality.
+ *
+ * `scheduleStockCount` at the bottom raises the count: it resolves a scope to
+ * the holdings in it and fixes them as the sheet's lines, each carrying the
+ * on-hand it had at that moment as its `expected`. It moves no stock.
  *
  * A warehouse operator works through a count sheet entering what is physically
  * on the shelf, then completes the count as one operation. `completeStockCount`:
@@ -29,7 +33,7 @@
  * against another concurrent completion.
  */
 
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, gt, isNull } from "drizzle-orm";
 import type { NeonDatabase } from "drizzle-orm/neon-serverless";
 
 import { can } from "@/lib/auth/permissions";
@@ -41,7 +45,9 @@ import {
   type Actor,
 } from "@/lib/domain/stock";
 import { runAutomation } from "@/lib/domain/automation";
-import type { CountStatus } from "@/lib/types";
+import { allocateDocumentNumber } from "@/lib/db/numbers";
+import { newId } from "@/lib/domain/reference";
+import type { CountStatus, CountType } from "@/lib/types";
 
 type Db = NeonDatabase<typeof schema>;
 
@@ -306,4 +312,182 @@ export async function completeStockCount(
   // (ADR-0008). Never throws; a failing rule is recorded, not propagated.
   await runAutomation(db, eventSeqs);
   return result;
+}
+
+/* --------------------------------------------------------------- scheduling */
+
+/** Scheduling a count is a `create` on the same module (ADR-0004) — a different
+ *  permission from working the sheet. */
+const SCHEDULE_PERMISSION = { module: "counts", action: "create" } as const;
+
+export interface ScheduleStockCountInput {
+  warehouseId: string;
+  type: CountType;
+  /** A `location` count: only holdings in this zone of the site. */
+  zone?: string | null;
+  /** A `category` count: only products in this category. */
+  categoryId?: string | null;
+  /** A `cycle` or `spot` count: at most this many holdings, lowest `stock_rows.seq` first. */
+  limit?: number | null;
+  /** Days from today the count is due; `scheduled_for` is NOT NULL. */
+  scheduledInDays: number;
+  assignedTo: string[];
+  /** How the scope reads on the count ("All zones", "Zone A", a category name). */
+  scopeLabel: string;
+}
+
+export interface ScheduleStockCountResult {
+  id: string;
+  number: string;
+  /** How many holdings the scope resolved to — the size of the sheet. */
+  lines: number;
+}
+
+/**
+ * Schedule a Stock Count over a scope (ticket 09). Returns the new count's id
+ * and number. Throws `CountError` — and writes nothing — when the Actor's Role
+ * forbids scheduling counts or the scope resolves to no holdings.
+ *
+ * The lines are the product-location holdings in scope *at the moment the count
+ * is scheduled*, each carrying the on-hand it had then as its `expected`.
+ * Fixing them here rather than resolving the scope lazily when someone starts
+ * counting is what makes a variance mean something: `expected` is what the
+ * system believed when the count was raised, and `completeStockCount` posts the
+ * difference from what the counter found as a `count-correction`. A sheet cut
+ * at counting time would instead compare the shelf against itself.
+ *
+ * Only un-lotted holdings with something in them are taken: a count line has no
+ * lot column, so a lotted holding has nowhere to record which lot was counted,
+ * and an empty holding is a line with nothing to count. A scope that resolves
+ * to none of them is refused rather than creating an empty count — a sheet with
+ * no lines can never be completed (`completeStockCount` rejects it) and would
+ * sit `scheduled` forever.
+ *
+ * Scheduling moves no stock: it appends its Event and writes the count and its
+ * lines, and no Movement. The count lands in `scheduled`, which is one of
+ * `COMPLETABLE_STATUSES`, so it opens in the existing sheet and completes
+ * through the existing flow.
+ *
+ * The number, the Event, the count and its lines commit together or not at all,
+ * so a scheduling that fails partway leaves nothing behind — except its burned
+ * number, which is correct for a Document number (`lib/db/numbers.ts`).
+ */
+export async function scheduleStockCount(
+  actor: Actor,
+  input: ScheduleStockCountInput,
+  db: Db,
+): Promise<ScheduleStockCountResult> {
+  if (!can(actor.role, SCHEDULE_PERMISSION.module, SCHEDULE_PERMISSION.action)) {
+    throw new CountError(
+      `Your role (${actor.role}) is not allowed to schedule stock counts.`,
+      "forbidden",
+    );
+  }
+
+  const created = await db.transaction(async (tx) => {
+    const holdings = await tx
+      .select({
+        productId: schema.stockRows.productId,
+        locationId: schema.stockRows.locationId,
+        onHand: schema.stockRows.onHand,
+        sku: schema.products.sku,
+        name: schema.products.name,
+      })
+      .from(schema.stockRows)
+      .innerJoin(schema.products, eq(schema.products.id, schema.stockRows.productId))
+      .innerJoin(schema.locations, eq(schema.locations.id, schema.stockRows.locationId))
+      .where(
+        and(
+          eq(schema.stockRows.warehouseId, input.warehouseId),
+          isNull(schema.stockRows.lotNumber),
+          gt(schema.stockRows.onHand, 0),
+          eq(schema.products.status, "active"),
+          input.zone ? eq(schema.locations.zone, input.zone) : undefined,
+          input.categoryId ? eq(schema.products.categoryId, input.categoryId) : undefined,
+        ),
+      )
+      .orderBy(schema.stockRows.seq);
+
+    // A `cycle` or `spot` count caps its sheet size; the others take the
+    // scope whole. Sliced in JS rather than a SQL `LIMIT` sentinel — the
+    // "no cap" case has no honest limit value to pass.
+    const capped =
+      input.limit && input.limit > 0 ? holdings.slice(0, input.limit) : holdings;
+
+    if (capped.length === 0) {
+      throw new CountError(
+        "Nothing is held in that scope, so there is nothing to count.",
+        "invalid",
+      );
+    }
+
+    const number = await allocateDocumentNumber(tx, "stockCount");
+    const id = newId("SC");
+    const now = new Date();
+
+    // The Event first — it is the source of truth; the rows below are its
+    // projection and commit with it (ADR-0002, ADR-0003).
+    const [event] = await tx
+      .insert(schema.events)
+      .values({
+        type: "stock-count-scheduled",
+        actorId: actor.id,
+        payload: {
+          stockCountId: id,
+          number,
+          warehouseId: input.warehouseId,
+          countType: input.type,
+          scopeLabel: input.scopeLabel,
+          status: "scheduled",
+          lines: capped.length,
+        },
+      })
+      .returning({ seq: schema.events.seq });
+
+    await tx.insert(schema.stockCounts).values({
+      id,
+      number,
+      type: input.type,
+      warehouseId: input.warehouseId,
+      scopeLabel: input.scopeLabel,
+      status: "scheduled",
+      scheduledFor: new Date(
+        now.getTime() + Math.max(0, input.scheduledInDays) * 24 * 60 * 60 * 1000,
+      ).toISOString(),
+      startedAt: null,
+      completedAt: null,
+      assignedTo: input.assignedTo,
+      accuracyPct: 0,
+      totalVarianceValue: 0,
+      createdBy: actor.id,
+      approvedBy: null,
+    });
+
+    await tx.insert(schema.countLines).values(
+      capped.map((h, i) => ({
+        stockCountId: id,
+        id: `CL-${String(i + 1).padStart(3, "0")}`,
+        productId: h.productId,
+        sku: h.sku,
+        name: h.name,
+        locationId: h.locationId,
+        // What the system believed at scheduling time. The counter's number is
+        // measured against this, not against on-hand when they get there.
+        expected: h.onHand,
+        counted: null,
+        variance: 0,
+        varianceValue: 0,
+        countedBy: null,
+        countedAt: null,
+        recount: false,
+      })),
+    );
+
+    return { id, number, lines: capped.length, eventSeq: event.seq };
+  });
+
+  // After commit: evaluate matching Automation Rules in the same request
+  // (ADR-0008), as every other flow that appends an Event does. Never throws.
+  await runAutomation(db, [created.eventSeq]);
+  return { id: created.id, number: created.number, lines: created.lines };
 }

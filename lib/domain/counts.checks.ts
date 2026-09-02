@@ -37,7 +37,7 @@ import ws from "ws";
 import { hydrateRoles, can } from "@/lib/auth/permissions";
 import * as schema from "@/lib/db/schema";
 import { StockChangeError, type Actor } from "@/lib/domain/stock";
-import { completeStockCount, CountError } from "@/lib/domain/counts";
+import { completeStockCount, scheduleStockCount, CountError } from "@/lib/domain/counts";
 
 type Db = NeonDatabase<typeof schema>;
 
@@ -336,6 +336,84 @@ async function noVarianceAppendsNothingButStampsCounted(db: Db): Promise<void> {
   }
 }
 
+async function scheduleForbiddenIsRefusedAndWritesNothing(db: Db): Promise<void> {
+  const forbidden = await actorForRole(db, "auditor");
+  assert.equal(
+    can(forbidden.role, "counts", "create"),
+    false,
+    "precondition: the chosen role must not be able to create counts",
+  );
+
+  const { warehouseId } = await pickPair(db);
+  const before = await eventCount(db);
+  const countsBefore = (
+    await db.select({ n: sql<number>`count(*)::int` }).from(schema.stockCounts)
+  )[0]?.n ?? 0;
+
+  await assert.rejects(
+    () =>
+      scheduleStockCount(
+        forbidden,
+        {
+          warehouseId,
+          type: "full",
+          scheduledInDays: 1,
+          assignedTo: [forbidden.id],
+          scopeLabel: "All zones",
+        },
+        db,
+      ),
+    (err: unknown) => err instanceof CountError && err.code === "forbidden",
+    "scheduleStockCount must throw CountError('forbidden') for a role without counts create",
+  );
+
+  const afterForbidden = await eventCount(db);
+  assert.equal(
+    afterForbidden,
+    before,
+    `a refused scheduling appended ${afterForbidden - before} event(s); expected 0`,
+  );
+  const countsAfter = (
+    await db.select({ n: sql<number>`count(*)::int` }).from(schema.stockCounts)
+  )[0]?.n ?? 0;
+  assert.equal(countsAfter, countsBefore, "a refused scheduling wrote a stock count");
+  console.log(`  schedule forbidden: ${forbidden.role} refused directly, nothing written`);
+}
+
+async function scheduleEmptyScopeIsRefused(db: Db): Promise<void> {
+  const manager = await actorForRole(db, "inventory-manager");
+  assert.equal(can(manager.role, "counts", "create"), true, "precondition: manager can create counts");
+
+  const { warehouseId } = await pickPair(db);
+  const before = await eventCount(db);
+
+  await assert.rejects(
+    () =>
+      scheduleStockCount(
+        manager,
+        {
+          warehouseId,
+          type: "category",
+          categoryId: "CAT-DOES-NOT-EXIST",
+          scheduledInDays: 1,
+          assignedTo: [manager.id],
+          scopeLabel: "No such category",
+        },
+        db,
+      ),
+    (err: unknown) => err instanceof CountError && err.code === "invalid",
+    "scheduleStockCount must throw CountError('invalid') for a scope with no holdings",
+  );
+
+  const afterEmpty = await eventCount(db);
+  assert.equal(
+    afterEmpty,
+    before,
+    `a refused (empty-scope) scheduling appended ${afterEmpty - before} event(s); expected 0`,
+  );
+  console.log("  schedule empty scope: a scope with no holdings was refused, not created empty");
+}
+
 async function main() {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) throw new Error("DATABASE_URL is not set");
@@ -350,6 +428,8 @@ async function main() {
     await forbiddenIsRefusedAndWritesNothing(db);
     await partialFailureLeavesNoTrace(db);
     await noVarianceAppendsNothingButStampsCounted(db);
+    await scheduleForbiddenIsRefusedAndWritesNothing(db);
+    await scheduleEmptyScopeIsRefused(db);
     console.log("ok");
   } finally {
     await pool.end();
