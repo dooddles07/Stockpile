@@ -96,9 +96,11 @@ const slugify = (name: string): string =>
 /**
  * A fresh id for a new row. The letters and the length keep it clear of the
  * zero-padded sequence the seed generator uses (`CAT-001`), so a created row
- * can never collide with a seeded one.
+ * can never collide with a seeded one. Exported because `purchasing.ts` mints a
+ * Purchase Order's id the same way.
  */
-const newId = (prefix: string): string => `${prefix}-${randomUUID().slice(0, 8).toUpperCase()}`;
+export const newId = (prefix: string): string =>
+  `${prefix}-${randomUUID().slice(0, 8).toUpperCase()}`;
 
 const nowIso = (): string => new Date().toISOString();
 const todayIso = (): string => new Date().toISOString().slice(0, 10);
