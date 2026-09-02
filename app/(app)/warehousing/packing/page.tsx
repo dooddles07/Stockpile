@@ -17,6 +17,7 @@ import { dueLabel, money, qty } from "@/lib/format";
 import { humanize } from "@/lib/status";
 import { cn } from "@/lib/utils";
 import { ActionButton } from "@/components/actions/action-button";
+import { FulfilmentActionButton } from "@/app/(app)/sales/orders/[id]/fulfilment-actions";
 
 export const metadata: Metadata = {
   title: "Packing",
@@ -35,13 +36,17 @@ export default async function PackingPage() {
   const customerById = await indexById(allCustomers);
   const warehouseById = await indexById(allWarehouses);
 
+  // Orders still on a picker's route (`picking`) as well as those already on the
+  // bench (`packing`): the queue is where a picker hands an order over, by
+  // advancing it the one step to `packing` through `advanceSalesOrder`.
   const queue = (await allSalesOrders())
-    .filter((o) => o.status === "packing")
+    .filter((o) => ["picking", "packing"].includes(o.status))
     .map((o) => {
       const units = o.lines.reduce((s, l) => s + l.quantity, 0);
       return {
         id: o.id,
         number: o.number,
+        status: o.status,
         customer: customerById.get(o.customerId)?.name ?? "—",
         warehouse: warehouseById.get(o.warehouseId)?.code ?? "—",
         shipToCity: o.shipToCity,
@@ -56,13 +61,14 @@ export default async function PackingPage() {
     .sort((a, b) => a.promisedAt.localeCompare(b.promisedAt));
 
   const late = queue.filter((o) => o.late);
+  const onBench = queue.filter((o) => o.status === "packing");
 
   return (
     <>
       <PageHeader
         crumbs={[{ label: "Warehousing", href: "/warehousing/warehouses" }, { label: "Packing" }]}
         title="Packing"
-        description={`Picked orders waiting to be boxed, labelled and manifested. Carrier cut-off is ${CUTOFF} — anything packed after that ships the next working day.`}
+        description={`Orders still on a picker's route and orders already on the bench. Starting one moves it to the bench; carrier cut-off is ${CUTOFF} — anything packed after that ships the next working day.`}
         actions={
           <>
             <ActionButton
@@ -86,11 +92,15 @@ export default async function PackingPage() {
         }
       >
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <StatTile label="Awaiting packing" value={qty(queue.length)} />
-          <StatTile label="Units" value={qty(queue.reduce((s, o) => s + o.units, 0))} />
+          <StatTile
+            label="Awaiting packing"
+            value={qty(queue.length - onBench.length)}
+            hint="still being picked"
+          />
+          <StatTile label="On the bench" value={qty(onBench.length)} />
           <StatTile
             label="Value on the bench"
-            value={money(queue.reduce((s, o) => s + o.value, 0))}
+            value={money(onBench.reduce((s, o) => s + o.value, 0))}
           />
           <StatTile
             label="Past promised date"
@@ -104,7 +114,7 @@ export default async function PackingPage() {
       <div className="p-4 sm:p-6">
         <Section
           title="Packing bench"
-          description="Everything picked and waiting to go out. Closing the manifest ships every packed order on it."
+          description="Orders still being picked and orders already on the bench. Starting one moves it to Packing; closing the manifest ships every packed order on it."
           contentClassName="p-0"
         >
           <SimpleTable
@@ -121,6 +131,7 @@ export default async function PackingPage() {
                 ),
               },
               { key: "customer", header: "Customer", cell: (o) => <span className="truncate">{o.customer}</span> },
+              { key: "status", header: "Status", cell: (o) => <StatusBadge status={o.status} /> },
               {
                 key: "destination",
                 header: "Ship to",
@@ -151,11 +162,26 @@ export default async function PackingPage() {
                 key: "action",
                 header: "",
                 align: "right",
-                cell: (o) => (
-                  <Button variant="outline" size="sm" className="h-7" render={<Link href={`/sales/orders/${o.id}`} />}>
-                    Pack
-                  </Button>
-                ),
+                // A picking order is handed to the bench here — one advance
+                // through `advanceSalesOrder`. Once packing, the order detail is
+                // where it gets boxed and shipped.
+                cell: (o) =>
+                  o.status === "picking" ? (
+                    <FulfilmentActionButton
+                      salesOrderId={o.id}
+                      intent="pack"
+                      pendingLabel="Moving…"
+                      variant="outline"
+                      size="sm"
+                      className="h-7"
+                    >
+                      Start packing
+                    </FulfilmentActionButton>
+                  ) : (
+                    <Button variant="outline" size="sm" className="h-7" render={<Link href={`/sales/orders/${o.id}`} />}>
+                      Pack
+                    </Button>
+                  ),
               },
             ]}
             empty={

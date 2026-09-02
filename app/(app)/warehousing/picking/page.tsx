@@ -16,6 +16,7 @@ import { can } from "@/lib/auth/permissions";
 import { dueLabel, money, qty } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { ActionButton } from "@/components/actions/action-button";
+import { FulfilmentActionButton } from "@/app/(app)/sales/orders/[id]/fulfilment-actions";
 
 export const metadata: Metadata = {
   title: "Picking",
@@ -148,11 +149,26 @@ export default async function PickingPage() {
                 key: "action",
                 header: "",
                 align: "right",
-                cell: (o) => (
-                  <Button variant="outline" size="sm" className="h-7" render={<Link href={`/warehousing/picking/${o.id}`} />}>
-                    {o.status === "picking" ? "Continue" : "Start pick"}
-                  </Button>
-                ),
+                // A reserved order starts its pick here — one advance through
+                // `advanceSalesOrder`, so the queue is where the work happens.
+                // Once picking, the walk sheet is the next screen.
+                cell: (o) =>
+                  o.status === "picking" ? (
+                    <Button variant="outline" size="sm" className="h-7" render={<Link href={`/warehousing/picking/${o.id}`} />}>
+                      Continue
+                    </Button>
+                  ) : (
+                    <FulfilmentActionButton
+                      salesOrderId={o.id}
+                      intent="pick"
+                      pendingLabel="Starting…"
+                      variant="outline"
+                      size="sm"
+                      className="h-7"
+                    >
+                      Start pick
+                    </FulfilmentActionButton>
+                  ),
               },
             ]}
             empty={
