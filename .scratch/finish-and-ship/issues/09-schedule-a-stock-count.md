@@ -8,14 +8,22 @@ The interesting decision here is what the lines are and when they are fixed. A c
 
 **Blocked by:** 08 (raise a Transfer).
 
-**Status:** open
+**Status:** resolved
 
-- [ ] A `scheduleStockCount(actor, input, db)` domain function exists, checks permission first, and writes the count and its lines in one transaction
-- [ ] The number is allocated inside that transaction and an Event is appended, attributed to the Actor
-- [ ] Lines are materialised from the scope at scheduling time, each carrying the expected quantity as it stood then
-- [ ] A scope that resolves to no holdings is refused, not created empty
-- [ ] The count lands in `scheduled` and moves no stock
-- [ ] The scheduled count opens in the existing count sheet and can be completed through the existing `completeStockCount`
-- [ ] The form submits through a server action that validates and delegates only
-- [ ] A Role that forbids scheduling counts is refused when reaching the domain function directly
-- [ ] End-to-end coverage exists for scheduling a count and opening its sheet with the expected lines present
+- [x] A `scheduleStockCount(actor, input, db)` domain function exists, checks permission first, and writes the count and its lines in one transaction
+- [x] The number is allocated inside that transaction and an Event is appended, attributed to the Actor
+- [x] Lines are materialised from the scope at scheduling time, each carrying the expected quantity as it stood then
+- [x] A scope that resolves to no holdings is refused, not created empty
+- [x] The count lands in `scheduled` and moves no stock
+- [x] The scheduled count opens in the existing count sheet and can be completed through the existing `completeStockCount`
+- [x] The form submits through a server action that validates and delegates only
+- [x] A Role that forbids scheduling counts is refused when reaching the domain function directly
+- [x] End-to-end coverage exists for scheduling a count and opening its sheet with the expected lines present
+
+## Comments
+
+**2026-09-02:** Implemented. `scheduleStockCount` in `lib/domain/counts.ts` — permission check first (`counts`/`create`), then one transaction: resolves the scope to un-lotted, active, in-stock holdings (`stock_rows` joined to `products`/`locations`), refuses an empty result before a number is burned, allocates the number, appends a `stock-count-scheduled` Event, and writes the count (`scheduled`) and its lines with `expected` set from the on-hand at that moment. `count-form.tsx` submits through the new `app/(app)/inventory/counts/new/actions.ts` server action (validate + delegate only, per ADR-0005). Direct-call coverage for the forbidden role and the empty-scope refusal is in `lib/domain/counts.checks.ts` (`npm run check:counts`). End-to-end coverage is `e2e/stock-count-schedule.write.spec.ts` — schedules a count through the form and asserts the sheet opens with its lines already present.
+
+Reviewed with `/code-review` (fixed point `cc43f0d`, spec-sourced from this ticket): Standards and Spec axes both came back clean — no hard violations, no missing or wrong checklist items. A few judgement-call nits (a `LIMIT` sentinel, duplicated 40/12 caps between the form's estimate and the scheduling call) were cheap enough to fix directly rather than leave as debt.
+
+Not run: `npm run check:counts` and the Playwright e2e suite need the seeded Neon branch, which is currently over its data-transfer quota (`Your project has exceeded the data transfer quota`) — out of my control here. Typecheck and lint both pass clean on every changed file.
