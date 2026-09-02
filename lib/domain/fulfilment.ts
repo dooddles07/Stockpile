@@ -1,11 +1,15 @@
 /**
- * Sales Order fulfilment (ticket 13) — the flow where the distinction between
- * the two kinds of balance matters most.
+ * Sales Order fulfilment (ticket 13), and placing the order in the first place
+ * (ticket 07) — the flow where the distinction between the two kinds of balance
+ * matters most.
  *
  * Reserved is projected from open Sales Order state (`documents.reservedByProduct`
  * — `sum(quantity - fulfilled)` over orders in `confirmed` / `reserved` /
  * `picking` / `packing`), never from a Movement. So:
  *
+ *  - `createSalesOrder` writes a new order in `draft`, with its lines and an
+ *    Event. A `draft` is not in the open set, so creation reserves nothing: it
+ *    records demand, and confirmation is what promises stock against it.
  *  - `confirmSalesOrder` moves an order `draft -> confirmed`. That alone changes
  *    what is reserved, because the order has entered the open set. No Event is
  *    appended and nothing writes to `stock_rows.reserved`.
@@ -38,11 +42,18 @@ import type { NeonDatabase } from "drizzle-orm/neon-serverless";
 
 import { can } from "@/lib/auth/permissions";
 import * as schema from "@/lib/db/schema";
+import { allocateDocumentNumber } from "@/lib/db/numbers";
 import { applyStockChange, type Actor } from "@/lib/domain/stock";
 import { runAutomation } from "@/lib/domain/automation";
-import type { SOStatus } from "@/lib/types";
+import { newId } from "@/lib/domain/reference";
+import { documentTotals, lineMoney, roundMoney } from "@/lib/totals";
+import type { SalesOrder, SOStatus } from "@/lib/types";
 
 type Db = NeonDatabase<typeof schema>;
+
+/** Placing an order is a `create` on the sales-orders module (ADR-0004), which
+ *  is a different permission from fulfilling one. */
+const CREATE_PERMISSION = { module: "sales-orders", action: "create" } as const;
 
 /** Every fulfilment action is gated on the same access (CONTEXT.md: a Role that
  *  forbids fulfilment is refused, per ADR-0004, in the domain — not the UI). */
@@ -90,6 +101,171 @@ export class SalesOrderError extends Error {
     super(message);
     this.name = "SalesOrderError";
   }
+}
+
+export interface CreateSalesOrderLineInput {
+  productId: string;
+  quantity: number;
+  unitPrice: number;
+  discountPct: number;
+  taxPct: number;
+}
+
+export interface CreateSalesOrderInput {
+  customerId: string;
+  warehouseId: string;
+  channel: SalesOrder["channel"];
+  /** Days from today the order is promised for; `promised_at` is NOT NULL. */
+  promisedInDays: number;
+  shipping: number;
+  notes: string;
+  lines: CreateSalesOrderLineInput[];
+}
+
+export interface CreateSalesOrderResult {
+  id: string;
+  number: string;
+  total: number;
+}
+
+/**
+ * Place a Sales Order for the Actor (ticket 07). Returns the new order's id and
+ * number. Throws `SalesOrderError` — and writes nothing at all — when the
+ * Actor's Role forbids creating sales orders, the order has no lines, or the
+ * customer or a product on it does not exist.
+ *
+ * The order lands in `draft`, and a draft reserves nothing. Reserved is
+ * projected from open Sales Order state (`OPEN_SO_STATUSES`) and `draft` is not
+ * in that set, so creation records demand without promising stock;
+ * `confirmSalesOrder` above is what promises it. The availability the form
+ * shows per line is advisory here — it is checked for real, against what other
+ * open orders have already claimed, at confirmation.
+ *
+ * The number, the Event, the order and its lines commit together or not at all,
+ * so a creation that fails partway leaves nothing behind — except its burned
+ * number, which is correct for a Document number (`lib/db/numbers.ts`).
+ *
+ * The warehouse is not looked up: `sales_orders.warehouse_id` carries a foreign
+ * key, so an unknown one is the database's rejection to make, and it rolls the
+ * whole transaction back like any other failure.
+ */
+export async function createSalesOrder(
+  actor: Actor,
+  input: CreateSalesOrderInput,
+  db: Db,
+): Promise<CreateSalesOrderResult> {
+  if (!can(actor.role, CREATE_PERMISSION.module, CREATE_PERMISSION.action)) {
+    throw new SalesOrderError(
+      `Your role (${actor.role}) is not allowed to place sales orders.`,
+      "forbidden",
+    );
+  }
+  if (input.lines.length === 0) {
+    throw new SalesOrderError("A sales order needs at least one line.", "invalid");
+  }
+  if (input.lines.some((l) => l.quantity <= 0)) {
+    throw new SalesOrderError("Every line needs a quantity of at least one.", "invalid");
+  }
+
+  const created = await db.transaction(async (tx) => {
+    const [customer] = await tx
+      .select({ city: schema.customers.city })
+      .from(schema.customers)
+      .where(eq(schema.customers.id, input.customerId));
+    if (!customer) throw new SalesOrderError("Unknown customer.", "not-found");
+
+    // The line's SKU and name are copied from the catalogue, not from the
+    // client: a Document records what was sold at the time it was placed.
+    const productRows = await tx
+      .select({ id: schema.products.id, sku: schema.products.sku, name: schema.products.name })
+      .from(schema.products)
+      .where(inArray(schema.products.id, input.lines.map((l) => l.productId)));
+    const products = new Map(productRows.map((p) => [p.id, p]));
+
+    const lines = input.lines.map((line, i) => {
+      const product = products.get(line.productId);
+      if (!product) throw new SalesOrderError(`Unknown product on line ${i + 1}.`, "not-found");
+
+      return {
+        id: `LN-${String(i + 1).padStart(3, "0")}`,
+        productId: product.id,
+        sku: product.sku,
+        name: product.name,
+        quantity: line.quantity,
+        fulfilled: 0,
+        unitPrice: line.unitPrice,
+        discountPct: line.discountPct,
+        taxPct: line.taxPct,
+        lineTotal: lineMoney(line).lineTotal,
+      };
+    });
+
+    // Money is recomputed from the lines rather than trusted from the client —
+    // a server action is a trust boundary — with the same `lib/totals.ts` the
+    // form uses, so what the user was shown and what is stored cannot drift.
+    const shipping = roundMoney(Math.max(0, input.shipping));
+    const totals = documentTotals(input.lines, shipping);
+
+    const number = await allocateDocumentNumber(tx, "salesOrder");
+    const id = newId("SO");
+    const placedAt = new Date();
+
+    // The Event first — it is the source of truth; the rows below are its
+    // projection and commit with it (ADR-0002, ADR-0003).
+    const [event] = await tx.insert(schema.events).values({
+      type: "sales-order-created",
+      actorId: actor.id,
+      payload: {
+        salesOrderId: id,
+        number,
+        customerId: input.customerId,
+        warehouseId: input.warehouseId,
+        status: "draft",
+        total: totals.total,
+        lines: lines.map((l) => ({ sku: l.sku, quantity: l.quantity, unitPrice: l.unitPrice })),
+      },
+    }).returning({ seq: schema.events.seq });
+
+    await tx.insert(schema.salesOrders).values({
+      id,
+      number,
+      customerId: input.customerId,
+      warehouseId: input.warehouseId,
+      status: "draft",
+      paymentStatus: "unpaid",
+      fulfillmentStatus: "unfulfilled",
+      channel: input.channel,
+      placedAt: placedAt.toISOString(),
+      promisedAt: new Date(
+        placedAt.getTime() + Math.max(0, input.promisedInDays) * 24 * 60 * 60 * 1000,
+      ).toISOString(),
+      shippedAt: null,
+      subtotal: totals.subtotal,
+      taxTotal: totals.taxTotal,
+      discountTotal: totals.discountTotal,
+      shipping,
+      total: totals.total,
+      // The dataset prices every Sales Order in USD and nothing on a Customer
+      // says otherwise; a per-customer currency is a pricing feature, not this.
+      currency: "USD",
+      createdBy: actor.id,
+      carrier: null,
+      trackingNumber: null,
+      shipToCity: customer.city,
+      notes: input.notes,
+    });
+
+    await tx
+      .insert(schema.salesOrderLines)
+      .values(lines.map((line) => ({ ...line, salesOrderId: id })));
+
+    return { id, number, total: totals.total, eventSeq: event.seq };
+  });
+
+  // After commit: evaluate matching Automation Rules in the same request
+  // (ADR-0008), as every other flow that appends an Event does. Never throws.
+  await runAutomation(db, [created.eventSeq]);
+  return created;
 }
 
 function assertCan(actor: Actor): void {
