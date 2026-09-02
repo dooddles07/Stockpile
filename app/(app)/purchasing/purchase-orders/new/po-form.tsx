@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Lightbulb, Save, Send, TriangleAlert } from "lucide-react";
+import { Lightbulb, Save, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -17,11 +17,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Section, StatTile } from "@/components/record/field-grid";
-import { LineItemEditor, lineTotals, type EditorLine } from "@/components/record/line-item-editor";
+import { LineItemEditor, type EditorLine } from "@/components/record/line-item-editor";
 import { WorkflowStepper } from "@/components/status/workflow-stepper";
 import { StatusBadge } from "@/components/status/status-badge";
 import { money, percent, plural, qty } from "@/lib/format";
+import { documentTotals } from "@/lib/totals";
 import { cn } from "@/lib/utils";
+import { raisePurchaseOrder } from "./actions";
 
 export interface PoSupplier {
   id: string;
@@ -67,6 +69,7 @@ export function PoForm({
   const [shipping, setShipping] = React.useState(0);
   const [notes, setNotes] = React.useState("");
   const [lines, setLines] = React.useState<EditorLine[]>([]);
+  const [saving, setSaving] = React.useState(false);
 
   const supplierLabels = React.useMemo(
     () => Object.fromEntries(suppliers.map((s) => [s.id, `${s.name} · ${s.code}`])),
@@ -172,28 +175,43 @@ export function PoForm({
     toast.success(`${plural(missing.length, "line")} added from purchase suggestions`);
   };
 
-  const totals = lineTotals(lines, shipping);
+  const totals = documentTotals(lines, shipping);
   const needsApproval = totals.total > APPROVAL_THRESHOLD;
   const supplierOnHold = supplier?.status !== "active";
-  const canSubmit = lines.length > 0 && !supplierOnHold;
 
-  const submit = (asDraft: boolean) => {
-    if (!asDraft && !canSubmit) return;
-    toast.success(
-      asDraft
-        ? "Purchase order saved as a draft"
-        : needsApproval
-          ? "Purchase order submitted for approval"
-          : "Purchase order placed",
-      {
-        description: asDraft
-          ? "Nothing is committed. Finish it later from the purchase orders list."
-          : needsApproval
-            ? `${money(totals.total, { cents: true })} is above the ${money(APPROVAL_THRESHOLD)} threshold, so a purchasing manager has to sign it off before it reaches ${supplier?.name}.`
-            : `Sent to ${supplier?.name}. ${qty(totals.units)} units booked as incoming at ${warehouses.find((w) => w.id === warehouseId)?.code}.`,
-      },
-    );
-    router.push("/purchasing/purchase-orders");
+  // Creation stops at `draft` (ticket 06). Submitting it for approval, approving
+  // it and placing it with the supplier are separate transitions on the order's
+  // own page, so there is one button here rather than a draft/place pair.
+  const create = async () => {
+    if (lines.length === 0 || saving) return;
+    setSaving(true);
+
+    const result = await raisePurchaseOrder({
+      supplierId,
+      warehouseId,
+      shipping,
+      notes,
+      lines: lines.map((l) => ({
+        productId: l.product.id,
+        quantity: l.quantity,
+        unitPrice: l.unitPrice,
+        discountPct: l.discountPct,
+        taxPct: l.taxPct,
+      })),
+    });
+
+    if (!result.ok) {
+      setSaving(false);
+      toast.error("Purchase order not raised", { description: result.message });
+      return;
+    }
+
+    toast.success(`${result.number} raised as a draft`, {
+      description: needsApproval
+        ? `${money(totals.total, { cents: true })} is above the ${money(APPROVAL_THRESHOLD)} threshold, so a purchasing manager has to sign it off before it reaches ${supplier?.name}.`
+        : `${qty(totals.units)} units for ${supplier?.name}, into ${warehouses.find((w) => w.id === warehouseId)?.code}. Nothing is on order until it is submitted.`,
+    });
+    router.push(`/purchasing/purchase-orders/${result.id}`);
   };
 
   return (
@@ -282,8 +300,8 @@ export function PoForm({
                   {supplier.name} is {supplier.status === "on-hold" ? "on hold" : "inactive"}
                 </p>
                 <p className="mt-1 text-caption leading-relaxed text-status-warning/90">
-                  New orders cannot be placed with this supplier until the hold is lifted. Save a
-                  draft, or pick a different supplier for these lines.
+                  The order can still be raised as a draft, but it cannot be placed with this
+                  supplier until the hold is lifted.
                 </p>
               </div>
             </div>
@@ -379,32 +397,20 @@ export function PoForm({
           </div>
 
           <div className="mt-4">
-            <WorkflowStepper
-              workflow="purchaseOrder"
-              status={needsApproval ? "submitted" : "ordered"}
-            />
+            <WorkflowStepper workflow="purchaseOrder" status="draft" />
           </div>
         </Section>
 
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" className="h-8" disabled={!canSubmit} onClick={() => submit(false)}>
-            <Send className="size-3.5" aria-hidden />
-            {needsApproval ? "Submit for approval" : "Place order"}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8"
-            disabled={lines.length === 0}
-            onClick={() => submit(true)}
-          >
+          <Button size="sm" className="h-8" disabled={lines.length === 0 || saving} onClick={create}>
             <Save className="size-3.5" aria-hidden />
-            Save draft
+            {saving ? "Creating…" : "Create order"}
           </Button>
           <Button
             variant="ghost"
             size="sm"
             className="h-8"
+            disabled={saving}
             onClick={() => router.push("/purchasing/purchase-orders")}
           >
             Cancel
