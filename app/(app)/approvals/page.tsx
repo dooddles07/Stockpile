@@ -11,6 +11,7 @@ import { PageHeader } from "@/components/shell/page-header";
 import { EmptyState, PermissionDenied } from "@/components/states";
 import { StatTile } from "@/components/record/field-grid";
 import { WidgetCard, WidgetList, WidgetRow } from "@/components/widgets/widget-card";
+import { DecisionList } from "./decision-list";
 import { StatusBadge } from "@/components/status/status-badge";
 import { indexById, users } from "@/lib/repo/reference";
 import { pendingApprovals } from "@/lib/repo/metrics";
@@ -139,6 +140,17 @@ export default async function ApprovalsPage() {
                       title="Queue is clear"
                       description={`No ${group.title.toLowerCase()} are waiting.`}
                       className="py-10"
+                    />
+                  ) : decidable ? (
+                    <DecisionList
+                      items={items.map((item) => ({
+                        id: item.id,
+                        type: item.kind,
+                        number: item.number,
+                        title: item.title,
+                        subtitle: `${item.subtitle} · raised by ${userById.get(item.requestedBy)?.name ?? "—"}`,
+                        amount: item.amount,
+                      }))}
                     />
                   ) : (
                     <WidgetList>

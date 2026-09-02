@@ -4,6 +4,8 @@ import * as React from "react";
 import { BadgeCheck, Check, X } from "lucide-react";
 import { toast } from "sonner";
 
+import { decideOnApproval } from "@/app/(app)/approvals/approval-actions";
+import type { DocumentType } from "@/lib/domain/approvals";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { EmptyState } from "@/components/states";
@@ -12,7 +14,7 @@ import { cn } from "@/lib/utils";
 
 export interface ApprovalItem {
   id: string;
-  kind: string;
+  kind: DocumentType;
   kindLabel: string;
   number: string;
   title: string;
@@ -35,19 +37,34 @@ export function ApproveClient({ items }: { items: ApprovalItem[] }) {
   const [decided, setDecided] = React.useState<Record<string, "approved" | "rejected">>({});
   const [rejecting, setRejecting] = React.useState<string | null>(null);
   const [reason, setReason] = React.useState("");
+  const [busy, startTransition] = React.useTransition();
 
   const pending = items.filter((item) => !decided[item.id]);
 
   const approve = (item: ApprovalItem) => {
-    setDecided((prev) => ({ ...prev, [item.id]: "approved" }));
-    toast.success(`${item.number} approved`, { description: item.subtitle });
+    startTransition(async () => {
+      const result = await decideOnApproval({ type: item.kind, id: item.id, decision: "approve" });
+      if (!result.ok) return void toast.error(result.message);
+      setDecided((prev) => ({ ...prev, [item.id]: "approved" }));
+      toast.success(result.message, { description: item.subtitle });
+    });
   };
 
   const reject = (item: ApprovalItem) => {
-    setDecided((prev) => ({ ...prev, [item.id]: "rejected" }));
-    toast.warning(`${item.number} rejected`, { description: reason.trim() || "No reason given." });
-    setRejecting(null);
-    setReason("");
+    const note = reason.trim();
+    startTransition(async () => {
+      const result = await decideOnApproval({
+        type: item.kind,
+        id: item.id,
+        decision: "reject",
+        reason: note,
+      });
+      if (!result.ok) return void toast.error(result.message);
+      setDecided((prev) => ({ ...prev, [item.id]: "rejected" }));
+      toast.warning(result.message, { description: note });
+      setRejecting(null);
+      setReason("");
+    });
   };
 
   if (pending.length === 0) {
@@ -103,6 +120,7 @@ export function ApproveClient({ items }: { items: ApprovalItem[] }) {
                 <Button
                   variant="destructive"
                   className="h-11 flex-1"
+                  disabled={busy || !reason.trim()}
                   onClick={() => reject(item)}
                 >
                   Confirm rejection
@@ -110,6 +128,7 @@ export function ApproveClient({ items }: { items: ApprovalItem[] }) {
                 <Button
                   variant="outline"
                   className="h-11"
+                  disabled={busy}
                   onClick={() => {
                     setRejecting(null);
                     setReason("");
@@ -121,13 +140,18 @@ export function ApproveClient({ items }: { items: ApprovalItem[] }) {
             </div>
           ) : (
             <div className="mt-4 flex gap-2">
-              <Button className={cn("h-12 flex-1 text-[15px]")} onClick={() => approve(item)}>
+              <Button
+                className={cn("h-12 flex-1 text-[15px]")}
+                disabled={busy}
+                onClick={() => approve(item)}
+              >
                 <Check className="size-4" aria-hidden />
                 Approve
               </Button>
               <Button
                 variant="outline"
                 className="h-12 flex-1 text-[15px]"
+                disabled={busy}
                 onClick={() => {
                   setRejecting(item.id);
                   setReason("");
