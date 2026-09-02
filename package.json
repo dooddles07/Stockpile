@@ -22,6 +22,7 @@
     "check:transfers": "tsx lib/domain/transfers.checks.ts",
     "check:counts": "tsx lib/domain/counts.checks.ts",
     "check:returns": "tsx lib/domain/returns.checks.ts",
+    "check:approvals": "tsx lib/domain/approvals.checks.ts",
     "check:automation": "tsx lib/domain/automation.checks.ts"
   },
   "dependencies": {

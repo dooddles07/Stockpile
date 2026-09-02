@@ -167,6 +167,18 @@ jobs:
       # failing rule is recorded as a failed run without failing the triggering
       # operation; and every run is attributed to the system Actor. Playwright
       # cannot see post-commit in-process evaluation or issue a rolled-back write.
+      # Ticket 11: one approve/reject implementation over four Document types
+      # refuses a Role without `approve` on the type's module when reached
+      # directly (all four), refuses a Document not in its pending status rather
+      # than re-deciding it, requires a reason to reject, and — for a PO and a
+      # transfer approval and an adjustment rejection — appends exactly one
+      # Event and no Movement while carrying an approved Purchase Order far
+      # enough for `receiveGoods`. Playwright only ever hits the queue.
+      - name: Approvals checks
+        run: npm run check:approvals
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
       - name: Automation checks
         run: npm run check:automation
         env:
