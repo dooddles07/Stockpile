@@ -12,16 +12,41 @@ An approval appends no Movement. Nothing about approving a document moves stock;
 
 **Blocked by:** 10 (raise a Return, in both directions).
 
-**Status:** open
+**Status:** resolved
 
-- [ ] One shared approve/reject implementation with four thin per-document-type wrappers
-- [ ] Each checks permission before anything else and locks the document before reading its status
-- [ ] A document not in its pending status is refused rather than silently re-approved
-- [ ] Approval records the deciding Actor and the time; rejection additionally requires a reason
-- [ ] An Event is appended for every decision; no Movement is appended for any of them
-- [ ] The Approvals queue offers approve and reject for all four types and updates on decision
-- [ ] The handheld approve surface performs a real approval
-- [ ] An approved Purchase Order is receivable through the existing `receiveGoods`
-- [ ] A Role that forbids approving is refused when reaching the domain function directly, for each of the four types
-- [ ] End-to-end coverage exists for the full path: raise a Purchase Order, approve it, receive it, and see on-hand rise and the Movement in the ledger attributed to the Actor
-- [ ] End-to-end coverage exists for an Auditor seeing the queue and being unable to act on it
+- [x] One shared approve/reject implementation with four thin per-document-type wrappers
+- [x] Each checks permission before anything else and locks the document before reading its status
+- [x] A document not in its pending status is refused rather than silently re-approved
+- [x] Approval records the deciding Actor and the time; rejection additionally requires a reason
+- [x] An Event is appended for every decision; no Movement is appended for any of them
+- [x] The Approvals queue offers approve and reject for all four types and updates on decision
+- [x] The handheld approve surface performs a real approval
+- [x] An approved Purchase Order is receivable through the existing `receiveGoods`
+- [x] A Role that forbids approving is refused when reaching the domain function directly, for each of the four types
+- [x] End-to-end coverage exists for the full path: raise a Purchase Order, approve it, receive it, and see on-hand rise and the Movement in the ledger attributed to the Actor
+- [x] End-to-end coverage exists for an Auditor seeing the queue and being unable to act on it
+
+## Comments
+
+**2026-09-02** — Resolved.
+
+- `lib/domain/approvals.ts`: one `decide()` over a per-type descriptor, with
+  `decideOnPurchaseOrder` / `decideOnTransfer` / `decideOnAdjustment` /
+  `decideOnStockCount` wrappers and a `decideOnDocument` dispatcher. Permission
+  (`approve` on the type's module) is checked before the transaction; the row is
+  locked before its status is read; a document off its pending status throws
+  `wrong-state`. Approve writes the deciding Actor to `approvedBy` and an
+  approve-time stamp where the table has one (`orderedAt` / `approvedAt`);
+  reject writes neither, only the terminal status, and needs a non-blank reason.
+  Every decision appends one `<type>-(approved|rejected)` Event and no Movement.
+  Approving a Purchase Order writes `ordered`, so `receiveGoods` accepts it
+  unchanged.
+- Queue + handheld both post to the `decideOnApproval` server action (ADR-0005:
+  no logic in the action). Queue groups a role can decide render inline
+  Approve / Reject with a reason field; the handheld cards make the real write.
+- `lib/domain/approvals.checks.ts` (`npm run check:approvals`) and
+  `e2e/approval.write.spec.ts` cover the below-UI refusals and the
+  raise -> approve -> receive path.
+- `tsc` and `eslint` pass. `check:approvals` and `test:e2e` were not run
+  locally — the Neon dev branch is over its data-transfer quota; both run in CI
+  against a fresh seeded branch.
