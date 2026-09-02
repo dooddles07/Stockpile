@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Save, Send, TriangleAlert } from "lucide-react";
+import { Save, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,7 @@ import { money, percent, plural, qty } from "@/lib/format";
 import { humanize } from "@/lib/status";
 import { documentTotals } from "@/lib/totals";
 import { cn } from "@/lib/utils";
+import { placeSalesOrder } from "./actions";
 
 export interface OrderCustomer {
   id: string;
@@ -67,6 +68,7 @@ export function OrderForm({
   const [shipping, setShipping] = React.useState(0);
   const [notes, setNotes] = React.useState("");
   const [lines, setLines] = React.useState<EditorLine[]>([]);
+  const [saving, setSaving] = React.useState(false);
 
   const customerLabels = React.useMemo(
     () => Object.fromEntries(customers.map((c) => [c.id, `${c.name} · ${c.code}`])),
@@ -133,25 +135,44 @@ export function OrderForm({
   const overCredit = customer ? creditAfter > customer.creditLimit : false;
   const customerBlocked = customer?.status !== "active";
 
-  const canSubmit = lines.length > 0 && !customerBlocked && !overCredit;
+  // Placing an order stops at `draft` (ticket 07), and a draft reserves
+  // nothing — confirming it on its own page is what promises stock. So there is
+  // one button here rather than a confirm/draft pair. A blocked customer or an
+  // over-credit total no longer disables it either — a draft promises nothing,
+  // so there is nothing to withhold. Neither rule is enforced at confirmation
+  // (`confirmSalesOrder` checks the fulfilment permission, the draft state and
+  // availability, and nothing about the account), so the banners below are
+  // advice to a human, not a gate.
+  const create = async () => {
+    if (lines.length === 0 || saving) return;
+    setSaving(true);
 
-  const submit = (asDraft: boolean) => {
-    if (!asDraft && !canSubmit) return;
-    toast.success(
-      asDraft
-        ? "Order saved as a draft"
-        : shortLines.length > 0
-          ? "Order confirmed with a backorder"
-          : "Order confirmed and stock reserved",
-      {
-        description: asDraft
-          ? "Nothing is reserved yet. Finish it later from the sales orders list."
-          : shortLines.length > 0
-            ? `${qty(totals.units - backorderUnits)} units reserved at ${warehouses.find((w) => w.id === warehouseId)?.code}; ${qty(backorderUnits)} on backorder until stock arrives.`
-            : `${qty(totals.units)} units reserved at ${warehouses.find((w) => w.id === warehouseId)?.code} and released for picking.`,
-      },
-    );
-    router.push("/sales/orders");
+    const result = await placeSalesOrder({
+      customerId,
+      warehouseId,
+      channel,
+      promisedInDays: promisedDays,
+      shipping,
+      notes,
+      lines: lines.map((l) => ({
+        productId: l.product.id,
+        quantity: l.quantity,
+        unitPrice: l.unitPrice,
+        discountPct: l.discountPct,
+        taxPct: l.taxPct,
+      })),
+    });
+
+    if (!result.ok) {
+      setSaving(false);
+      toast.error("Order not placed", { description: result.message });
+      return;
+    }
+
+    toast.success(`${result.number} placed as a draft`, {
+      description: `${qty(totals.units)} units for ${customer?.name}, from ${warehouses.find((w) => w.id === warehouseId)?.code}. Nothing is reserved until the order is confirmed.`,
+    });
+    router.push(`/sales/orders/${result.id}`);
   };
 
   return (
@@ -261,8 +282,8 @@ export function OrderForm({
                   {customer.name} is {customer.status === "on-hold" ? "on hold" : "inactive"}
                 </p>
                 <p className="mt-1 text-caption leading-relaxed text-status-warning/90">
-                  Stock cannot be reserved for this account until the hold is lifted. You can still
-                  save a draft.
+                  The order can still be placed as a draft — a draft reserves nothing. Do not
+                  confirm it until the hold is lifted: confirming promises stock to the account.
                 </p>
               </div>
             </div>
@@ -302,10 +323,7 @@ export function OrderForm({
           </div>
 
           <div className="mt-4">
-            <WorkflowStepper
-              workflow="salesOrder"
-              status={backorderUnits > 0 ? "confirmed" : "reserved"}
-            />
+            <WorkflowStepper workflow="salesOrder" status="draft" />
           </div>
         </Section>
 
@@ -370,24 +388,15 @@ export function OrderForm({
         )}
 
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" className="h-8" disabled={!canSubmit} onClick={() => submit(false)}>
-            <Send className="size-3.5" aria-hidden />
-            Confirm order
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8"
-            disabled={lines.length === 0}
-            onClick={() => submit(true)}
-          >
+          <Button size="sm" className="h-8" disabled={lines.length === 0 || saving} onClick={create}>
             <Save className="size-3.5" aria-hidden />
-            Save draft
+            {saving ? "Placing…" : "Place order"}
           </Button>
           <Button
             variant="ghost"
             size="sm"
             className="h-8"
+            disabled={saving}
             onClick={() => router.push("/sales/orders")}
           >
             Cancel
