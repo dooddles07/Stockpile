@@ -184,6 +184,17 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
+      # Ticket 12: dismissing a notification is one column write behind a
+      # permission check. A Role without dashboard access is refused at the
+      # domain function (no seeded Role is, but ticket 13 makes it reachable),
+      # an unknown id is refused, and neither path writes anything; a permitted
+      # dismissal flips the column, appends no Event and is idempotent.
+      # Playwright only ever sees the page with its control already rendered.
+      - name: Notification checks
+        run: npm run check:notifications
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
       - name: Run Playwright suite
         run: npm run test:e2e
         env:

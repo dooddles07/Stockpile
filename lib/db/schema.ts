@@ -671,6 +671,9 @@ export const notifications = pgTable("notifications", {
   body: text("body").notNull(),
   href: text("href").notNull(),
   read: boolean("read").notNull(),
+  /** Cleared from every feed once the recipient dismisses it (ticket 12). The
+   *  seed never sets it, so the default is what every seeded row carries. */
+  dismissed: boolean("dismissed").notNull().default(false),
   /** Null for system notifications; a User id otherwise. */
   actorId: text("actor_id"),
 });

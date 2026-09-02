@@ -85,6 +85,13 @@
       "when": 1788271649849,
       "tag": "0011_large_dazzler",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1788357226027,
+      "tag": "0012_old_whistler",
+      "breakpoints": true
     }
   ]
 }

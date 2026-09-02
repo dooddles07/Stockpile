@@ -23,11 +23,14 @@ import type {
   TaskItem,
 } from "@/lib/types";
 
+// A dismissed notification is gone from every feed — the bell, the page — so it
+// is dropped here rather than at each call site (ticket 12). `dismissed` never
+// reaches a caller; like `seq` it is a storage concern, not part of the shape.
 export const notifications = cache(
   async (): Promise<AppNotification[]> =>
-    (await getDb().select().from(schema.notifications).orderBy(schema.notifications.seq)).map(
-      ({ seq, ...notification }) => notification,
-    ),
+    (await getDb().select().from(schema.notifications).orderBy(schema.notifications.seq))
+      .filter((n) => !n.dismissed)
+      .map(({ seq, dismissed, ...notification }) => notification),
 );
 
 export const tasks = cache(

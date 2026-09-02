@@ -13,6 +13,7 @@ import { NOW, DAY_MS } from "@/lib/data/rng";
 import { plural, qty, relative } from "@/lib/format";
 import { humanize, priorityMeta } from "@/lib/status";
 import { cn } from "@/lib/utils";
+import { DismissButton } from "./dismiss-button";
 
 export const metadata: Metadata = {
   title: "Notifications",
@@ -87,13 +88,16 @@ export default async function NotificationsPage() {
                     const actor = n.actorId ? userById.get(n.actorId) : null;
 
                     return (
-                      <li key={n.id}>
+                      <li
+                        key={n.id}
+                        className={cn(
+                          "flex items-stretch transition-colors",
+                          !n.read && "bg-surface-sunken/40",
+                        )}
+                      >
                         <Link
                           href={n.href}
-                          className={cn(
-                            "flex gap-3 px-4 py-3 transition-colors hover:bg-surface-hover",
-                            !n.read && "bg-surface-sunken/40",
-                          )}
+                          className="flex flex-1 gap-3 px-4 py-3 transition-colors hover:bg-surface-hover"
                         >
                           <span
                             className={cn(
@@ -129,6 +133,7 @@ export default async function NotificationsPage() {
                             )}
                           </span>
                         </Link>
+                        <DismissButton id={n.id} label={n.title} />
                       </li>
                     );
                   })}

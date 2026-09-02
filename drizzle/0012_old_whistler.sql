@@ -1,0 +1,1 @@
+ALTER TABLE "notifications" ADD COLUMN "dismissed" boolean DEFAULT false NOT NULL;
