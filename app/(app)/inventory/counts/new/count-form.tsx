@@ -23,6 +23,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { initials, qty } from "@/lib/format";
 import { humanize } from "@/lib/status";
 import { cn } from "@/lib/utils";
+import { scheduleCount } from "./actions";
 
 export interface CountScope {
   warehouseId: string;
@@ -43,6 +44,12 @@ const TYPES = [
   { value: "spot", hint: "A handful of SKUs, usually to check a suspicion." },
 ];
 
+/** Sheet-size caps for the two scoped-down count types — shared by the
+ *  estimate shown here and the scope sent to `scheduleStockCount`, so the two
+ *  cannot drift apart. */
+const CYCLE_LIMIT = 40;
+const SPOT_LIMIT = 12;
+
 export function CountForm({
   warehouses,
   counters,
@@ -61,6 +68,7 @@ export function CountForm({
   const [categoryId, setCategoryId] = React.useState(categories[0]?.id ?? "");
   const [scheduledIn, setScheduledIn] = React.useState(1);
   const [assigned, setAssigned] = React.useState<string[]>([]);
+  const [saving, setSaving] = React.useState(false);
 
   const warehouseLabels = React.useMemo(
     () => Object.fromEntries(warehouses.map((w) => [w.id, `${w.code} · ${w.name}`])),
@@ -90,7 +98,10 @@ export function CountForm({
   const activeZone = zones.includes(zone) ? zone : (zones[0] ?? "A");
 
   // Estimated line count, so the person scheduling knows whether they are
-  // asking for an hour of work or a shutdown.
+  // asking for an hour of work or a shutdown. A cycle or spot count is a
+  // slice of the site rather than all of it, capped at the same size the
+  // scheduling call below caps its scope to; the other three types take
+  // everything their scope resolves to.
   const siteScopes = scopes.filter((s) => s.warehouseId === warehouseId);
   const estimatedLines =
     type === "full"
@@ -100,8 +111,8 @@ export function CountForm({
         : type === "location"
           ? siteScopes.filter((s) => s.zone === activeZone).reduce((s, x) => s + x.skuCount, 0)
           : type === "cycle"
-            ? Math.min(40, siteScopes.reduce((s, x) => s + x.skuCount, 0))
-            : 12;
+            ? Math.min(CYCLE_LIMIT, siteScopes.reduce((s, x) => s + x.skuCount, 0))
+            : SPOT_LIMIT;
 
   // Roughly 25 lines an hour for a two-handed count with a scanner.
   const estimatedHours = Math.max(0.5, Math.round((estimatedLines / 25) * 2) / 2);
@@ -112,6 +123,8 @@ export function CountForm({
   );
   const canSubmit = assigned.length > 0 && estimatedLines > 0;
 
+  const lineLimit = type === "cycle" ? CYCLE_LIMIT : type === "spot" ? SPOT_LIMIT : null;
+
   const scopeLabel =
     type === "full"
       ? "All zones"
@@ -120,6 +133,33 @@ export function CountForm({
         : type === "location"
           ? `Zone ${activeZone}`
           : `${estimatedLines} SKUs`;
+
+  const schedule = async () => {
+    if (!canSubmit || saving) return;
+    setSaving(true);
+
+    const result = await scheduleCount({
+      warehouseId,
+      type,
+      zone: type === "location" ? activeZone : null,
+      categoryId: type === "category" ? categoryId : null,
+      limit: lineLimit,
+      scheduledInDays: scheduledIn,
+      assignedTo: assigned,
+      scopeLabel,
+    });
+
+    if (!result.ok) {
+      setSaving(false);
+      toast.error("Count not scheduled", { description: result.message });
+      return;
+    }
+
+    toast.success(`${result.number} scheduled`, {
+      description: `${qty(result.lines)} lines at ${warehouses.find((w) => w.id === warehouseId)?.code}, assigned to ${assigned.length} counter${assigned.length === 1 ? "" : "s"}.`,
+    });
+    router.push(`/inventory/counts/${result.id}`);
+  };
 
   return (
     <div className="grid gap-4 lg:grid-cols-3">
@@ -326,16 +366,11 @@ export function CountForm({
           <Button
             size="sm"
             className="h-8"
-            disabled={!canSubmit}
-            onClick={() => {
-              toast.success("Count scheduled", {
-                description: `${qty(estimatedLines)} lines at ${warehouses.find((w) => w.id === warehouseId)?.code}, assigned to ${assigned.length} counter${assigned.length === 1 ? "" : "s"}.`,
-              });
-              router.push("/inventory/counts");
-            }}
+            disabled={!canSubmit || saving}
+            onClick={schedule}
           >
             <CalendarClock className="size-3.5" aria-hidden />
-            Schedule count
+            {saving ? "Scheduling..." : "Schedule count"}
           </Button>
           <Button
             variant="ghost"
