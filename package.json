@@ -16,6 +16,7 @@
     "check:stock": "tsx lib/domain/stock.checks.ts",
     "check:adjustments": "tsx lib/domain/adjustments.checks.ts",
     "check:reference": "tsx lib/domain/reference.checks.ts",
+    "check:purchasing": "tsx lib/domain/purchasing.checks.ts",
     "check:receiving": "tsx lib/domain/receiving.checks.ts",
     "check:fulfilment": "tsx lib/domain/fulfilment.checks.ts",
     "check:transfers": "tsx lib/domain/transfers.checks.ts",

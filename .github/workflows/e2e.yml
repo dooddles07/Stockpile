@@ -93,6 +93,15 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
+      # Finish-and-ship ticket 06: the purchase-order creation domain function
+      # refuses a Role that reaches it directly, and a creation that fails after
+      # the Event is appended leaves no order, no lines and no Event. Playwright
+      # only ever hits the form and cannot fail a creation halfway through.
+      - name: Purchase-order creation checks
+        run: npm run check:purchasing
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
       # Ticket 12: the goods-receipt domain function refuses a Role that reaches
       # it directly, and over-receipt is permitted with the excess recorded
       # rather than clamped. Playwright only ever hits the Receive tab.
