@@ -17,12 +17,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Section, StatTile } from "@/components/record/field-grid";
-import { LineItemEditor, lineTotals, type EditorLine } from "@/components/record/line-item-editor";
+import { LineItemEditor, type EditorLine } from "@/components/record/line-item-editor";
 import { WorkflowStepper } from "@/components/status/workflow-stepper";
 import { StatusBadge } from "@/components/status/status-badge";
 import { MeterBar } from "@/components/status/meter-bar";
 import { money, percent, plural, qty } from "@/lib/format";
 import { humanize } from "@/lib/status";
+import { documentTotals } from "@/lib/totals";
 import { cn } from "@/lib/utils";
 
 export interface OrderCustomer {
@@ -116,7 +117,7 @@ export function OrderForm({
     }
   };
 
-  const totals = lineTotals(lines, shipping);
+  const totals = documentTotals(lines, shipping);
 
   const shortLines = lines.filter(
     (l) => l.quantity > (availabilityById.get(l.product.id) ?? 0),

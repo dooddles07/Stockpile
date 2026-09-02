@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/table";
 import { EmptyState } from "@/components/states";
 import { money, qty } from "@/lib/format";
+import { documentTotals, lineMoney } from "@/lib/totals";
 import { cn } from "@/lib/utils";
 
 export interface PickableProduct {
@@ -44,39 +45,6 @@ export interface EditorLine {
   discountPct: number;
   taxPct: number;
 }
-
-export interface LineEditorTotals {
-  subtotal: number;
-  discountTotal: number;
-  taxTotal: number;
-  total: number;
-  units: number;
-}
-
-export function lineTotals(lines: EditorLine[], shipping = 0): LineEditorTotals {
-  let subtotal = 0;
-  let discountTotal = 0;
-  let taxTotal = 0;
-  let units = 0;
-  for (const line of lines) {
-    const gross = line.quantity * line.unitPrice;
-    const discount = gross * (line.discountPct / 100);
-    const net = gross - discount;
-    subtotal += gross;
-    discountTotal += discount;
-    taxTotal += net * (line.taxPct / 100);
-    units += line.quantity;
-  }
-  return {
-    subtotal: round(subtotal),
-    discountTotal: round(discountTotal),
-    taxTotal: round(taxTotal),
-    total: round(subtotal - discountTotal + taxTotal + shipping),
-    units,
-  };
-}
-
-const round = (n: number) => Math.round(n * 100) / 100;
 
 /**
  * The line-item grid shared by purchase orders, sales orders, transfers,
@@ -142,7 +110,7 @@ export function LineItemEditor({
 
   const remove = (key: string) => onChange(lines.filter((l) => l.key !== key));
 
-  const totals = lineTotals(lines);
+  const totals = documentTotals(lines);
 
   return (
     <div className={cn("overflow-hidden rounded-lg border bg-surface", className)}>
@@ -243,9 +211,7 @@ export function LineItemEditor({
             </TableHeader>
             <TableBody>
               {lines.map((line) => {
-                const gross = line.quantity * line.unitPrice;
-                const net = gross * (1 - line.discountPct / 100);
-                const lineTotal = net * (1 + line.taxPct / 100);
+                const { gross, net, lineTotal } = lineMoney(line);
                 const short = checkAvailability && line.quantity > line.product.available;
 
                 return (
