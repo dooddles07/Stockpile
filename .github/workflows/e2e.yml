@@ -131,6 +131,13 @@ jobs:
       # pair of Warehouses do not deadlock (consistent stock-row lock order), and
       # a despatch that cannot be fully covered writes nothing. Playwright cannot
       # issue simultaneous operations.
+      #
+      # Finish-and-ship ticket 08 rides along here, since raising a transfer
+      # lives in the same module: creation is gated on `transfers.create` rather
+      # than the despatch/receive permission, the same site at both ends and a
+      # product the source does not hold are both refused, and a raised transfer
+      # lands in `draft` with nothing in transit until it is approved and
+      # despatched.
       - name: Transfer checks
         run: npm run check:transfers
         env:

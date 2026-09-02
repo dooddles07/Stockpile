@@ -21,6 +21,13 @@
  *     source without being recorded in transit, and a half-despatched transfer
  *     cannot exist.
  *
+ *  4. Raising a transfer (ticket 08) checks `transfers.create`, refuses a Role
+ *     without it while writing no transfer, no lines and no Event, refuses a
+ *     route the form would never offer (the same site at both ends, a product
+ *     the source does not hold), and lands the transfer in `draft` with nothing
+ *     in transit and no Movement — until that same transfer is approved and
+ *     despatched through `dispatchTransfer`.
+ *
  * Run with `npm run check:transfers` against a migrated, seeded database; CI
  * runs it after `check:fulfilment`. Its own Pool under plain Node, same as the
  * seed and the other check scripts. Every mutation it makes is reversed (or its
@@ -33,14 +40,21 @@ import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 
 import { Pool, neonConfig } from "@neondatabase/serverless";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
 import { drizzle, type NeonDatabase } from "drizzle-orm/neon-serverless";
 import ws from "ws";
 
 import { hydrateRoles, can } from "@/lib/auth/permissions";
 import * as schema from "@/lib/db/schema";
 import { applyStockChange, type Actor } from "@/lib/domain/stock";
-import { dispatchTransfer, receiveTransfer, TransferError } from "@/lib/domain/transfers";
+import {
+  createTransfer,
+  dispatchTransfer,
+  receiveTransfer,
+  OPEN_TRANSFER_STATUSES,
+  TransferError,
+  type CreateTransferInput,
+} from "@/lib/domain/transfers";
 
 type Db = NeonDatabase<typeof schema>;
 
@@ -331,6 +345,213 @@ async function partialFailureLeavesNoTrace(db: Db): Promise<void> {
   }
 }
 
+/** Row counts of everything a creation writes, as one snapshot to compare. */
+async function creationCounts(
+  db: Db,
+): Promise<{ events: number; transfers: number; lines: number }> {
+  const [[events], [transfers], [lines]] = await Promise.all([
+    db.select({ n: sql<number>`count(*)::int` }).from(schema.events),
+    db.select({ n: sql<number>`count(*)::int` }).from(schema.transfers),
+    db.select({ n: sql<number>`count(*)::int` }).from(schema.transferLines),
+  ]);
+  return { events: events.n, transfers: transfers.n, lines: lines.n };
+}
+
+/**
+ * The in-transit balance for a product, projected the way `documents.ts`
+ * projects it: `sum(shipped - received)` over the lines of open Transfers. Not
+ * a stored balance — creation must leave this untouched.
+ */
+async function projectedInTransit(db: Db, productId: string): Promise<number> {
+  const [row] = await db
+    .select({
+      qty: sql<number>`coalesce(sum(${schema.transferLines.shipped} - ${schema.transferLines.received}), 0)::int`,
+    })
+    .from(schema.transferLines)
+    .innerJoin(schema.transfers, eq(schema.transfers.id, schema.transferLines.transferId))
+    .where(
+      and(
+        eq(schema.transferLines.productId, productId),
+        inArray(schema.transfers.status, [...OPEN_TRANSFER_STATUSES]),
+      ),
+    );
+  return row?.qty ?? 0;
+}
+
+/** A well-formed one-line transfer of `holding`'s product, `from` -> `to`. */
+function raisable(
+  from: string,
+  to: string,
+  holding: Holding,
+  quantity: number,
+): CreateTransferInput {
+  return {
+    fromWarehouseId: from,
+    toWarehouseId: to,
+    reason: "checks: raising a transfer",
+    notes: "",
+    carrier: null,
+    expectedInDays: 5,
+    lines: [{ productId: holding.productId, quantity }],
+  };
+}
+
+async function creationIsRefusedForAForbiddenRole(db: Db): Promise<void> {
+  const forbidden = await actorForRole(db, "auditor");
+  assert.equal(
+    can(forbidden.role, "transfers", "create"),
+    false,
+    "precondition: the chosen role must not be able to create transfers",
+  );
+
+  const { from, to, a } = await pickPair(db);
+  const before = await creationCounts(db);
+
+  await assert.rejects(
+    () => createTransfer(forbidden, raisable(from, to, a, 1), db),
+    (err: unknown) => err instanceof TransferError && err.code === "forbidden",
+    "createTransfer must throw TransferError('forbidden') for a role without transfers.create",
+  );
+
+  assert.deepEqual(
+    await creationCounts(db),
+    before,
+    "a refused creation wrote a transfer, a line or an event; expected none",
+  );
+  console.log(`  create/forbidden: ${forbidden.role} refused directly, nothing written`);
+}
+
+async function impossibleRoutesAreRefused(db: Db): Promise<void> {
+  const actor = await actorForRole(db, "inventory-manager");
+  assert.equal(
+    can(actor.role, "transfers", "create"),
+    true,
+    "precondition: the chosen role must be able to create transfers",
+  );
+
+  const { from, to, a } = await pickPair(db);
+  const before = await creationCounts(db);
+
+  // Both ends the same site: there is no despatch and no receipt to make. The
+  // form disables its button on this, but the form is only a rendering gate.
+  await assert.rejects(
+    () => createTransfer(actor, raisable(from, from, a, 1), db),
+    (err: unknown) => err instanceof TransferError && err.code === "invalid",
+    "createTransfer must refuse a transfer whose source and destination are the same warehouse",
+  );
+
+  // A product the source does not hold: it could never be despatched, and the
+  // line has no `from_location_id` to record.
+  const held = await db
+    .select({ productId: schema.stockRows.productId })
+    .from(schema.stockRows)
+    .where(eq(schema.stockRows.warehouseId, from));
+  const [unheld] = await db
+    .select({ id: schema.products.id })
+    .from(schema.products)
+    .where(
+      notInArray(
+        schema.products.id,
+        held.map((h) => h.productId),
+      ),
+    )
+    .limit(1);
+  if (!unheld) throw new Error("checks: every product is held at the source warehouse");
+
+  await assert.rejects(
+    () =>
+      createTransfer(
+        actor,
+        { ...raisable(from, to, a, 1), lines: [{ productId: unheld.id, quantity: 1 }] },
+        db,
+      ),
+    (err: unknown) => err instanceof TransferError && err.code === "invalid",
+    "createTransfer must refuse a line whose product is not held at the source",
+  );
+
+  assert.deepEqual(
+    await creationCounts(db),
+    before,
+    "a refused creation wrote a transfer, a line or an event; expected none",
+  );
+  console.log(
+    "  create/route: same site at both ends, and a product the source does not hold, both refused",
+  );
+}
+
+async function creationMovesNothingButDespatchDoes(db: Db): Promise<void> {
+  const actor = await actorForRole(db, "inventory-manager");
+  const operator = await actorForRole(db, "warehouse-staff");
+  const { from, to, a } = await pickPair(db);
+
+  const QTY = 3;
+  const inTransitBefore = await projectedInTransit(db, a.productId);
+  const onHandBefore = await sumOnHand(db, a.productId, from);
+
+  const transfer = await createTransfer(actor, raisable(from, to, a, QTY), db);
+  try {
+    const [row] = await db
+      .select({ status: schema.transfers.status, requestedBy: schema.transfers.requestedBy })
+      .from(schema.transfers)
+      .where(eq(schema.transfers.id, transfer.id));
+    assert.equal(row.status, "draft", "a raised transfer must land in draft");
+    assert.equal(row.requestedBy, actor.id, "the transfer must be attributed to the Actor");
+
+    // By payload, not "the newest row": the Event stream is append-only and
+    // shared, so anything else committing alongside this would win a seq race.
+    const [event] = await db
+      .select({ type: schema.events.type, actorId: schema.events.actorId })
+      .from(schema.events)
+      .where(sql`${schema.events.payload}->>'transferId' = ${transfer.id}`);
+    assert.equal(event.type, "transfer-created", "creation must append a transfer-created Event");
+    assert.equal(event.actorId, actor.id, "the Event must be attributed to the Actor");
+
+    assert.equal(
+      await projectedInTransit(db, a.productId),
+      inTransitBefore,
+      "a draft transfer put stock in transit; creation must create no in-transit quantity",
+    );
+    assert.equal(
+      await sumOnHand(db, a.productId, from),
+      onHandBefore,
+      "creation moved stock at the source; a draft is a plan and moves nothing",
+    );
+    const [movements] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(schema.movements)
+      .where(eq(schema.movements.refId, transfer.id));
+    assert.equal(movements.n, 0, "creation appended a Movement; a draft moves no stock");
+
+    // The document the write path operates on is real: approve it (ticket 11's
+    // transition, so set here directly) and the existing `dispatchTransfer`
+    // takes it from there — stock leaves the source and goes in transit.
+    await db
+      .update(schema.transfers)
+      .set({ status: "approved", approvedAt: new Date().toISOString(), approvedBy: actor.id })
+      .where(eq(schema.transfers.id, transfer.id));
+
+    const dispatched = await dispatchTransfer(operator, { transferId: transfer.id }, db);
+    assert.equal(dispatched.totalShipped, QTY, "the approved transfer did not despatch in full");
+    assert.equal(
+      await sumOnHand(db, a.productId, from),
+      onHandBefore - QTY,
+      "despatching the raised transfer did not lower on-hand at the source",
+    );
+    assert.equal(
+      await projectedInTransit(db, a.productId),
+      inTransitBefore + QTY,
+      "despatching the raised transfer did not put its quantity in transit",
+    );
+
+    console.log(
+      `  create: ${transfer.number} raised in draft — nothing in transit, no Movement; approving and despatching it moved ${QTY} (reversed)`,
+    );
+  } finally {
+    await reverseDispatch(db, operator, transfer.id);
+    await deleteTransfer(db, transfer.id);
+  }
+}
+
 async function main() {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) throw new Error("DATABASE_URL is not set");
@@ -343,6 +564,9 @@ async function main() {
 
     console.log("transfer checks:");
     await forbiddenIsRefusedAndWritesNothing(db);
+    await creationIsRefusedForAForbiddenRole(db);
+    await impossibleRoutesAreRefused(db);
+    await creationMovesNothingButDespatchDoes(db);
     await concurrentDespatchesDoNotDeadlock(db);
     await partialFailureLeavesNoTrace(db);
     console.log("ok");
