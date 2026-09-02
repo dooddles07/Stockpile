@@ -1,5 +1,12 @@
 /**
- * The guarantees ticket 16 needs that Playwright cannot express.
+ * The guarantees tickets 10 (raising) and 16 (processing) need that Playwright
+ * cannot express.
+ *
+ *  0. Raising is gated in `raiseReturn`, keyed by the Return's kind (ADR-0004):
+ *     a Role without `sales-returns` create is refused when it reaches the
+ *     function directly, and nothing is written. And a line asking back more
+ *     than the source Document moved is refused at creation with `over-return`,
+ *     not left for `processReturn` to reject later.
  *
  *  1. Authorization is in the domain function, keyed by the Return's kind
  *     (ADR-0004). A browser test only ever reaches the return screen, whose
@@ -36,7 +43,12 @@ import ws from "ws";
 import { hydrateRoles, can } from "@/lib/auth/permissions";
 import * as schema from "@/lib/db/schema";
 import { type Actor } from "@/lib/domain/stock";
-import { processReturn, ReturnError, PROCESSABLE_RETURN_STATUSES } from "@/lib/domain/returns";
+import {
+  processReturn,
+  raiseReturn,
+  ReturnError,
+  PROCESSABLE_RETURN_STATUSES,
+} from "@/lib/domain/returns";
 import type { ItemCondition, ReturnKind } from "@/lib/types";
 
 type Db = NeonDatabase<typeof schema>;
@@ -503,6 +515,138 @@ async function supplierReturnLowersOnHand(db: Db): Promise<void> {
   }
 }
 
+/* --------------------------------------------------------- raising (ticket 10) */
+
+async function returnCountForSource(db: Db, sourceOrderId: string): Promise<number> {
+  const [row] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(schema.returns)
+    .where(eq(schema.returns.sourceOrderId, sourceOrderId));
+  return row?.n ?? 0;
+}
+
+/** The source Document's own line id for a product — what `raiseReturn` keys
+ *  its input lines by. */
+async function sourceLineIdFor(
+  db: Db,
+  kind: ReturnKind,
+  sourceOrderId: string,
+  productId: string,
+): Promise<string> {
+  const [row] =
+    kind === "sales"
+      ? await db
+          .select({ id: schema.salesOrderLines.id })
+          .from(schema.salesOrderLines)
+          .where(
+            and(
+              eq(schema.salesOrderLines.salesOrderId, sourceOrderId),
+              eq(schema.salesOrderLines.productId, productId),
+            ),
+          )
+          .limit(1)
+      : await db
+          .select({ id: schema.purchaseOrderLines.id })
+          .from(schema.purchaseOrderLines)
+          .where(
+            and(
+              eq(schema.purchaseOrderLines.purchaseOrderId, sourceOrderId),
+              eq(schema.purchaseOrderLines.productId, productId),
+            ),
+          )
+          .limit(1);
+  if (!row) throw new Error(`checks: no ${kind} source line for product ${productId}`);
+  return row.id;
+}
+
+/**
+ * A Role without `sales-returns` create is refused when it reaches `raiseReturn`
+ * directly, and nothing is written — the render gate on the new-return screen
+ * only ever hid the form.
+ */
+async function raisingForbiddenIsRefusedAndWritesNothing(db: Db): Promise<void> {
+  const forbidden = await actorForRole(db, "auditor");
+  assert.equal(
+    can(forbidden.role, "sales-returns", "create"),
+    false,
+    "precondition: the auditor role must not be able to create sales returns",
+  );
+
+  const source = await pickSource(db, "sales", { minMoved: 3, minOnHand: 10, lines: 1 });
+  const p = source.products[0];
+  const lineId = await sourceLineIdFor(db, "sales", source.sourceOrderId, p.productId);
+
+  const before = await eventCount(db);
+  const returnsBefore = await returnCountForSource(db, source.sourceOrderId);
+
+  await assert.rejects(
+    () =>
+      raiseReturn(
+        forbidden,
+        {
+          kind: "sales",
+          sourceOrderId: source.sourceOrderId,
+          reason: "checks",
+          note: "checks",
+          lines: [{ lineId, quantity: 1, condition: "sellable", restock: true }],
+        },
+        db,
+      ),
+    (err: unknown) => err instanceof ReturnError && err.code === "forbidden",
+    "raiseReturn must throw ReturnError('forbidden') for a role without sales-returns create",
+  );
+
+  assert.equal(await eventCount(db), before, "a refused raise appended an Event");
+  assert.equal(
+    await returnCountForSource(db, source.sourceOrderId),
+    returnsBefore,
+    "a refused raise wrote a Return row",
+  );
+  console.log(`  raise forbidden: ${forbidden.role} refused directly, event stream unchanged (${before})`);
+}
+
+/**
+ * A line asking back more than the source Document moved is refused at creation
+ * with `over-return` — the constraint enforced when the Return is raised, not
+ * left for `processReturn` to reject later.
+ */
+async function raiseOverReturnIsRefused(db: Db): Promise<void> {
+  const operator = await actorForRole(db, "sales-manager");
+  const source = await pickSource(db, "sales", { minMoved: 3, minOnHand: 10, lines: 1 });
+  const p = source.products[0];
+  const lineId = await sourceLineIdFor(db, "sales", source.sourceOrderId, p.productId);
+
+  const before = await eventCount(db);
+  const returnsBefore = await returnCountForSource(db, source.sourceOrderId);
+
+  await assert.rejects(
+    () =>
+      raiseReturn(
+        operator,
+        {
+          kind: "sales",
+          sourceOrderId: source.sourceOrderId,
+          reason: "checks",
+          note: "checks",
+          lines: [{ lineId, quantity: p.moved + 1, condition: "sellable", restock: true }],
+        },
+        db,
+      ),
+    (err: unknown) => err instanceof ReturnError && err.code === "over-return",
+    "raiseReturn must reject a line exceeding what the source order shipped",
+  );
+
+  assert.equal(await eventCount(db), before, "a refused over-return appended an Event");
+  assert.equal(
+    await returnCountForSource(db, source.sourceOrderId),
+    returnsBefore,
+    "a refused over-return wrote a Return row",
+  );
+  console.log(
+    `  raise over-return: ${p.sku} ${p.moved + 1} > ${p.moved} shipped on ${source.sourceOrderNumber}, refused`,
+  );
+}
+
 async function main() {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) throw new Error("DATABASE_URL is not set");
@@ -514,6 +658,8 @@ async function main() {
     hydrateRoles(await db.select().from(schema.roles));
 
     console.log("returns checks:");
+    await raisingForbiddenIsRefusedAndWritesNothing(db);
+    await raiseOverReturnIsRefused(db);
     await forbiddenIsRefusedAndWritesNothing(db);
     await overReturnIsRefused(db);
     await customerReturnRoutesByCondition(db);
