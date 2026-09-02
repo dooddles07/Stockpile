@@ -19,7 +19,13 @@
  *     Cancelling then releases the reservation the same way — projection down,
  *     no Event.
  *
- *  4. Shipping appends a `sale` Movement, lowers on-hand and releases the
+ *  4. Placing an order (ticket 07) checks `sales-orders.create` — not the
+ *     fulfilment permission — refuses a Role without it while writing no order,
+ *     no lines and no Event, leaves nothing behind when it fails partway, and
+ *     lands the order in `draft` with the reserved projection unmoved.
+ *     Confirming that same order is what moves it.
+ *
+ *  5. Shipping appends a `sale` Movement, lowers on-hand and releases the
  *     reservation. After `shipSalesOrder` there is a `sale` Movement per line
  *     attributed to the Actor, on-hand has fallen by the shipped quantity, each
  *     line's `fulfilled` equals its `quantity`, and the order no longer counts
@@ -45,6 +51,7 @@ import * as schema from "@/lib/db/schema";
 import {
   cancelSalesOrder,
   confirmSalesOrder,
+  createSalesOrder,
   advanceSalesOrder,
   shipSalesOrder,
   OPEN_SO_STATUSES,
@@ -347,6 +354,143 @@ async function shipAppendsSaleLowersOnHandReleasesReservation(db: Db, c: Candida
   );
 }
 
+/** Row counts of everything a creation writes, as one snapshot to compare. */
+async function creationCounts(db: Db): Promise<{ events: number; orders: number; lines: number }> {
+  const [[events], [orders], [lines]] = await Promise.all([
+    db.select({ n: sql<number>`count(*)::int` }).from(schema.events),
+    db.select({ n: sql<number>`count(*)::int` }).from(schema.salesOrders),
+    db.select({ n: sql<number>`count(*)::int` }).from(schema.salesOrderLines),
+  ]);
+  return { events: events.n, orders: orders.n, lines: lines.n };
+}
+
+/** A well-formed order for `c`'s product at `c`'s warehouse, one unit of it. */
+async function placeable(db: Db, c: Candidate) {
+  const [customer] = await db
+    .select({ id: schema.customers.id })
+    .from(schema.customers)
+    .where(eq(schema.customers.status, "active"))
+    .limit(1);
+  if (!customer) throw new Error("checks: the seed has no active customer");
+  return {
+    customerId: customer.id,
+    warehouseId: c.warehouseId,
+    channel: "phone" as const,
+    promisedInDays: 5,
+    shipping: 0,
+    notes: "fulfilment checks",
+    lines: [{ productId: c.productId, quantity: 1, unitPrice: 10, discountPct: 0, taxPct: 0 }],
+  };
+}
+
+/** Remove an order this file created, so the shared branch is left as seeded.
+ *  Its Event and its burned number stay — both are append-only by design. */
+async function removeCreatedOrder(db: Db, id: string): Promise<void> {
+  await db.delete(schema.salesOrderLines).where(eq(schema.salesOrderLines.salesOrderId, id));
+  await db.delete(schema.salesOrders).where(eq(schema.salesOrders.id, id));
+}
+
+async function creationIsRefusedForAForbiddenRole(db: Db, c: Candidate): Promise<void> {
+  // Warehouse Staff fulfil sales orders but do not raise them — the two are
+  // different permissions, and creation is gated on `sales-orders.create`.
+  const forbidden = await actorForRole(db, "warehouse-staff");
+  assert.equal(
+    can(forbidden.role, "sales-orders", "create"),
+    false,
+    "precondition: the chosen role must not be able to create sales orders",
+  );
+
+  const input = await placeable(db, c);
+  const before = await creationCounts(db);
+
+  await assert.rejects(
+    () => createSalesOrder(forbidden, input, db),
+    (err: unknown) => err instanceof SalesOrderError && err.code === "forbidden",
+    "createSalesOrder must throw SalesOrderError('forbidden') for a role without sales-orders.create",
+  );
+
+  assert.deepEqual(
+    await creationCounts(db),
+    before,
+    "a refused creation wrote an order, a line or an event; expected none",
+  );
+  console.log(`  create/forbidden: ${forbidden.role} refused directly, nothing written`);
+}
+
+async function failedCreationLeavesNothing(db: Db, c: Candidate): Promise<void> {
+  const actor = await actorForRole(db, "sales-manager");
+  assert.equal(
+    can(actor.role, "sales-orders", "create"),
+    true,
+    "precondition: the chosen role must be able to create sales orders",
+  );
+
+  // Permitted, well-formed, and doomed: the warehouse does not exist, so the
+  // foreign key rejects the order row — after the number is allocated and the
+  // Event is appended. Everything but the burned number must roll back.
+  const input = { ...(await placeable(db, c)), warehouseId: "WH-NO-SUCH-SITE" };
+  const before = await creationCounts(db);
+
+  await assert.rejects(
+    () => createSalesOrder(actor, input, db),
+    "a creation against an unknown warehouse must fail",
+  );
+
+  assert.deepEqual(
+    await creationCounts(db),
+    before,
+    "a creation that failed partway left an order, a line or an event behind",
+  );
+  console.log("  create/atomic: a creation failing after the Event left no order, no lines, no event");
+}
+
+async function creationReservesNothingButConfirmationDoes(db: Db, c: Candidate): Promise<void> {
+  const actor = await actorForRole(db, "sales-manager");
+  const input = await placeable(db, c);
+  const quantity = input.lines[0].quantity;
+  const reservedBefore = await projectedReserved(db, c.productId);
+
+  const order = await createSalesOrder(actor, input, db);
+  try {
+    const [row] = await db
+      .select({ status: schema.salesOrders.status, createdBy: schema.salesOrders.createdBy })
+      .from(schema.salesOrders)
+      .where(eq(schema.salesOrders.id, order.id));
+    assert.equal(row.status, "draft", "a placed order must land in draft");
+    assert.equal(row.createdBy, actor.id, "the order must be attributed to the Actor");
+
+    // By payload, not "the newest row": the Event stream is append-only and
+    // shared, so anything else committing alongside this would win a seq race.
+    const [event] = await db
+      .select({ type: schema.events.type, actorId: schema.events.actorId })
+      .from(schema.events)
+      .where(sql`${schema.events.payload}->>'salesOrderId' = ${order.id}`);
+    assert.equal(event.type, "sales-order-created", "creation must append a sales-order-created Event");
+    assert.equal(event.actorId, actor.id, "the Event must be attributed to the Actor");
+
+    assert.equal(
+      await projectedReserved(db, c.productId),
+      reservedBefore,
+      "a draft order reserved stock; creation must reserve nothing",
+    );
+
+    // Confirming the very same order is what reserves — proof the two are
+    // correctly separated rather than creation quietly doing both.
+    const confirmed = await confirmSalesOrder(actor, { salesOrderId: order.id }, db);
+    assert.equal(confirmed.reservedUnits, quantity);
+    assert.equal(
+      await projectedReserved(db, c.productId),
+      reservedBefore + quantity,
+      "confirming the created order did not move the reserved projection",
+    );
+    console.log(
+      `  create: ${order.number} placed in draft, reserved ${reservedBefore} unchanged; confirming took it to ${reservedBefore + quantity} (removed)`,
+    );
+  } finally {
+    await removeCreatedOrder(db, order.id);
+  }
+}
+
 async function main() {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) throw new Error("DATABASE_URL is not set");
@@ -369,6 +513,9 @@ async function main() {
     // cannot mask a later assertion.
     console.log("sales-order fulfilment checks:");
     await forbiddenIsRefused(db, candidates[0]);
+    await creationIsRefusedForAForbiddenRole(db, candidates[0]);
+    await failedCreationLeavesNothing(db, candidates[0]);
+    await creationReservesNothingButConfirmationDoes(db, candidates[0]);
     await overReservationIsPrevented(db, candidates[0]);
     await confirmReservesWithoutMovementOrDirectWrite(db, candidates[0]);
     await shipAppendsSaleLowersOnHandReleasesReservation(db, candidates[1]);

@@ -115,6 +115,12 @@ jobs:
       # confirming/cancelling move the reserved projection without appending a
       # Movement or writing stock_rows.reserved. Playwright only ever hits the
       # Fulfil tab.
+      #
+      # Finish-and-ship ticket 07 rides along here, since placing an order lives
+      # in the same module: creation is gated on `sales-orders.create` rather
+      # than the fulfilment permission, a creation that fails partway leaves
+      # nothing behind, and a placed order lands in `draft` with the reserved
+      # projection unmoved until it is confirmed.
       - name: Sales-order fulfilment checks
         run: npm run check:fulfilment
         env:
