@@ -21,8 +21,11 @@ import { Section, StatTile } from "@/components/record/field-grid";
 import { EmptyState } from "@/components/states";
 import { money, plural, qty } from "@/lib/format";
 import type { ItemCondition, ReturnKind } from "@/lib/types";
+import { raiseReturnAction } from "@/app/(app)/purchasing/returns/new/actions";
 
 export interface ReturnableLine {
+  /** The source document's own line id — what the domain matches the return
+   *  line back to, to copy its SKU, name and price. */
   id: string;
   sku: string;
   name: string;
@@ -83,6 +86,7 @@ export function ReturnForm({
   const [note, setNote] = React.useState("");
   const [lines, setLines] = React.useState<Record<string, LineState>>({});
   const [submitted, setSubmitted] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
 
   const order = orders.find((o) => o.id === orderId);
 
@@ -113,12 +117,41 @@ export function ReturnForm({
   );
   const writeOff = refund - restockValue;
 
-  const submit = (event: React.FormEvent) => {
+  const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     setSubmitted(true);
-    if (!order || picked.length === 0) return;
+    if (!order || picked.length === 0 || saving) return;
 
-    toast.success(`Return raised against ${order.number}`, {
+    setSaving(true);
+    let result;
+    try {
+      result = await raiseReturnAction({
+        kind,
+        sourceOrderId: order.id,
+        reason,
+        note,
+        lines: picked.map(({ line, state }) => ({
+          lineId: line.id,
+          quantity: state.quantity,
+          condition: state.condition,
+          restock: state.restock,
+        })),
+      });
+    } catch (error) {
+      setSaving(false);
+      toast.error("Return not raised", {
+        description: "Something went wrong raising the return. Try again.",
+      });
+      throw error;
+    }
+
+    if (!result.ok) {
+      setSaving(false);
+      toast.error("Return not raised", { description: result.message });
+      return;
+    }
+
+    toast.success(`${result.number} raised against ${order.number}`, {
       description: `${plural(picked.length, "line")}, ${qty(units)} units, ${money(refund)} ${
         sales ? "to credit" : "to claim from the supplier"
       }. ${
@@ -127,7 +160,7 @@ export function ReturnForm({
           : "All of it is sellable and goes back into stock."
       }`,
     });
-    router.push(listHref);
+    router.push(`${listHref}/${result.id}`);
   };
 
   if (orders.length === 0) {
@@ -352,9 +385,9 @@ export function ReturnForm({
       </Section>
 
       <div className="flex flex-wrap gap-2">
-        <Button type="submit" size="sm" className="h-8">
+        <Button type="submit" size="sm" className="h-8" disabled={saving}>
           <Save className="size-3.5" aria-hidden />
-          Raise return
+          {saving ? "Raising..." : "Raise return"}
         </Button>
         <Button
           type="button"
