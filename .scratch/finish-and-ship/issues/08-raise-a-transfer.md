@@ -31,7 +31,7 @@ anything else — a different permission from the `transfers.edit` both ends of
 the write path use — then allocates the number, appends a `transfer-created`
 Event and writes the transfer and its lines in one transaction.
 `app/(app)/warehousing/transfers/new/actions.ts` validates with zod and
-delegates only (ADR-0005), then redirects to the new transfer.
+delegates only (ADR-0005); the form navigates to the new transfer on success.
 
 Creation puts nothing in transit because in transit is `sum(shipped - received)`
 over the lines of transfers in `OPEN_TRANSFER_STATUSES`, and every line starts
@@ -45,13 +45,17 @@ Notes on the decisions:
   is ticket 11's transition on the transfer's own page — so the stepper shows
   `draft` and the value threshold tile is advice about the step ahead rather
   than a gate on this one.
-- **`from_location_id` is the lowest-seq holding at the source.** The column is
-  NOT NULL and records the pick location the despatch is planned against. It is
-  a plan, not a commitment: `dispatchTransfer` re-plans the draw across every
-  holding oldest-first, so stock that has moved bin by then still despatches.
-  Requiring a holding to exist is also how "every line's product must be held at
-  the source" is enforced, and it rejects the undespatchable transfer when it is
-  raised rather than at despatch.
+- **`from_location_id` is the lowest-seq non-empty holding at the source.** The
+  column is NOT NULL and records the pick location the despatch is planned
+  against — the same holding `dispatchTransfer` would draw from first, since it
+  skips empty ones. It is a plan, not a commitment: the despatch re-plans the
+  draw across every holding oldest-first, so stock that has moved bin by then
+  still despatches. An empty holding is still accepted as a fallback, which is
+  the honest reading of "must have a holding at the source": the rule is not
+  "coverable at the source", because a draft plans a move that has to be
+  coverable when it is despatched, and stock arrives in between. What it rules
+  out is a product the source has no holding for at all — a line the source
+  could never pick, and a line with no location to record.
 - **The over-committed banner's copy changed.** It said a transfer reserves
   stock at the source, which is not true of any transfer status — a transfer
   never reserves; it lowers on-hand at despatch. The line check stays as a

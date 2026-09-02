@@ -80,7 +80,7 @@ test.describe("raising a transfer", () => {
     await addFirstAvailableProduct(page);
     await main.getByRole("button", { name: "Create transfer" }).click();
 
-    // The action redirects to the new transfer, so its id is in the URL.
+    // The form navigates to the new transfer on success, so its id is in the URL.
     await page.waitForURL(/\/warehousing\/transfers\/TR-[0-9A-F]{8}$/, { timeout: 30_000 });
 
     const number = await main.getByText(/^TR-\d{4}-\d{3}$/).first().innerText();

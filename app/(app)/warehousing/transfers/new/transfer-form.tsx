@@ -228,7 +228,12 @@ export function TransferForm({
                 max={60}
                 inputMode="numeric"
                 value={expectedDays}
-                onChange={(e) => setExpectedDays(Math.max(1, Number(e.target.value) || 1))}
+                onChange={(e) =>
+                  // Clamped both ways: the server action rejects anything
+                  // outside 1–60, and it can only answer that with the same
+                  // generic "check the sites and the lines" message.
+                  setExpectedDays(Math.min(60, Math.max(1, Number(e.target.value) || 1)))
+                }
                 className="text-right tabular"
               />
             </div>

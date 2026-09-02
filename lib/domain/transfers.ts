@@ -137,12 +137,16 @@ export interface CreateTransferResult {
  * form, which is a rendering gate.
  *
  * Each line's product must already be held at the source, and its lowest-seq
- * holding becomes the line's `from_location_id`: the pick location the despatch
- * is planned against. It is a plan rather than a commitment, since
+ * non-empty holding becomes the line's `from_location_id`: the pick location
+ * the despatch is planned against. It is a plan rather than a commitment, since
  * `dispatchTransfer` re-plans the draw across every holding oldest-first, so
- * stock that has moved location by then still despatches. Requiring a holding
- * rejects the transfer that could never be despatched when it is raised rather
- * than at despatch, and `from_location_id` is NOT NULL besides.
+ * stock that has moved location by then still despatches. That is also why the
+ * rule is "held at the source" rather than "coverable from the source": a draft
+ * plans a move that has to be coverable when it is despatched, not when it is
+ * raised, and stock arrives at the source in between. What it rules out is a
+ * product the source has no holding for at all — which is both a line the
+ * source could never pick and a line with no `from_location_id` to record, and
+ * that column is NOT NULL.
  *
  * The number, the Event, the transfer and its lines commit together or not at
  * all, so a creation that fails partway leaves nothing behind — except its
@@ -187,12 +191,17 @@ export async function createTransfer(
       .where(inArray(schema.products.id, productIds));
     const products = new Map(productRows.map((p) => [p.id, p]));
 
-    // One query for every line's source holding; the lowest `seq` per product
-    // wins, which is the holding `dispatchTransfer` would draw from first.
+    // One query for every line's source holding. The lowest-seq holding that
+    // actually has something in it wins — that is the one `dispatchTransfer`
+    // draws from first, since it skips empty holdings. An empty holding is
+    // still a holding for the purpose of the rule below, so it is kept as a
+    // fallback: a product the source holds but has none of right now can be
+    // planned for, and the despatch is where it has to be coverable.
     const holdings = await tx
       .select({
         productId: schema.stockRows.productId,
         locationId: schema.stockRows.locationId,
+        onHand: schema.stockRows.onHand,
       })
       .from(schema.stockRows)
       .where(
@@ -203,16 +212,17 @@ export async function createTransfer(
       )
       .orderBy(schema.stockRows.seq);
     const sourceLocation = new Map<string, string>();
+    const emptySourceLocation = new Map<string, string>();
     for (const holding of holdings) {
-      if (!sourceLocation.has(holding.productId)) {
-        sourceLocation.set(holding.productId, holding.locationId);
-      }
+      const target = holding.onHand > 0 ? sourceLocation : emptySourceLocation;
+      if (!target.has(holding.productId)) target.set(holding.productId, holding.locationId);
     }
 
     const lines = input.lines.map((line, i) => {
       const product = products.get(line.productId);
       if (!product) throw new TransferError(`Unknown product on line ${i + 1}.`, "not-found");
-      const fromLocationId = sourceLocation.get(line.productId);
+      const fromLocationId =
+        sourceLocation.get(line.productId) ?? emptySourceLocation.get(line.productId);
       if (!fromLocationId) {
         throw new TransferError(
           `${product.sku} is not held at the source site, so it cannot be transferred out of it.`,
