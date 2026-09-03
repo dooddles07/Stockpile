@@ -39,6 +39,7 @@ import ws from "ws";
 import { hydrateRoles, levelFor } from "@/lib/auth/permissions";
 import { db as dataset } from "@/lib/data/store";
 import { advanceDocumentNumbers } from "@/lib/db/numbers";
+import { COMPANY_SETTINGS_SEED } from "@/lib/domain/settings";
 import {
   adjustmentLines,
   adjustments,
@@ -58,6 +59,7 @@ import {
   returnLines,
   returns,
   roles,
+  settings,
   salesOrderLines,
   salesOrders,
   stockCounts,
@@ -84,7 +86,7 @@ export async function seed() {
     // 09's trigger), but TRUNCATE is the sanctioned reset — like ADR-0010's
     // daily demo reset — and every CI run starts from an empty stream.
     await db.execute(
-      sql`TRUNCATE TABLE ${events}, ${notifications}, ${automationRuns}, ${automationRules}, ${auditEntries}, ${roles}, ${users}, ${countLines}, ${stockCounts}, ${adjustmentLines}, ${adjustments}, ${movements}, ${transferLines}, ${transfers}, ${salesOrderLines}, ${salesOrders}, ${customers}, ${returnLines}, ${returns}, ${purchaseOrderLines}, ${purchaseOrders}, ${suppliers}, ${stockRows}, ${products}, ${locations}, ${warehouses}, ${categories} RESTART IDENTITY CASCADE`,
+      sql`TRUNCATE TABLE ${events}, ${settings}, ${notifications}, ${automationRuns}, ${automationRules}, ${auditEntries}, ${roles}, ${users}, ${countLines}, ${stockCounts}, ${adjustmentLines}, ${adjustments}, ${movements}, ${transferLines}, ${transfers}, ${salesOrderLines}, ${salesOrders}, ${customers}, ${returnLines}, ${returns}, ${purchaseOrderLines}, ${purchaseOrders}, ${suppliers}, ${stockRows}, ${products}, ${locations}, ${warehouses}, ${categories} RESTART IDENTITY CASCADE`,
     );
 
     // FK order: categories -> warehouses -> locations -> products -> stock_rows,
@@ -163,6 +165,11 @@ export async function seed() {
     // order so ORDER BY seq reproduces the generator's order (newest-first).
     await db.insert(notifications).values(dataset.notifications);
 
+    // Company settings (ticket 16). One row, a fixed id; the app updates it in
+    // place and this reseed restores it. Not in the generated dataset — it is a
+    // single known constant, not generated data.
+    await db.insert(settings).values(COMPANY_SETTINGS_SEED);
+
     // Ticket 05: every Document number sequence is advanced past the highest
     // number just loaded, so the first Document a visitor creates continues the
     // seeded series instead of colliding with it. On every run — the daily
@@ -215,6 +222,7 @@ export async function seed() {
       ["automation_rules", automationRules, dataset.automationRules.length],
       ["automation_runs", automationRuns, dataset.automationRuns.length],
       ["notifications", notifications, dataset.notifications.length],
+      ["settings", settings, 1],
     ] as const;
     const counts: Record<string, number> = {};
     for (const [name, table, expected] of checks) {

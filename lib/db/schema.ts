@@ -545,11 +545,19 @@ export const transferLines = pgTable("transfer_lines", {
  * `conditions` and `actions` stay free text / free-text arrays: ADR-0008 says
  * the vocabulary is undefined and modelling it is not this phase.
  *
- * There is no `settings` table. The settings screens render company / security
- * / product numbers derived from `users`, `warehouses` and `products` — all
- * Postgres-backed now — and otherwise show static copy; the dataset carries no
- * settings entity to seed.
+ * Ticket 16 (finish-and-ship) adds the `settings` table: one row holding the
+ * company name and trading address, the one genuinely global setting. It is a
+ * record with named typed columns, not a key-value store — the set of settings
+ * is small and known. The seed creates the row and the truncate-and-reseed
+ * restores it; nothing else inserts or deletes it, so `id` is a fixed constant
+ * (`SETTINGS_ROW_ID` in `lib/domain/settings.ts`).
  */
+
+export const settings = pgTable("settings", {
+  id: text("id").primaryKey(),
+  companyName: text("company_name").notNull(),
+  companyAddress: text("company_address").notNull(),
+});
 
 export const roles = pgTable("roles", {
   id: text("id").$type<Role>().primaryKey(),
