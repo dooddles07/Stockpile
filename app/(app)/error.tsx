@@ -31,7 +31,7 @@ export default function AppError({
           headingLevel={1}
           title="This page could not be loaded"
           description="The data behind this screen failed to load. Nothing was changed — retrying is safe."
-          detail={error.digest ? `Reference: ${error.digest}` : error.message}
+          detail={error.digest ? `Reference: ${error.digest}` : "An unexpected error occurred."}
           onRetry={reset}
         />
         <div className="flex justify-center pb-8">
