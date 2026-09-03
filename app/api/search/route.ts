@@ -9,7 +9,12 @@ import { search } from "@/lib/repo/search";
  * filtered for the active role.
  */
 export async function GET(request: Request) {
-  const q = new URL(request.url).searchParams.get("q") ?? "";
-  const role = await getRole();
-  return NextResponse.json({ hits: await search(q, role) });
+  try {
+    const q = new URL(request.url).searchParams.get("q") ?? "";
+    const role = await getRole();
+    return NextResponse.json({ hits: await search(q, role) });
+  } catch (e) {
+    console.error("[stockpile] search failed", e);
+    return NextResponse.json({ hits: [] });
+  }
 }

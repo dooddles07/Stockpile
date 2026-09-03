@@ -24,6 +24,7 @@ import {
   pgTable,
   text,
   timestamp,
+  unique,
   uuid,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
@@ -82,8 +83,9 @@ export const warehouses = pgTable("warehouses", {
   city: text("city").notNull(),
   region: text("region").notNull(),
   country: text("country").notNull(),
-  /** A User id (ADR-0004); Users are not a table in this ticket, so no FK. */
-  managerId: text("manager_id").notNull(),
+  managerId: text("manager_id")
+    .notNull()
+    .references((): AnyPgColumn => users.id),
   capacityPallets: integer("capacity_pallets").notNull(),
   usedPallets: integer("used_pallets").notNull(),
   status: text("status").$type<WarehouseModel["status"]>().notNull(),
@@ -122,8 +124,9 @@ export const products = pgTable("products", {
   unitCost: numeric("unit_cost", { mode: "number" }).notNull(),
   sellPrice: numeric("sell_price", { mode: "number" }).notNull(),
   status: text("status").$type<ProductStatus>().notNull(),
-  /** A Supplier id; Suppliers are not a table in this ticket, so no FK. */
-  primarySupplierId: text("primary_supplier_id").notNull(),
+  primarySupplierId: text("primary_supplier_id")
+    .notNull()
+    .references((): AnyPgColumn => suppliers.id),
   supplierIds: jsonb("supplier_ids").$type<string[]>().notNull(),
   reorderPoint: integer("reorder_point").notNull(),
   reorderQty: integer("reorder_qty").notNull(),
@@ -146,26 +149,32 @@ export const products = pgTable("products", {
  * the in-memory generator built them in, which several recorded assertions
  * depend on.
  */
-export const stockRows = pgTable("stock_rows", {
-  seq: integer("seq").generatedAlwaysAsIdentity().primaryKey(),
-  productId: text("product_id")
-    .notNull()
-    .references(() => products.id),
-  warehouseId: text("warehouse_id")
-    .notNull()
-    .references(() => warehouses.id),
-  locationId: text("location_id")
-    .notNull()
-    .references(() => locations.id),
-  onHand: integer("on_hand").notNull(),
-  reserved: integer("reserved").notNull(),
-  damaged: integer("damaged").notNull(),
-  incoming: integer("incoming").notNull(),
-  inTransit: integer("in_transit").notNull(),
-  lastCountedAt: text("last_counted_at"),
-  expiresAt: text("expires_at"),
-  lotNumber: text("lot_number"),
-});
+export const stockRows = pgTable(
+  "stock_rows",
+  {
+    seq: integer("seq").generatedAlwaysAsIdentity().primaryKey(),
+    productId: text("product_id")
+      .notNull()
+      .references(() => products.id),
+    warehouseId: text("warehouse_id")
+      .notNull()
+      .references(() => warehouses.id),
+    locationId: text("location_id")
+      .notNull()
+      .references(() => locations.id),
+    onHand: integer("on_hand").notNull(),
+    reserved: integer("reserved").notNull(),
+    damaged: integer("damaged").notNull(),
+    incoming: integer("incoming").notNull(),
+    inTransit: integer("in_transit").notNull(),
+    lastCountedAt: text("last_counted_at"),
+    expiresAt: text("expires_at"),
+    lotNumber: text("lot_number"),
+  },
+  (t) => [
+    unique("stock_rows_holding").on(t.productId, t.warehouseId, t.locationId),
+  ],
+);
 
 /* ------------------------------------------------ purchasing & suppliers ---
  *
