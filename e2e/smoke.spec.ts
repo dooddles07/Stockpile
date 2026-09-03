@@ -161,11 +161,12 @@ test.describe("admin", () => {
 });
 
 test.describe("settings", () => {
-  test("shows company profile and workspace stats", async ({ page, main }) => {
+  test("shows the stored company name and address", async ({ page, main }) => {
     await page.goto("/settings/company");
 
     await expect(main.getByRole("heading", { name: "Settings", exact: true })).toBeVisible();
-    await expect(main.getByText("6 sites · 38 users · 266 SKUs.")).toBeVisible();
+    await expect(main.locator("#companyName")).toHaveValue("Stockpile");
+    await expect(main.locator("#companyAddress")).toHaveValue(/Columbus, Ohio/);
   });
 });
 
