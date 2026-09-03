@@ -46,6 +46,7 @@ import {
 } from "@/lib/import/validate";
 import { percent, plural, qty } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { runImport as submitImportRows } from "./actions";
 
 type Step = "upload" | "map" | "review" | "done";
 
@@ -74,6 +75,7 @@ export function ImportWizard({
   const [mapping, setMapping] = React.useState<Record<string, string>>({});
   const [dragging, setDragging] = React.useState(false);
   const [imported, setImported] = React.useState<ValidationResult | null>(null);
+  const [submitting, setSubmitting] = React.useState(false);
 
   const schema = IMPORT_SCHEMAS[kind];
   const keySet = React.useMemo(
@@ -145,16 +147,32 @@ export function ImportWizard({
     setImported(null);
   };
 
-  const runImport = () => {
-    if (!result) return;
-    setImported(result);
-    setStep("done");
-    toast.success(`${plural(result.valid.length, "row")} imported`, {
-      description:
-        errorRows.size > 0
-          ? `${plural(errorRows.size, "row")} were skipped because they had errors. Nothing from those rows was written.`
-          : "Every row passed validation.",
-    });
+  const runImport = async () => {
+    if (!result || result.valid.length === 0 || submitting) return;
+    setSubmitting(true);
+    try {
+      const res = await submitImportRows({ kind, rows: result.valid });
+      if (!res.ok) {
+        toast.error("Nothing was imported", {
+          description: `${res.message} The file is one transaction — no rows were written.`,
+        });
+        return;
+      }
+      setImported(result);
+      setStep("done");
+      toast.success(`${plural(res.imported, "row")} imported`, {
+        description:
+          errorRows.size > 0
+            ? `${plural(errorRows.size, "row")} were skipped because they had errors. Nothing from those rows was written.`
+            : "Every row passed validation.",
+      });
+    } catch {
+      toast.error("The import did not complete", {
+        description: "Something went wrong before anything was written. Try again.",
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const requiredUnmapped = schema.fields.filter(
@@ -567,9 +585,16 @@ export function ImportWizard({
           )}
 
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" className="h-8" disabled={cleanCount === 0} onClick={runImport}>
+            <Button
+              size="sm"
+              className="h-8"
+              disabled={cleanCount === 0 || submitting}
+              onClick={() => void runImport()}
+            >
               <Check className="size-3.5" aria-hidden />
-              Import {qty(cleanCount)} {cleanCount === 1 ? "row" : "rows"}
+              {submitting
+                ? "Importing…"
+                : `Import ${qty(cleanCount)} ${cleanCount === 1 ? "row" : "rows"}`}
             </Button>
             <Button variant="outline" size="sm" className="h-8" onClick={() => setStep("map")}>
               <ArrowLeft className="size-3.5" aria-hidden />
@@ -624,9 +649,9 @@ export function ImportWizard({
                       {plural(errorRows.size, "row")} were not imported
                     </p>
                     <p className="mt-1 text-caption leading-relaxed text-status-warning/90">
-                      Nothing from those rows was written — no partial records exist. Correct them
-                      in the source file and run the import again; the rows already imported will
-                      be recognised and updated rather than duplicated.
+                      Nothing from those rows was written — no partial records exist. Fix them in
+                      the source file and import that file on its own; a file that repeats an
+                      identifier already on record is rejected whole.
                     </p>
                   </div>
                 )}
@@ -643,7 +668,9 @@ export function ImportWizard({
                 </li>
                 <li className="flex items-start gap-2">
                   <Check className="mt-0.5 size-3.5 shrink-0 text-status-success" aria-hidden />
-                  Existing records were updated in place; their history is unchanged.
+                  {kind === "stock"
+                    ? "Each opening-stock row posted a count-correction through the movement ledger."
+                    : "Every row was written as one transaction — the whole file landed, or none of it."}
                 </li>
                 <li className="flex items-start gap-2">
                   <Check className="mt-0.5 size-3.5 shrink-0 text-status-success" aria-hidden />
