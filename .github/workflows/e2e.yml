@@ -195,6 +195,16 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
+      # Ticket 14: the import domain function refuses a Role that reaches it
+      # directly (for a reference kind and for opening stock), and a file whose
+      # last row cannot be resolved writes none of its earlier rows — no product,
+      # no stock balance change, no Event. Playwright only ever reaches the
+      # wizard, always as a role that can import.
+      - name: Import checks
+        run: npm run check:import
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
       - name: Run Playwright suite
         run: npm run test:e2e
         env:

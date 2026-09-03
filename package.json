@@ -25,7 +25,8 @@
     "check:approvals": "tsx lib/domain/approvals.checks.ts",
     "check:automation": "tsx lib/domain/automation.checks.ts",
     "check:notifications": "tsx lib/domain/notifications.checks.ts",
-    "check:roles": "tsx lib/domain/roles.checks.ts"
+    "check:roles": "tsx lib/domain/roles.checks.ts",
+    "check:import": "tsx lib/domain/import.checks.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
