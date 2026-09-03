@@ -37,13 +37,15 @@ Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS v4 · shadcn/u
 
 ```bash
 npm install
-export DATABASE_URL=postgres://…   # a Neon connection string (pooled)
-npm run db:migrate                 # apply migrations
-npm run db:seed                    # load the deterministic dataset
-npm run dev                        # http://localhost:3000
+echo 'DATABASE_URL=postgres://…' > .env   # the dev branch's pooled string (see below)
+npm run db:migrate                        # apply migrations
+npm run db:seed                           # load the deterministic dataset
+npm run dev                               # http://localhost:3000
 ```
 
-`db:seed` truncates and reloads every table; it is safe to re-run.
+`db:migrate`, `db:seed`, `npm run dev` and the Playwright suite all read
+`DATABASE_URL` from `.env` (gitignored). `db:seed` truncates and reloads every
+table; it is safe to re-run.
 
 ### Which Neon branch to point at
 
