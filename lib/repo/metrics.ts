@@ -29,7 +29,7 @@ import {
   stockCounts as allStockCounts,
   transfers as allTransfers,
 } from "./documents";
-import { notifications as allNotifications, tasks as allTasks } from "./ops";
+import { notifications as allNotifications } from "./ops";
 import {
   indexById,
   products as allProducts,
@@ -567,12 +567,11 @@ export async function transfersInFlight(limit = 6) {
 
 /** Live counters that badge the sidebar. */
 export async function navCounts() {
-  const [health, approvals, purchaseOrders, notifications, tasks] = await Promise.all([
+  const [health, approvals, purchaseOrders, notifications] = await Promise.all([
     healthCounts(),
     pendingApprovals(),
     allPurchaseOrders(),
     allNotifications(),
-    allTasks(),
   ]);
   return {
     approvals: approvals.length,
@@ -580,7 +579,6 @@ export async function navCounts() {
     lowStock: health.low + health.critical,
     receiving: purchaseOrders.filter((p) => AWAITING_RECEIPT_STATUSES.includes(p.status)).length,
     notifications: notifications.filter((n) => !n.read).length,
-    tasks: tasks.filter((t) => t.status !== "done").length,
   };
 }
 

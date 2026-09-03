@@ -18,12 +18,12 @@
  * Ticket 05 adds Transfers and their lines (`transfers` / `transfer_lines`),
  * loaded after the sales area — they reference only warehouses, products and
  * locations, all seeded earlier.
- * Ticket 06 adds the admin area — `users`, `roles`, `integrations`,
- * `audit_entries`, `automation_rules` and `automation_runs`; audit entries and
- * rules key into `users`, and roles carry their whole permission matrix.
- * Ticket 08 adds the last two — `notifications` and `tasks` — loaded last. They
- * reference nothing, and with them the generated dataset is read here and
- * nowhere else in the codebase.
+ * Ticket 06 adds the admin area — `users`, `roles`, `audit_entries`,
+ * `automation_rules` and `automation_runs`; audit entries and rules key into
+ * `users`, and roles carry their whole permission matrix.
+ * Ticket 08 adds `notifications`, loaded last — it references nothing.
+ * Ticket 15 dropped `integrations` and `tasks`: their only readers were screens
+ * that could not do what they offered, deleted in the same ticket (ADR-0011).
  *
  * Its own Pool, not `lib/db/client.ts`: that module is `server-only` and this
  * runs under plain Node.
@@ -49,7 +49,6 @@ import {
   countLines,
   customers,
   events,
-  integrations,
   locations,
   movements,
   notifications,
@@ -64,7 +63,6 @@ import {
   stockCounts,
   stockRows,
   suppliers,
-  tasks,
   transferLines,
   transfers,
   users,
@@ -86,7 +84,7 @@ export async function seed() {
     // 09's trigger), but TRUNCATE is the sanctioned reset — like ADR-0010's
     // daily demo reset — and every CI run starts from an empty stream.
     await db.execute(
-      sql`TRUNCATE TABLE ${events}, ${tasks}, ${notifications}, ${automationRuns}, ${automationRules}, ${auditEntries}, ${integrations}, ${roles}, ${users}, ${countLines}, ${stockCounts}, ${adjustmentLines}, ${adjustments}, ${movements}, ${transferLines}, ${transfers}, ${salesOrderLines}, ${salesOrders}, ${customers}, ${returnLines}, ${returns}, ${purchaseOrderLines}, ${purchaseOrders}, ${suppliers}, ${stockRows}, ${products}, ${locations}, ${warehouses}, ${categories} RESTART IDENTITY CASCADE`,
+      sql`TRUNCATE TABLE ${events}, ${notifications}, ${automationRuns}, ${automationRules}, ${auditEntries}, ${roles}, ${users}, ${countLines}, ${stockCounts}, ${adjustmentLines}, ${adjustments}, ${movements}, ${transferLines}, ${transfers}, ${salesOrderLines}, ${salesOrders}, ${customers}, ${returnLines}, ${returns}, ${purchaseOrderLines}, ${purchaseOrders}, ${suppliers}, ${stockRows}, ${products}, ${locations}, ${warehouses}, ${categories} RESTART IDENTITY CASCADE`,
     );
 
     // FK order: categories -> warehouses -> locations -> products -> stock_rows,
@@ -157,16 +155,13 @@ export async function seed() {
     // sorted newest-first, so insert in array order and ORDER BY seq reproduces it.
     await db.insert(roles).values(dataset.roles);
     await db.insert(users).values(dataset.users);
-    await db.insert(integrations).values(dataset.integrations);
     await db.insert(auditEntries).values(dataset.auditEntries);
     await db.insert(automationRules).values(dataset.automationRules);
     await db.insert(automationRuns).values(dataset.automationRuns);
 
-    // Notifications and tasks (ticket 08). Flat lists, `seq` generated — insert
-    // in array order so ORDER BY seq reproduces the generator's order (the inbox
-    // is already newest-first, the task list is in display order).
+    // Notifications (ticket 08). Flat list, `seq` generated — insert in array
+    // order so ORDER BY seq reproduces the generator's order (newest-first).
     await db.insert(notifications).values(dataset.notifications);
-    await db.insert(tasks).values(dataset.tasks);
 
     // Ticket 05: every Document number sequence is advanced past the highest
     // number just loaded, so the first Document a visitor creates continues the
@@ -216,12 +211,10 @@ export async function seed() {
       ["count_lines", countLines, countLineCount],
       ["users", users, dataset.users.length],
       ["roles", roles, dataset.roles.length],
-      ["integrations", integrations, dataset.integrations.length],
       ["audit_entries", auditEntries, dataset.auditEntries.length],
       ["automation_rules", automationRules, dataset.automationRules.length],
       ["automation_runs", automationRuns, dataset.automationRuns.length],
       ["notifications", notifications, dataset.notifications.length],
-      ["tasks", tasks, dataset.tasks.length],
     ] as const;
     const counts: Record<string, number> = {};
     for (const [name, table, expected] of checks) {

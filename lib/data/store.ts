@@ -37,7 +37,6 @@ import type {
   CountStatus,
   CountType,
   Customer,
-  Integration,
   ItemCondition,
   Movement,
   MovementType,
@@ -56,7 +55,6 @@ import type {
   StockLocation,
   StockRow,
   Supplier,
-  TaskItem,
   Transfer,
   TransferLine,
   TransferStatus,
@@ -1771,7 +1769,7 @@ const notifications: AppNotification[] = [
   { category: "expiry", priority: "high", title: "14 lots expire within 30 days", body: "Mostly nitrile gloves and surface disinfectant held at Harbor Cold Storage.", href: "/inventory/stock-levels?view=expiring" },
   { category: "receiving", priority: "normal", title: "Shipment arrived at goods-in dock 2", body: "TR-2026-214 from Cascade Distribution Center is ready to be checked in.", href: "/warehousing/receiving" },
   { category: "approval", priority: "high", title: "Stock adjustment ADJ-2026-0331 needs review", body: "Write-off of $2,140.00 across 3 lines, raised by warehouse staff.", href: "/inventory/adjustments" },
-  { category: "integration", priority: "critical", title: "Accounting sync failed", body: "The nightly journal export returned 402 from the accounting connector at 02:14.", href: "/admin/integrations" },
+  { category: "integration", priority: "critical", title: "Accounting sync failed", body: "The nightly journal export returned 402 from the accounting connector at 02:14.", href: "/dashboard" },
   { category: "stock", priority: "normal", title: "38 SKUs dropped below their reorder point", body: "Purchase suggestions have been generated for 22 of them.", href: "/inventory/stock-levels?view=low-stock" },
   { category: "import", priority: "normal", title: "Supplier import finished with 7 warnings", body: "612 rows imported, 7 skipped for duplicate supplier codes.", href: "/purchasing/suppliers" },
   { category: "system", priority: "low", title: "Cycle count CNT-2026-0052 is due tomorrow", body: "Zone B at Southfield Distribution Center, 3 counters assigned.", href: "/inventory/counts" },
@@ -1786,32 +1784,6 @@ const notifications: AppNotification[] = [
   ...seed,
 })) as AppNotification[];
 notifications.sort((a, b) => b.ts.localeCompare(a.ts));
-
-/* ----------------------------------------------------------------- tasks */
-
-const tasks: TaskItem[] = [
-  { title: "Approve PO-2026-1043", detail: "Meridian Packaging Group · $18,420.60", type: "approval", priority: "high", href: "/approvals" },
-  { title: "Review adjustment ADJ-2026-0331", detail: "Write-off of $2,140.00 across 3 lines", type: "approval", priority: "high", href: "/inventory/adjustments" },
-  { title: "Check in shipment at dock 2", detail: "TR-2026-0214 from Cascade Distribution Center", type: "receiving", priority: "normal", href: "/warehousing/receiving" },
-  { title: "Complete cycle count for Zone B", detail: "Southfield Distribution Center · 28 SKUs", type: "count", priority: "normal", href: "/inventory/counts" },
-  { title: "Pick SO-2026-4188", detail: "Ironwood Construction · 6 lines · promised Friday", type: "picking", priority: "high", href: "/warehousing/picking" },
-  { title: "Raise reorders for 22 low-stock SKUs", detail: "Purchase suggestions ready to convert", type: "reorder", priority: "high", href: "/inventory/stock-levels?view=low-stock" },
-  { title: "Investigate accounting sync failure", detail: "Nightly journal export returned 402", type: "review", priority: "critical", href: "/admin/integrations" },
-  { title: "Recount 9 variance lines", detail: "CNT-2026-0053 · variance above tolerance", type: "count", priority: "normal", href: "/inventory/counts" },
-  { title: "Quarantine expiring lots at CS-01", detail: "14 lots inside the 30-day window", type: "review", priority: "high", href: "/inventory/stock-levels?view=expiring" },
-  { title: "Approve transfer TR-2026-0221", detail: "1,240 units DC-02 → FC-01", type: "approval", priority: "normal", href: "/approvals" },
-  { title: "Confirm short delivery on PO-2026-1017", detail: "3 of 8 lines under quantity", type: "receiving", priority: "normal", href: "/warehousing/receiving" },
-  { title: "Pack and manifest 12 orders", detail: "Cut-off for Anchor Parcel is 16:30", type: "picking", priority: "normal", href: "/warehousing/packing" },
-].map((seed, i) => {
-  const dueOffset = i < 4 ? r.float(-1, 2) : r.float(0, 9);
-  return {
-    id: id("TSK", i + 1, 3),
-    dueAt: daysFromNow(dueOffset),
-    assignedTo: r.pick(users).id,
-    status: dueOffset < 0 ? "overdue" : i < 3 ? "in-progress" : "open",
-    ...seed,
-  };
-}) as TaskItem[];
 
 /* ------------------------------------------------------------- automation */
 
@@ -1870,23 +1842,6 @@ const automationRuns: AutomationRun[] = [];
   automationRuns.sort((a, b) => b.ts.localeCompare(a.ts));
 }
 
-/* ----------------------------------------------------------- integrations */
-
-const integrations: Integration[] = [
-  { name: "Storefront Sync", vendor: "Commerce Cloud", category: "ecommerce", status: "connected", recordsSynced: 128_402, description: "Two-way sync of products, prices and orders with the online storefront." },
-  { name: "Marketplace Channel", vendor: "Marketplace Direct", category: "ecommerce", status: "syncing", recordsSynced: 41_920, description: "Listing and inventory feed for the marketplace channel." },
-  { name: "General Ledger Export", vendor: "Ledgerly", category: "accounting", status: "error", recordsSynced: 8_244, description: "Nightly journal export of inventory movements and valuation." },
-  { name: "Shipping Rates & Labels", vendor: "Anchor Parcel", category: "shipping", status: "connected", recordsSynced: 62_118, description: "Rate shopping, label generation and tracking updates." },
-  { name: "Freight Manifest", vendor: "Meridian Freight", category: "shipping", status: "connected", recordsSynced: 9_806, description: "Pallet manifests and collection bookings for LTL freight." },
-  { name: "Card Payments", vendor: "Northgate Pay", category: "payments", status: "connected", recordsSynced: 31_570, description: "Payment capture and refund reconciliation for sales orders." },
-  { name: "Supplier EDI", vendor: "TradeLink EDI", category: "edi", status: "connected", recordsSynced: 17_388, description: "EDI 850/855/856 exchange with contracted suppliers." },
-  { name: "Analytics Warehouse", vendor: "Beacon BI", category: "bi", status: "disconnected", recordsSynced: 0, description: "Streams inventory and order facts into the analytics warehouse." },
-].map((seed, i) => ({
-  id: id("INT", i + 1, 3),
-  lastSyncAt: seed.status === "disconnected" ? null : daysFromNow(-r.float(0, 2)),
-  ...seed,
-})) as Integration[];
-
 /* ------------------------------------------------------------------ export */
 
 export const db = {
@@ -1908,10 +1863,8 @@ export const db = {
   movements,
   auditEntries,
   notifications,
-  tasks,
   automationRules,
   automationRuns,
-  integrations,
   generatedAt: NOW.toISOString(),
 };
 

@@ -40,7 +40,6 @@ import type {
   AutomationRun as AutomationRunModel,
   CountType,
   Customer as CustomerModel,
-  Integration as IntegrationModel,
   ItemCondition,
   LocationType,
   ModuleKey,
@@ -50,7 +49,6 @@ import type {
   Role,
   SalesOrder as SalesOrderModel,
   Supplier as SupplierModel,
-  TaskItem as TaskItemModel,
   User as UserModel,
   Warehouse as WarehouseModel,
   WarehouseType,
@@ -636,28 +634,14 @@ export const automationRuns = pgTable("automation_runs", {
   actorId: text("actor_id").notNull().default("system"),
 });
 
-export const integrations = pgTable("integrations", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  vendor: text("vendor").notNull(),
-  category: text("category").$type<IntegrationModel["category"]>().notNull(),
-  status: text("status").$type<IntegrationModel["status"]>().notNull(),
-  lastSyncAt: text("last_sync_at"),
-  recordsSynced: integer("records_synced").notNull(),
-  description: text("description").notNull(),
-});
-
-/* --------------------------------------------------- notifications & tasks ---
+/* --------------------------------------------------------- notifications ---
  *
- * Ticket 08. The last two things a repository function still read from the
- * generated dataset — the notification inbox and the operator task list. Both
- * are flat lists with no state machine, so `category` / `type` / `priority` /
- * `status` stay `text` narrowed to their union rather than Postgres enums (same
- * treatment as `integrations.category`). `seq` is an identity column like
- * `movements.seq`: the generator emits notifications newest-first and the task
- * list in display order, the seed inserts in that array order, and `ORDER BY
- * seq` reproduces it. People ids (`actor_id`, `assigned_to`) carry no FK,
- * matching `movements.user_id` and the Document tables.
+ * Ticket 08. The notification inbox — a flat list with no state machine, so
+ * `category` / `priority` stay `text` narrowed to their union rather than
+ * Postgres enums. `seq` is an identity column like `movements.seq`: the
+ * generator emits notifications newest-first, the seed inserts in that array
+ * order, and `ORDER BY seq` reproduces it. `actor_id` carries no FK, matching
+ * `movements.user_id` and the Document tables.
  */
 
 export const notifications = pgTable("notifications", {
@@ -676,20 +660,6 @@ export const notifications = pgTable("notifications", {
   dismissed: boolean("dismissed").notNull().default(false),
   /** Null for system notifications; a User id otherwise. */
   actorId: text("actor_id"),
-});
-
-export const tasks = pgTable("tasks", {
-  seq: integer("seq").generatedAlwaysAsIdentity().primaryKey(),
-  /** The dataset's own id (`TSK-001`); `seq` is what fixes row order. */
-  id: text("id").notNull(),
-  title: text("title").notNull(),
-  detail: text("detail").notNull(),
-  type: text("type").$type<TaskItemModel["type"]>().notNull(),
-  priority: text("priority").$type<TaskItemModel["priority"]>().notNull(),
-  dueAt: text("due_at").notNull(),
-  assignedTo: text("assigned_to").notNull(),
-  href: text("href").notNull(),
-  status: text("status").$type<TaskItemModel["status"]>().notNull(),
 });
 
 /* --------------------------------------------- movements, adjustments, counts ---

@@ -1,13 +1,12 @@
 /**
- * Operational and admin reads: notifications, tasks, automation and
- * integrations config, the audit log. Raw lists — see `reference.ts` for why.
+ * Operational and admin reads: notifications, automation config, the audit log.
+ * Raw lists — see `reference.ts` for why.
  *
- * All Postgres-backed: automation, integrations and audit entries since ticket
- * 06, notifications and tasks since ticket 08. Notifications, tasks, audit
- * entries and automation runs carry a generated `seq` that fixes row order (the
- * generator's array order: newest-first for the inbox / ledger / audit log, the
- * task list in display order) — strip it back off, callers expect the bare
- * shape (same convention as `documents.ts`).
+ * All Postgres-backed: automation and audit entries since ticket 06,
+ * notifications since ticket 08. Notifications, audit entries and automation
+ * runs carry a generated `seq` that fixes row order (the generator's array
+ * order: newest-first for the inbox / ledger / audit log) — strip it back off,
+ * callers expect the bare shape (same convention as `documents.ts`).
  */
 
 import { cache } from "react";
@@ -19,8 +18,6 @@ import type {
   AuditEntry,
   AutomationRule,
   AutomationRun,
-  Integration,
-  TaskItem,
 } from "@/lib/types";
 
 // A dismissed notification is gone from every feed — the bell, the page — so it
@@ -33,21 +30,9 @@ export const notifications = cache(
       .map(({ seq, dismissed, ...notification }) => notification),
 );
 
-export const tasks = cache(
-  async (): Promise<TaskItem[]> =>
-    (await getDb().select().from(schema.tasks).orderBy(schema.tasks.seq)).map(
-      ({ seq, ...task }) => task,
-    ),
-);
-
 export const automationRules = cache(
   (): Promise<AutomationRule[]> =>
     getDb().select().from(schema.automationRules).orderBy(schema.automationRules.id),
-);
-
-export const integrations = cache(
-  (): Promise<Integration[]> =>
-    getDb().select().from(schema.integrations).orderBy(schema.integrations.id),
 );
 
 // `seq` is the generated insert order; the seed loads these newest-first, so

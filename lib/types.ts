@@ -603,18 +603,6 @@ export interface AppNotification {
   actorId: string | null;
 }
 
-export interface TaskItem {
-  id: string;
-  title: string;
-  detail: string;
-  type: "approval" | "receiving" | "count" | "picking" | "review" | "reorder";
-  priority: NotificationPriority;
-  dueAt: string;
-  assignedTo: string;
-  href: string;
-  status: "open" | "in-progress" | "done" | "overdue";
-}
-
 export interface AutomationRule {
   id: string;
   name: string;
@@ -641,17 +629,6 @@ export interface AutomationRun {
   /** The Actor the run executed as — always the system Actor (`"system"`);
    *  automation acts as a designated Actor, not anonymously (ADR-0004). */
   actorId: string;
-}
-
-export interface Integration {
-  id: string;
-  name: string;
-  vendor: string;
-  category: "ecommerce" | "accounting" | "shipping" | "payments" | "edi" | "bi";
-  status: "connected" | "error" | "disconnected" | "syncing";
-  lastSyncAt: string | null;
-  recordsSynced: number;
-  description: string;
 }
 
 /* -------------------------------------------------------------- computed */
