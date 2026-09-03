@@ -1,5 +1,13 @@
 import { defineConfig, devices } from "@playwright/test";
 
+// Local runs get DATABASE_URL from `.env` (the `dev` Neon branch); CI sets it in
+// the job env and ships no `.env`. Workers inherit this process's env.
+try {
+  process.loadEnvFile(".env");
+} catch {
+  // no .env — CI, or the var is already exported
+}
+
 const PORT = 3100;
 
 /**
