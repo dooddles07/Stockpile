@@ -18,12 +18,16 @@ Three ADRs describe things that are no longer true, and one decision made in thi
 
 **Blocked by:** 16 (company settings, the one setting worth having).
 
-**Status:** open
+**Status:** resolved
 
-- [ ] ADR-0010 amended: reset by workflow, no endpoint
-- [ ] ADR-0004 amendment extended: identity declined for this phase, permission editor now real
-- [ ] ADR-0009 amended: post-reset production smoke run
-- [ ] A new ADR records that screens without a write path are deleted rather than stubbed
-- [ ] CONTEXT.md gains **Approval**, with an `_Avoid_` line, and nothing else changes
-- [ ] README carries the production URL, the branch convention, and no reference to a deleted screen
-- [ ] Every claim on the landing page is true of the deployed instance
+- [x] ADR-0010 amended: reset by workflow, no endpoint
+- [x] ADR-0004 amendment extended: identity declined for this phase, permission editor now real
+- [x] ADR-0009 amended: post-reset production smoke run
+- [x] A new ADR records that screens without a write path are deleted rather than stubbed
+- [x] CONTEXT.md gains **Approval**, with an `_Avoid_` line, and nothing else changes
+- [x] README carries the production URL, the branch convention, and no reference to a deleted screen
+- [x] Every claim on the landing page is true of the deployed instance
+
+## Comments
+
+**2026-09-03** — ADR-0010 amendment and ADR-0011 already landed with ticket 15; verified both still cover the requirement. This ticket added: ADR-0004 amendment reframed (identity via Auth.js declined for this phase by decision, permission matrix editor from ticket 13 now cited as real); ADR-0009 gained a post-reset production smoke amendment; CONTEXT.md gained the **Approval** term with an `_Avoid_` line; README's "What it covers" table dropped the deleted `tasks`, `automation rule builder`, and `integrations` screens. Landing page checked claim by claim against the deployed instance — seven roles seeded, no deleted-screen references, every link live — no change needed.
