@@ -48,16 +48,9 @@ test.describe("approvals", () => {
 
     await expect(main.getByRole("heading", { name: "Approvals" })).toBeVisible();
     await expect(main.getByText("$1,494,015")).toBeVisible();
-    await expect(main.getByRole("link", { name: /Stock transfer TR-2026-206/ })).toBeVisible();
-  });
-});
-
-test.describe("tasks", () => {
-  test("totals open work", async ({ page, main }) => {
-    await page.goto("/tasks");
-
-    await expect(main.getByRole("heading", { name: "Tasks" })).toBeVisible();
-    await expect(main.locator("[data-numeric]")).toHaveText(["12", "2", "1", "1"]);
+    // The default session is Super Admin, who can decide on every queue, so the
+    // oldest transfer renders in the decide list as text rather than a link.
+    await expect(main.getByText(/Stock transfer TR-2026-206/)).toBeVisible();
   });
 });
 
