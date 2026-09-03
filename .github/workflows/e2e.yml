@@ -205,6 +205,15 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
+      # Finish-and-ship ticket 16: the company-settings domain function refuses a
+      # Role that cannot edit settings when reached directly (the seeded Auditor),
+      # refuses blank input, and writes one audit row on a real change while a
+      # no-op re-save writes none. Playwright only ever hits the form.
+      - name: Company settings checks
+        run: npm run check:settings
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
       - name: Run Playwright suite
         run: npm run test:e2e
         env:

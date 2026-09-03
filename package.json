@@ -26,6 +26,7 @@
     "check:automation": "tsx lib/domain/automation.checks.ts",
     "check:notifications": "tsx lib/domain/notifications.checks.ts",
     "check:roles": "tsx lib/domain/roles.checks.ts",
+    "check:settings": "tsx lib/domain/settings.checks.ts",
     "check:import": "tsx lib/domain/import.checks.ts"
   },
   "dependencies": {
