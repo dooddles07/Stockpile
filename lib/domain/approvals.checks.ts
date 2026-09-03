@@ -63,6 +63,22 @@ async function maxEventSeq(db: Db): Promise<number> {
   return row?.n ?? 0;
 }
 
+/**
+ * Delete the events appended since `seqBefore`, undoing what a check exercised.
+ *
+ * The append-only trigger (migration 0009) rejects a bare DELETE; migration 0015
+ * lets it through for a transaction that has opted in with
+ * `stockpile.allow_events_rewind`. `SET LOCAL` is transaction-scoped, so the
+ * DELETE has to share the transaction — the Pool hands out connections that
+ * outlive a statement.
+ */
+async function rewindEvents(db: Db, seqBefore: number): Promise<void> {
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`SET LOCAL stockpile.allow_events_rewind = 'on'`);
+    await tx.delete(schema.events).where(sql`${schema.events.seq} > ${seqBefore}`);
+  });
+}
+
 async function actorForRole(db: Db, role: string): Promise<Actor> {
   const [user] = await db
     .select({ id: schema.users.id, name: schema.users.name, role: schema.users.role })
@@ -224,7 +240,7 @@ async function approvingCarriesPurchaseOrderToReceivable(db: Db): Promise<void> 
       .update(schema.purchaseOrders)
       .set({ status: snapshot.status, approvedBy: snapshot.approvedBy, orderedAt: snapshot.orderedAt, approvals: snapshot.approvals })
       .where(eq(schema.purchaseOrders.id, docs.po.id));
-    await db.delete(schema.events).where(sql`${schema.events.seq} > ${seqBefore}`);
+    await rewindEvents(db, seqBefore);
   }
 }
 
@@ -290,7 +306,7 @@ async function rejectionRecordsReasonAndIsTerminal(db: Db): Promise<void> {
       .update(schema.adjustments)
       .set({ status: snapshot.status, approvedBy: snapshot.approvedBy, approvals: snapshot.approvals })
       .where(eq(schema.adjustments.id, docs.adjustment.id));
-    await db.delete(schema.events).where(sql`${schema.events.seq} > ${seqBefore}`);
+    await rewindEvents(db, seqBefore);
   }
 }
 
@@ -343,7 +359,7 @@ async function approvingATransferRecordsItAndMovesNothing(db: Db): Promise<void>
         approvals: snapshot.approvals,
       })
       .where(eq(schema.transfers.id, docs.transfer.id));
-    await db.delete(schema.events).where(sql`${schema.events.seq} > ${seqBefore}`);
+    await rewindEvents(db, seqBefore);
   }
 }
 

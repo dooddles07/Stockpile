@@ -96,7 +96,17 @@ test.afterAll(async () => {
         );
       }
       await pool.query(`DELETE FROM movements WHERE ref_id = $1`, [po.id]);
-      await pool.query(`DELETE FROM events WHERE payload->>'purchaseOrderId' = $1`, [po.id]);
+      // The append-only trigger (migration 0009) blocks this DELETE unless the
+      // transaction opts in (migration 0015); SET LOCAL needs the same session.
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query(`SET LOCAL stockpile.allow_events_rewind = 'on'`);
+        await client.query(`DELETE FROM events WHERE payload->>'purchaseOrderId' = $1`, [po.id]);
+        await client.query("COMMIT");
+      } finally {
+        client.release();
+      }
       await pool.query(`DELETE FROM purchase_order_lines WHERE purchase_order_id = $1`, [po.id]);
       await pool.query(`DELETE FROM purchase_orders WHERE id = $1`, [po.id]);
     }
