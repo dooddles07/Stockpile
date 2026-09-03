@@ -1,12 +1,11 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Bell, Settings } from "lucide-react";
+import { Bell } from "lucide-react";
 
 import { PageHeader } from "@/components/shell/page-header";
 import { EmptyState } from "@/components/states";
 import { Section, StatTile } from "@/components/record/field-grid";
 import { StatusBadge } from "@/components/status/status-badge";
-import { Button } from "@/components/ui/button";
 import { notifications as allNotifications } from "@/lib/repo/ops";
 import { indexById, users } from "@/lib/repo/reference";
 import { NOW, DAY_MS } from "@/lib/data/rng";
@@ -37,12 +36,6 @@ export default async function NotificationsPage() {
       <PageHeader
         title="Notifications"
         description="Grouped by what they are about, so a run of stock alerts does not bury the one thing that needs a person."
-        actions={
-          <Button variant="outline" size="sm" className="h-8" render={<Link href="/settings/notifications" />}>
-            <Settings className="size-3.5" aria-hidden />
-            Notification settings
-          </Button>
-        }
       >
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatTile label="Notifications" value={qty(notifications.length)} />

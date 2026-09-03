@@ -2,7 +2,6 @@ import {
   ArrowLeftRight,
   BadgeCheck,
   Barcode,
-  Blocks,
   Boxes,
   Building2,
   CalendarCheck,
@@ -16,7 +15,6 @@ import {
   History,
   Inbox,
   LayoutGrid,
-  ListChecks,
   Map,
   PackageCheck,
   PackageMinus,
@@ -45,7 +43,7 @@ export interface NavItem {
   icon: LucideIcon;
   module: ModuleKey;
   /** Which live count to badge this entry with, if any. */
-  badge?: "approvals" | "lowStock" | "receiving" | "notifications" | "tasks";
+  badge?: "approvals" | "lowStock" | "receiving" | "notifications";
   /** Extra pathnames that should light this entry up. */
   match?: string[];
 }
@@ -61,7 +59,6 @@ export const NAV: NavSection[] = [
     items: [
       { label: "Dashboard", href: "/dashboard", icon: Gauge, module: "dashboard" },
       { label: "Approvals", href: "/approvals", icon: BadgeCheck, module: "approvals", badge: "approvals" },
-      { label: "Tasks", href: "/tasks", icon: ListChecks, module: "dashboard", badge: "tasks" },
       { label: "Notifications", href: "/notifications", icon: Inbox, module: "dashboard", badge: "notifications" },
     ],
   },
@@ -124,20 +121,9 @@ export const NAV: NavSection[] = [
       { label: "Roles & permissions", href: "/admin/roles", icon: ShieldCheck, module: "roles" },
       { label: "Audit logs", href: "/admin/audit-logs", icon: CalendarCheck, module: "audit" },
       { label: "Automation", href: "/admin/automation", icon: Workflow, module: "automation" },
-      { label: "Integrations", href: "/admin/integrations", icon: Blocks, module: "integrations" },
       { label: "Settings", href: "/settings/company", icon: Settings, module: "settings", match: ["/settings"] },
     ],
   },
-];
-
-export const SETTINGS_NAV = [
-  { label: "Company", href: "/settings/company" },
-  { label: "Inventory rules", href: "/settings/inventory" },
-  { label: "Warehouses", href: "/settings/warehouses" },
-  { label: "Products & SKUs", href: "/settings/products" },
-  { label: "Notifications", href: "/settings/notifications" },
-  { label: "Security", href: "/settings/security" },
-  { label: "API & webhooks", href: "/settings/api" },
 ];
 
 /** Flat index used by the command palette and breadcrumb resolution. */

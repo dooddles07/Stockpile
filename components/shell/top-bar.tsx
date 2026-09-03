@@ -235,10 +235,6 @@ export function TopBar({
                 <Settings className="size-4" aria-hidden />
                 Settings
               </DropdownMenuItem>
-              <DropdownMenuItem render={<Link href="/settings/security" />}>
-                <UserCog className="size-4" aria-hidden />
-                Security &amp; sessions
-              </DropdownMenuItem>
               <DropdownMenuItem render={<Link href="/operator" />}>
                 <Smartphone className="size-4" aria-hidden />
                 Handheld mode

@@ -1,4 +1,3 @@
-import { SettingsNav } from "./settings-nav";
 import { PageHeader } from "@/components/shell/page-header";
 import { PermissionDenied } from "@/components/states";
 import { getRole } from "@/lib/auth/session";
@@ -20,8 +19,7 @@ export default async function SettingsLayout({ children }: { children: React.Rea
         badge={readOnly ? <StatusBadge label="Read only" tone="neutral" size="md" /> : undefined}
       />
 
-      <div className="grid gap-6 p-4 sm:p-6 lg:grid-cols-[13rem_1fr]">
-        <SettingsNav />
+      <div className="p-4 sm:p-6">
         <div className="min-w-0">{children}</div>
       </div>
     </>
