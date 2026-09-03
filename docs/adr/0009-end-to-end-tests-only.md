@@ -23,3 +23,7 @@ The write-path tickets (09–17) each ship a check script alongside the flow —
 - **Enforcement past the UI**: each per-flow check calls the domain function directly as a forbidden role and asserts it refuses and writes no event.
 
 `lib/import/validate.test.ts` no longer exists; `lib/import/validate.ts` is now exercised by `e2e/import-validation.spec.ts` in the Playwright suite.
+
+## Amendment: the deployed instance is verified by a post-reset smoke run
+
+End-to-end tests remain the strategy. The deployed demo is verified by `e2e/smoke.spec.ts` run against the production URL immediately after each daily reset, inside the same workflow that reseeds it (ADR-0010) — the determinism the reset relies on is what keeps the recorded assertions valid against production. The write specs are deliberately not run there: they would leave the demo in a state the reset did not produce, and their coverage is already exercised against the `ci` branch on every push.

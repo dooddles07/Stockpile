@@ -6,7 +6,7 @@ status: accepted
 
 Identity, sessions and password flows are handled by Auth.js with the Drizzle adapter, so users and sessions are tables in our own Postgres rather than a vendor's. Authorization is enforced inside the domain functions: every mutation function takes the acting user as its first argument and checks permission before doing anything. Roles and their permissions are database rows, editable at runtime through the admin UI.
 
-**Only the authorization half of this is implemented — identity via Auth.js is not built yet. See the amendment below.**
+**The authorization half is implemented. Identity via Auth.js is declined for this phase, not deferred by omission. See the amendment below.**
 
 ## Considered options
 
@@ -20,8 +20,10 @@ Existing `can(role, module, action)` calls in pages and components are **renderi
 
 Every domain function carries an explicit actor argument, including a system actor used by automation. `ROLES` as a hardcoded array in `lib/auth/permissions.ts` contradicts the runtime permission editor and is replaced by database rows.
 
-## Amendment: identity (Auth.js) is not built yet; authorization is
+## Amendment: authorization is fully built; identity via Auth.js is declined for this phase
 
-The authorization half is built. `roles` and `users` are tables in our own Postgres, roles carry their whole permission matrix and are editable through the admin UI, `hydrateRoles` loads them into the permission engine per request, and every mutation in `lib/domain` takes the acting user first and calls `can()` before touching data. `can()` in pages and components is a rendering gate only, as decided above.
+The authorization half is real and complete. `roles` and `users` are tables in our own Postgres, roles carry their whole permission matrix and are editable at runtime through the permission matrix editor that ticket 13 built, `hydrateRoles` loads them into the permission engine per request, and every mutation in `lib/domain` takes the acting user first and calls `can()` before touching data. `can()` in pages and components is a rendering gate only, as decided above.
 
-The identity half is not built yet. Auth.js, the Drizzle adapter, and password / session / reset flows are not installed — there is no `next-auth` dependency and no sessions table. In their place `lib/auth/session.ts` holds the active role in a cookie (`stockpile-role`) and `getCurrentUser()` returns a representative active user for that role, which is what supplies the actor argument. It also fits the public demo planned in ADR-0010, where visitors would share one seeded account rather than registering. Wiring Auth.js as described above is the change required before Stockpile has real, per-person sign-in; the domain layer already expects a real user object and should not need to change.
+Identity via Auth.js is declined for this phase, deliberately — not deferred by accident. The deployed instance is a public writable demo (ADR-0010), and a public writable demo behind a registration wall is a demo nobody enters. So there is no `next-auth` dependency, no adapter, and no sessions table. `lib/auth/session.ts` holds the active role in a cookie (`stockpile-role`) and `getCurrentUser()` returns a representative active user for that role; that cookie-held role and its user are the actor source by decision, and they supply the actor argument every domain function expects.
+
+Wiring Auth.js as described in the body above is the change required before Stockpile has real, per-person sign-in. The domain layer already expects a real user object and should not need to change when that happens.
