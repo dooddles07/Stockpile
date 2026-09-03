@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+import { cache } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -13,6 +15,20 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status/status-badge";
+import { getDb } from "@/lib/db/client";
+import { companySettings } from "@/lib/domain/settings";
+
+// Reads the stored company name, so it cannot be prerendered — a production
+// build carries no connection string, exactly as the (app) segment relies on.
+export const dynamic = "force-dynamic";
+
+// One query per request, shared by generateMetadata and the page body.
+const loadCompany = cache(() => companySettings(getDb()));
+
+export async function generateMetadata(): Promise<Metadata> {
+  const { companyName } = await loadCompany();
+  return { title: companyName, openGraph: { title: companyName, siteName: companyName } };
+}
 
 const TRY = [
   {
@@ -41,7 +57,9 @@ const TRY = [
   },
 ];
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  const { companyName } = await loadCompany();
+
   return (
     <main className="min-h-full bg-background text-foreground">
       <div className="mx-auto flex max-w-5xl flex-col gap-16 px-6 py-16 sm:py-24">
@@ -50,7 +68,7 @@ export default function LandingPage() {
             <StatusBadge label="Public demo · resets daily" tone="info" />
           </div>
           <h1 className="font-heading text-[40px] font-bold leading-[1.05] tracking-tight sm:text-[56px]">
-            Stockpile
+            {companyName}
           </h1>
           <p className="max-w-2xl text-[17px] leading-relaxed text-muted-foreground sm:text-[19px]">
             An inventory platform for businesses that hold stock across several sites — purchase

@@ -54,7 +54,7 @@ function useFavorites() {
   return { favorites, toggle };
 }
 
-export function AppSidebar({ counts }: { counts: NavCounts }) {
+export function AppSidebar({ counts, companyName }: { counts: NavCounts; companyName: string }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { can } = useRole();
@@ -151,7 +151,7 @@ export function AppSidebar({ counts }: { counts: NavCounts }) {
               <Package className="size-4" strokeWidth={2} aria-hidden />
             </span>
             <span className="grid min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
-              <span className="truncate text-[13px] font-semibold leading-tight">Stockpile</span>
+              <span className="truncate text-[13px] font-semibold leading-tight">{companyName}</span>
               <span className="truncate text-[11px] leading-tight text-muted-foreground">
                 {workspace.name}
               </span>
