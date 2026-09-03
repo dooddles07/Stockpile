@@ -32,7 +32,7 @@
 import { fileURLToPath } from "node:url";
 
 import { Pool, neonConfig } from "@neondatabase/serverless";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/neon-serverless";
 import ws from "ws";
 
@@ -89,12 +89,16 @@ export async function seed() {
       sql`TRUNCATE TABLE ${events}, ${settings}, ${notifications}, ${automationRuns}, ${automationRules}, ${auditEntries}, ${roles}, ${users}, ${countLines}, ${stockCounts}, ${adjustmentLines}, ${adjustments}, ${movements}, ${transferLines}, ${transfers}, ${salesOrderLines}, ${salesOrders}, ${customers}, ${returnLines}, ${returns}, ${purchaseOrderLines}, ${purchaseOrders}, ${suppliers}, ${stockRows}, ${products}, ${locations}, ${warehouses}, ${categories} RESTART IDENTITY CASCADE`,
     );
 
-    // FK order: categories -> warehouses -> locations -> products -> stock_rows,
-    // then suppliers -> purchase_orders -> purchase_order_lines,
-    // returns -> return_lines, and customers -> sales_orders -> sales_order_lines.
+    // FK order: roles -> users (warehouseId null) -> categories -> warehouses
+    // -> locations -> products -> stock_rows, then back-fill users.warehouseId.
+    // Circular FK: warehouses.managerId -> users, users.warehouseId -> warehouses.
     // One multi-row INSERT per table; chunk .values() if the dataset ever
     // approaches Postgres's 65535-parameter limit (~2k product rows, or ~5k
     // order lines at 12 columns).
+    await db.insert(roles).values(dataset.roles);
+    await db.insert(users).values(
+      dataset.users.map(({ warehouseId: _, ...u }) => ({ ...u, warehouseId: null })),
+    );
     await db.insert(categories).values(dataset.categories);
     await db.insert(warehouses).values(dataset.warehouses);
     await db.insert(locations).values(dataset.locations);
@@ -151,12 +155,17 @@ export async function seed() {
       ),
     );
 
-    // Admin & settings. Roles then users (`users.role` is an FK into `roles`);
-    // audit entries and automation rules key into users. audit_entries /
-    // automation_runs carry a generated `seq` and the dataset arrays are already
-    // sorted newest-first, so insert in array order and ORDER BY seq reproduces it.
-    await db.insert(roles).values(dataset.roles);
-    await db.insert(users).values(dataset.users);
+    // Back-fill users.warehouseId now that warehouses exist (circular FK).
+    for (const u of dataset.users) {
+      if (u.warehouseId) {
+        await db.update(users).set({ warehouseId: u.warehouseId }).where(eq(users.id, u.id));
+      }
+    }
+
+    // Admin area: audit entries and automation rules key into users (already
+    // inserted above). audit_entries / automation_runs carry a generated `seq`
+    // and the dataset arrays are already sorted newest-first, so insert in
+    // array order and ORDER BY seq reproduces it.
     await db.insert(auditEntries).values(dataset.auditEntries);
     await db.insert(automationRules).values(dataset.automationRules);
     await db.insert(automationRuns).values(dataset.automationRuns);
