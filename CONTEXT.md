@@ -44,6 +44,10 @@ _Avoid_: site, facility, depot
 Any record with a state machine that causes or anticipates Movements: Purchase Order, Sales Order, Transfer, Adjustment, Stock Count, Return, Goods Receipt. Documents are event-sourced.
 _Avoid_: order, record, transaction
 
+**Approval**:
+A decision recorded against a Document that permits it to proceed, made by an Actor holding the permission for that document type. It appends an Event and moves no stock; the Movements the Document anticipates still happen later, through their own steps.
+_Avoid_: sign-off, authorization (that is the permission check, not this decision), confirmation
+
 **Reference Data**:
 Records that describe the business rather than its activity: Product, Category, Warehouse, Location, Supplier, Customer, Role, settings. Reference Data is stored as ordinary mutable rows, not event-sourced.
 _Avoid_: master data, lookup, config
