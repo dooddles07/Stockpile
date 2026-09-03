@@ -23,7 +23,7 @@
 import { eq } from "drizzle-orm";
 import type { NeonDatabase } from "drizzle-orm/neon-serverless";
 
-import { LEVEL_LABEL, can } from "@/lib/auth/permissions";
+import { ALL_MODULE_KEYS, LEVEL_LABEL, can } from "@/lib/auth/permissions";
 import { newId } from "@/lib/domain/reference";
 import { type Actor } from "@/lib/domain/stock";
 import * as schema from "@/lib/db/schema";
@@ -31,7 +31,10 @@ import type { AccessLevel, ModuleKey, Role } from "@/lib/types";
 
 type Db = NeonDatabase<typeof schema>;
 
-export type RolePermissionErrorCode = "forbidden" | "not-found" | "last-admin";
+export type RolePermissionErrorCode = "forbidden" | "not-found" | "last-admin" | "invalid";
+
+const KNOWN_MODULES = new Set<string>(ALL_MODULE_KEYS);
+const KNOWN_LEVELS = new Set<string>(Object.keys(LEVEL_LABEL));
 
 export class RolePermissionError extends Error {
   constructor(
@@ -75,6 +78,18 @@ export async function updateRolePermissions(
       `Your role (${actor.role}) is not allowed to change role permissions.`,
       "forbidden",
     );
+  }
+
+  // This function is the trust boundary (ADR-0004), not the server action that
+  // happens to call it today — so an unknown module or level is rejected here,
+  // before it can reach the JSONB column through automation or a REST caller.
+  for (const [module, level] of Object.entries(matrix)) {
+    if (!KNOWN_MODULES.has(module)) {
+      throw new RolePermissionError(`"${module}" is not a permission module.`, "invalid");
+    }
+    if (!KNOWN_LEVELS.has(level as string)) {
+      throw new RolePermissionError(`"${level}" is not an access level.`, "invalid");
+    }
   }
 
   return db.transaction(async (tx) => {

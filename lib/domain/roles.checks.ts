@@ -99,7 +99,7 @@ async function lastAdminCannotDropIt(db: Db): Promise<void> {
   console.log("  last-admin: Super Admin cannot drop its own roles:manage, nothing written");
 }
 
-async function apermittedEditPersistsAndIsAudited(db: Db): Promise<void> {
+async function aPermittedEditPersistsAndIsAudited(db: Db): Promise<void> {
   const actor = await actorForRole(db, "super-admin");
   const original = await levelOf(db, "auditor", "adjustments");
   assert.notEqual(original, "none", "precondition: the Role has this access to begin with");
@@ -156,7 +156,7 @@ async function main() {
     console.log("role permission write-path checks:");
     await noAdminAccessIsRefused(db);
     await lastAdminCannotDropIt(db);
-    await apermittedEditPersistsAndIsAudited(db);
+    await aPermittedEditPersistsAndIsAudited(db);
     console.log("ok");
   } finally {
     await pool.end();

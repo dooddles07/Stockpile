@@ -111,7 +111,7 @@ export function PermissionEditor({
     startSaving(async () => {
       const result = await saveRolePermissionsAction({ roleId, matrix: levels });
       if (!result.ok) {
-        toast.error(result.message);
+        toast.error(result.message ?? "That change could not be saved.");
         return;
       }
       toast.success(`${roleLabel} permissions updated`, {
