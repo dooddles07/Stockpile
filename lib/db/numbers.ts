@@ -165,8 +165,15 @@ export async function allocateDocumentNumber(
  * segment of the stored number; both the seed and `check:numbers` come through
  * here, so the two cannot disagree about where a series has reached.
  */
+const ALLOWED_TABLES = new Set(
+  Object.values(documentNumbers).map((s) => s.table),
+);
+
 export async function highestNumber(db: NumberDb, type: DocumentNumberType): Promise<number> {
   const spec = documentNumbers[type];
+  if (!ALLOWED_TABLES.has(spec.table)) {
+    throw new Error(`highestNumber: table "${spec.table}" not in allowlist`);
+  }
   const result = await db.execute(sql`
     select coalesce(max(split_part(number, '-', 3)::bigint), ${spec.start - 1})::int as value
       from ${sql.raw(spec.table)}

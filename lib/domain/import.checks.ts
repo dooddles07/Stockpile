@@ -264,7 +264,7 @@ async function main() {
     await lastRowInvalidLeavesFileUnwritten(db);
     console.log("ok");
   } finally {
-    await pool.query(`DELETE FROM products WHERE sku LIKE '${SKU_PREFIX}%'`);
+    await pool.query("DELETE FROM products WHERE sku LIKE $1", [`${SKU_PREFIX}%`]);
     await pool.end();
   }
 }
