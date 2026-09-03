@@ -27,16 +27,22 @@
 import { randomUUID } from "node:crypto";
 
 import { and, eq, ne } from "drizzle-orm";
-import type { NeonDatabase } from "drizzle-orm/neon-serverless";
 
 import { can } from "@/lib/auth/permissions";
 import * as schema from "@/lib/db/schema";
-import type { Actor } from "@/lib/domain/stock";
+import type { Actor, StockDb } from "@/lib/domain/stock";
 import type { LocationType, ModuleKey, PermissionAction, WarehouseType } from "@/lib/types";
 
 type CustomerType = "retail" | "wholesale" | "online" | "government";
 
-type Db = NeonDatabase<typeof schema>;
+/**
+ * The pool (`getDb()`, the check scripts) or an already-open transaction — the
+ * same handle `lib/domain/stock.ts` accepts. The import flow (ticket 14) commits
+ * a whole file as one transaction and calls `createProduct` / `createSupplier` /
+ * `createCustomer` on that `tx`, so these have to compose the same way the
+ * choke point does.
+ */
+type Db = StockDb;
 
 export type ReferenceWriteErrorCode =
   | "forbidden"
