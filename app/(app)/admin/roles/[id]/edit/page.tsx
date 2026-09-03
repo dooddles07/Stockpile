@@ -73,6 +73,7 @@ export default async function EditRolePage({ params }: { params: Promise<{ id: s
 
       <div className="p-4 sm:p-6">
         <PermissionEditor
+          roleId={meta.id}
           roleLabel={meta.label}
           holders={holders}
           modules={modules}

@@ -17,6 +17,7 @@ import {
 import { plural } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { AccessLevel } from "@/lib/auth/permissions";
+import { saveRolePermissionsAction } from "./actions";
 
 export interface ModuleRow {
   key: string;
@@ -65,12 +66,14 @@ const TONE: Record<AccessLevel, string> = {
  * where a mistake locks a shift out of the system.
  */
 export function PermissionEditor({
+  roleId,
   roleLabel,
   holders,
   modules,
   returnTo,
   locked,
 }: {
+  roleId: string;
   roleLabel: string;
   holders: number;
   modules: ModuleRow[];
@@ -79,6 +82,7 @@ export function PermissionEditor({
   locked?: boolean;
 }) {
   const router = useRouter();
+  const [saving, startSaving] = React.useTransition();
   const original = React.useMemo(
     () => Object.fromEntries(modules.map((m) => [m.key, m.level])) as Record<string, AccessLevel>,
     [modules],
@@ -104,12 +108,20 @@ export function PermissionEditor({
       toast.info("Nothing to save", { description: "No permission on this role has changed." });
       return;
     }
-    toast.success(`${roleLabel} permissions updated`, {
-      description: `${plural(changed.length, "module")} changed${
-        narrowed.length > 0 ? `, ${narrowed.length} narrowed` : ""
-      }. ${plural(holders, "person takes", "people take")} effect at their next page load.`,
+    startSaving(async () => {
+      const result = await saveRolePermissionsAction({ roleId, matrix: levels });
+      if (!result.ok) {
+        toast.error(result.message);
+        return;
+      }
+      toast.success(`${roleLabel} permissions updated`, {
+        description: `${plural(changed.length, "module")} changed${
+          narrowed.length > 0 ? `, ${narrowed.length} narrowed` : ""
+        }. ${plural(holders, "person takes", "people take")} effect at their next page load.`,
+      });
+      router.push(returnTo);
+      router.refresh();
     });
-    router.push(returnTo);
   };
 
   return (
@@ -198,9 +210,9 @@ export function PermissionEditor({
       ))}
 
       <div className="sticky bottom-0 flex flex-wrap items-center gap-2 border-t bg-background/95 py-3 backdrop-blur">
-        <Button size="sm" className="h-8" onClick={save} disabled={locked}>
+        <Button size="sm" className="h-8" onClick={save} disabled={locked || saving}>
           <Save className="size-3.5" aria-hidden />
-          Save permissions
+          {saving ? "Saving…" : "Save permissions"}
         </Button>
         <Button
           variant="outline"
