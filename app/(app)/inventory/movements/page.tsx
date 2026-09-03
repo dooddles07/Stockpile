@@ -17,7 +17,7 @@ import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { humanize } from "@/lib/status";
 import { money, qty } from "@/lib/format";
-import { ActionButton } from "@/components/actions/action-button";
+import { ExportButton } from "@/components/actions/export-button";
 
 export const metadata: Metadata = {
   title: "Inventory movements",
@@ -97,14 +97,31 @@ export default async function MovementsPage({
         description="Every stock change ever recorded, in order, with the person and document behind it. Entries are never edited or deleted — a correction is itself a movement."
         actions={
           can(role, "movements", "export") && (
-            <ActionButton
-              variant="outline" size="sm" className="h-8"
-              feedback="Export started"
-              detail="Every movement matching the current filters, as CSV."
+            <ExportButton
+              variant="outline"
+              size="sm"
+              className="h-8"
+              filename="movements"
+              rows={rows.map((r) => ({
+                When: r.ts,
+                Type: r.typeLabel,
+                SKU: r.sku,
+                Product: r.productName,
+                Warehouse: r.warehouseCode,
+                Location: r.locationCode,
+                "Qty before": r.qtyBefore,
+                "Qty change": r.qtyChange,
+                "Qty after": r.qtyAfter,
+                "Unit cost": r.unitCost,
+                "Value change": r.valueChange,
+                Reference: r.refNumber,
+                User: r.user,
+                Reason: r.reason,
+              }))}
             >
               <Download className="size-3.5" aria-hidden />
               Export ledger
-            </ActionButton>
+            </ExportButton>
           )
         }
       >

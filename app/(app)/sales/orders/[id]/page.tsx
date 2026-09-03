@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { Download, MapPin, Printer, Truck, Undo2 } from "lucide-react";
+import { MapPin, Printer, Truck, Undo2 } from "lucide-react";
 
 import { RecordHeader, StatStrip } from "@/components/record/record-header";
 import { DetailTabs } from "@/components/record/detail-tabs";
@@ -29,7 +29,6 @@ import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { date, dateTime, deliveryLabel, money, percent, plural, qty } from "@/lib/format";
 import { humanize } from "@/lib/status";
-import { ActionButton } from "@/components/actions/action-button";
 
 export async function generateMetadata({
   params,
@@ -479,16 +478,6 @@ export default async function SalesOrderDetailPage({
               <Printer className="size-3.5" aria-hidden />
               Pick list
             </Button>
-            {can(role, "sales-orders", "export") && (
-              <ActionButton
-                variant="outline" size="sm" className="h-8"
-                feedback="Export started"
-                detail={`A PDF copy of ${order.number} downloads once it is rendered.`}
-              >
-                <Download className="size-3.5" aria-hidden />
-                Export
-              </ActionButton>
-            )}
             {can(role, "sales-returns", "create") &&
               ["shipped", "delivered"].includes(order.status) && (
                 <Button variant="outline" size="sm" className="h-8" render={<Link href={`/sales/returns/new?order=${order.id}`} />}>

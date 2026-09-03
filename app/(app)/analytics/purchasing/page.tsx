@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Download, TriangleAlert } from "lucide-react";
+import { TriangleAlert } from "lucide-react";
 
 import { PageHeader } from "@/components/shell/page-header";
 import { PermissionDenied } from "@/components/states";
@@ -17,7 +17,6 @@ import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { money, percent, plural, qty } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { ActionButton } from "@/components/actions/action-button";
 
 export const metadata: Metadata = {
   title: "Purchasing analytics",
@@ -67,18 +66,6 @@ export default async function PurchasingAnalyticsPage() {
         crumbs={[{ label: "Analytics", href: "/analytics/inventory" }, { label: "Purchasing" }]}
         title="Purchasing analytics"
         description="Lead time and reliability cost money even when the price is right: an unreliable supplier forces buffer stock, and buffer stock is capital that could be somewhere else."
-        actions={
-          can(role, "analytics", "export") && (
-            <ActionButton
-              variant="outline" size="sm" className="h-8"
-              feedback="Export started"
-              detail="Every figure on this page, at the period selected, as CSV."
-            >
-              <Download className="size-3.5" aria-hidden />
-              Export
-            </ActionButton>
-          )
-        }
       >
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
           <StatTile label="Total spend" value={money(totalSpend)} hint={`${plural(placed.length, "order")}`} />

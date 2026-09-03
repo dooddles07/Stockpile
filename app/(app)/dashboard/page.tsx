@@ -5,7 +5,6 @@ import {
   ArrowLeftRight,
   ClipboardCheck,
   Clock,
-  Download,
   PackageCheck,
   Plus,
 } from "lucide-react";
@@ -40,13 +39,10 @@ import {
 } from "@/lib/repo/metrics";
 import { valueByCategory } from "@/lib/repo/inventory";
 import { indexById, suppliers, users, warehouses } from "@/lib/repo/reference";
-import { tasks as allTasks } from "@/lib/repo/ops";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { dueLabel, money, moneyCompact, percent, plural, qty, relative, signed } from "@/lib/format";
-import { humanize, priorityMeta } from "@/lib/status";
-import { ActionButton } from "@/components/actions/action-button";
-
+import { humanize } from "@/lib/status";
 export const metadata: Metadata = {
   title: "Dashboard",
   description: "What is happening across every warehouse right now.",
@@ -74,7 +70,6 @@ export default async function DashboardPage() {
     inTransit,
     receipts,
     activity,
-    allTasksList,
     valueTrend,
     composition,
     flowTrend,
@@ -92,7 +87,6 @@ export default async function DashboardPage() {
     transfersInFlight(5),
     recentReceipts(5),
     recentMovements(8),
-    allTasks(),
     inventoryValueTrend(),
     warehouseComposition(),
     movementTrend(),
@@ -107,7 +101,6 @@ export default async function DashboardPage() {
     (k) => k.key !== "inventory-value" || can(role, "valuation") || can(role, "stock"),
   );
   const lowStockTotal = allLowStock.length;
-  const openTasks = allTasksList.filter((t) => t.status !== "done").slice(0, 6);
 
   const panels: GridPanel[] = [];
 
@@ -297,36 +290,6 @@ export default async function DashboardPage() {
     });
   }
 
-  panels.push({
-    id: "tasks",
-    label: "Your tasks",
-    node: (
-      <WidgetCard
-          headingLevel={3}
-        title="Tasks"
-        count={openTasks.length}
-        href="/tasks"
-        description="Work assigned across receiving, counting, picking and review."
-      >
-        <WidgetList>
-          {openTasks.map((task) => {
-            const tone = priorityMeta(task.priority);
-            return (
-              <WidgetRow
-                key={task.id}
-                href={task.href}
-                title={task.title}
-                subtitle={task.detail}
-                trailing={<StatusBadge label={tone.label} tone={tone.tone} />}
-                trailingSub={relative(task.dueAt)}
-              />
-            );
-          })}
-        </WidgetList>
-      </WidgetCard>
-    ),
-  });
-
   if (can(role, "movements")) {
     panels.push({
       id: "activity",
@@ -377,16 +340,6 @@ export default async function DashboardPage() {
         actions={
           <>
             <PeriodSelect />
-            {can(role, "dashboard", "export") && (
-              <ActionButton
-                variant="outline" size="sm" className="h-8"
-                feedback="Export started"
-                detail="Every KPI and widget on this dashboard, at the period selected, as CSV."
-              >
-                <Download className="size-3.5" aria-hidden />
-                Export
-              </ActionButton>
-            )}
             {can(role, "purchase-orders", "create") && (
               <Button size="sm" className="h-8" render={<Link href="/purchasing/purchase-orders/new" />}>
                 <Plus className="size-3.5" aria-hidden />

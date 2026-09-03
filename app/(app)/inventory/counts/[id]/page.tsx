@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { ClipboardCheck, Download, Printer, TriangleAlert, Users } from "lucide-react";
+import { ClipboardCheck, TriangleAlert, Users } from "lucide-react";
 
 import { RecordHeader, StatStrip } from "@/components/record/record-header";
 import { DetailTabs } from "@/components/record/detail-tabs";
@@ -25,7 +25,6 @@ import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { date, dateTime, initials, plural, qty, relative, signed, signedMoney } from "@/lib/format";
 import { humanize } from "@/lib/status";
-import { ActionButton } from "@/components/actions/action-button";
 
 export async function generateMetadata({
   params,
@@ -436,24 +435,6 @@ export default async function CountDetailPage({
         }
         actions={
           <>
-            <ActionButton
-              variant="outline" size="sm" className="h-8"
-              feedback="Sent to printer"
-              detail={`The count sheet for ${count.number} is queued on the default printer.`}
-            >
-              <Printer className="size-3.5" aria-hidden />
-              Print sheet
-            </ActionButton>
-            {can(role, "counts", "export") && (
-              <ActionButton
-                variant="outline" size="sm" className="h-8"
-                feedback="Export started"
-                detail={`A PDF copy of ${count.number} downloads once it is rendered.`}
-              >
-                <Download className="size-3.5" aria-hidden />
-                Export
-              </ActionButton>
-            )}
             {awaitingReview && canApprove && (
               <ApprovalActions
                 recordLabel={count.number}

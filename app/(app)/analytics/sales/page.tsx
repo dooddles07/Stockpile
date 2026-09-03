@@ -1,6 +1,5 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Download } from "lucide-react";
 
 import { PageHeader } from "@/components/shell/page-header";
 import { PermissionDenied } from "@/components/states";
@@ -19,7 +18,6 @@ import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { money, percent, plural, qty } from "@/lib/format";
 import { humanize } from "@/lib/status";
-import { ActionButton } from "@/components/actions/action-button";
 
 export const metadata: Metadata = {
   title: "Sales analytics",
@@ -75,18 +73,6 @@ export default async function SalesAnalyticsPage() {
         crumbs={[{ label: "Analytics", href: "/analytics/inventory" }, { label: "Sales" }]}
         title="Sales analytics"
         description="Revenue is only half the picture — margin is what the business keeps, and it is the SKUs with high revenue and thin margin that quietly cost money."
-        actions={
-          can(role, "analytics", "export") && (
-            <ActionButton
-              variant="outline" size="sm" className="h-8"
-              feedback="Export started"
-              detail="Every figure on this page, at the period selected, as CSV."
-            >
-              <Download className="size-3.5" aria-hidden />
-              Export
-            </ActionButton>
-          )
-        }
       >
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
           <StatTile label="Revenue" value={money(revenue)} hint={`${plural(booked.length, "order")}`} />

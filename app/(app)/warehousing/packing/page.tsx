@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Container, Printer, Truck } from "lucide-react";
+import { Container } from "lucide-react";
 
 import { PageHeader } from "@/components/shell/page-header";
 import { EmptyState, PermissionDenied } from "@/components/states";
@@ -16,7 +16,6 @@ import { can } from "@/lib/auth/permissions";
 import { dueLabel, money, qty } from "@/lib/format";
 import { humanize } from "@/lib/status";
 import { cn } from "@/lib/utils";
-import { ActionButton } from "@/components/actions/action-button";
 import { FulfilmentActionButton } from "@/app/(app)/sales/orders/[id]/fulfilment-actions";
 
 export const metadata: Metadata = {
@@ -69,27 +68,6 @@ export default async function PackingPage() {
         crumbs={[{ label: "Warehousing", href: "/warehousing/warehouses" }, { label: "Packing" }]}
         title="Packing"
         description={`Orders still on a picker's route and orders already on the bench. Starting one moves it to the bench; carrier cut-off is ${CUTOFF} — anything packed after that ships the next working day.`}
-        actions={
-          <>
-            <ActionButton
-              variant="outline" size="sm" className="h-8"
-              feedback="Sent to printer"
-              detail="Carrier labels for every packed order are queued on the label printer."
-            >
-              <Printer className="size-3.5" aria-hidden />
-              Print labels
-            </ActionButton>
-            <ActionButton
-              size="sm" className="h-8"
-              feedback="Manifest closed"
-              detail="Nothing packed after this point ships today. The carrier collection is booked."
-              confirm={{ title: "Close today's manifest?", body: `Anything packed after the manifest closes ships tomorrow instead. Cut-off is ${CUTOFF}.`, action: "Close manifest" }}
-            >
-              <Truck className="size-3.5" aria-hidden />
-              Close manifest
-            </ActionButton>
-          </>
-        }
       >
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatTile

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { ArrowRight, Download, Printer, Truck } from "lucide-react";
+import { ArrowRight, Truck } from "lucide-react";
 
 import { RecordHeader, StatStrip } from "@/components/record/record-header";
 import { DetailTabs } from "@/components/record/detail-tabs";
@@ -27,7 +27,6 @@ import { can } from "@/lib/auth/permissions";
 import { date, dateTime, dueLabel, money, plural, qty } from "@/lib/format";
 import { humanize } from "@/lib/status";
 import type { StatusTone } from "@/lib/types";
-import { ActionButton } from "@/components/actions/action-button";
 
 export async function generateMetadata({
   params,
@@ -373,24 +372,6 @@ export default async function TransferDetailPage({
         }
         actions={
           <>
-            <ActionButton
-              variant="outline" size="sm" className="h-8"
-              feedback="Sent to printer"
-              detail={`The walk sheet for ${transfer.number} is queued at ${from?.code ?? "the despatching site"}.`}
-            >
-              <Printer className="size-3.5" aria-hidden />
-              Picking list
-            </ActionButton>
-            {can(role, "transfers", "export") && (
-              <ActionButton
-                variant="outline" size="sm" className="h-8"
-                feedback="Export started"
-                detail={`A PDF copy of ${transfer.number} downloads once it is rendered.`}
-              >
-                <Download className="size-3.5" aria-hidden />
-                Export
-              </ActionButton>
-            )}
             {transfer.status === "approved" && can(role, "transfers", "edit") && (
               <DispatchButton transferId={transfer.id} />
             )}

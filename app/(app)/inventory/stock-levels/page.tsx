@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { Download } from "lucide-react";
 
 import { PageHeader } from "@/components/shell/page-header";
 import { PermissionDenied } from "@/components/states";
@@ -11,7 +10,7 @@ import { categories as allCategories, warehouses as allWarehouses } from "@/lib/
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { money, qty } from "@/lib/format";
-import { ActionButton } from "@/components/actions/action-button";
+import { ExportButton } from "@/components/actions/export-button";
 
 export const metadata: Metadata = {
   title: "Stock levels",
@@ -74,14 +73,32 @@ export default async function StockLevelsPage({
         description={meta.description}
         actions={
           can(role, "stock", "export") && (
-            <ActionButton
-              variant="outline" size="sm" className="h-8"
-              feedback="Export started"
-              detail="Every stock row across all sites, not only the current filters, as CSV."
-            >
-              <Download className="size-3.5" aria-hidden />
-              Export
-            </ActionButton>
+            <ExportButton
+              variant="outline"
+              size="sm"
+              className="h-8"
+              filename="stock-levels"
+              rows={all.map((r) => ({
+                SKU: r.sku,
+                Name: r.name,
+                Category: r.categoryName,
+                Warehouse: r.warehouseCode,
+                Location: r.locationCode,
+                Lot: r.lotNumber,
+                "On hand": r.onHand,
+                Reserved: r.reserved,
+                Damaged: r.damaged,
+                Available: r.available,
+                Incoming: r.incoming,
+                "In transit": r.inTransit,
+                "Reorder point": r.reorderPoint,
+                "Unit cost": r.unitCost,
+                Value: r.value,
+                Health: r.health,
+                Expires: r.expiresAt,
+                "Last counted": r.lastCountedAt,
+              }))}
+            />
           )
         }
       >

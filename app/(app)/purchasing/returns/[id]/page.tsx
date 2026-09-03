@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { Download, Printer, Undo2 } from "lucide-react";
+import { Undo2 } from "lucide-react";
 
 import { RecordHeader, StatStrip } from "@/components/record/record-header";
 import { FieldGrid, Section, StatTile } from "@/components/record/field-grid";
@@ -22,7 +22,6 @@ import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { date, dateTime, money, plural, qty } from "@/lib/format";
 import type { ModuleKey } from "@/lib/types";
-import { ActionButton } from "@/components/actions/action-button";
 import { isProcessableReturn } from "@/lib/domain/returns";
 import { ProcessReturnButton } from "./process-return-button";
 
@@ -116,24 +115,6 @@ export default async function ReturnDetailPage({
                 label={isPurchase ? "Send back to supplier" : "Book goods back in"}
                 pendingLabel="Processing…"
               />
-            )}
-            <ActionButton
-              variant="outline" size="sm" className="h-8"
-              feedback="Sent to printer"
-              detail={`${doc.number} is queued on the default printer.`}
-            >
-              <Printer className="size-3.5" aria-hidden />
-              Print
-            </ActionButton>
-            {can(role, moduleKey, "export") && (
-              <ActionButton
-                variant="outline" size="sm" className="h-8"
-                feedback="Export started"
-                detail={`A PDF copy of ${doc.number} downloads once it is rendered.`}
-              >
-                <Download className="size-3.5" aria-hidden />
-                Export
-              </ActionButton>
             )}
           </>
         }

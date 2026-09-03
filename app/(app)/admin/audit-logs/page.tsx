@@ -13,7 +13,7 @@ import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { humanize } from "@/lib/status";
 import { qty } from "@/lib/format";
-import { ActionButton } from "@/components/actions/action-button";
+import { ExportButton } from "@/components/actions/export-button";
 
 export const metadata: Metadata = {
   title: "Audit logs",
@@ -67,14 +67,27 @@ export default async function AuditLogsPage({
         description="Every change, who made it, what it was before and what it became. Entries are appended and never edited — a correction is a new entry, not a rewrite of an old one."
         actions={
           can(role, "audit", "export") && (
-            <ActionButton
-              variant="outline" size="sm" className="h-8"
-              feedback="Export started"
-              detail="Every entry matching the current filters, with its before and after values, as CSV."
+            <ExportButton
+              variant="outline"
+              size="sm"
+              className="h-8"
+              filename="audit-log"
+              rows={rows.map((r) => ({
+                When: r.ts,
+                User: r.user,
+                Email: r.userEmail,
+                Action: r.actionLabel,
+                Entity: r.entityLabel,
+                Field: r.field,
+                Before: r.before,
+                After: r.after,
+                IP: r.ip,
+                Device: r.device,
+              }))}
             >
               <Download className="size-3.5" aria-hidden />
               Export log
-            </ActionButton>
+            </ExportButton>
           )
         }
       >

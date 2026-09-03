@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { Check, Download, Pencil, Printer, TriangleAlert } from "lucide-react";
+import { Check, Pencil, TriangleAlert } from "lucide-react";
 
 import { RecordHeader, StatStrip } from "@/components/record/record-header";
 import { FieldGrid, Section, StatTile } from "@/components/record/field-grid";
@@ -20,7 +20,6 @@ import { can } from "@/lib/auth/permissions";
 import { date, dateTime, money, plural, qty, signed, signedMoney } from "@/lib/format";
 import { humanize } from "@/lib/status";
 import type { StatusTone } from "@/lib/types";
-import { ActionButton } from "@/components/actions/action-button";
 
 export async function generateMetadata({
   params,
@@ -105,24 +104,6 @@ export default async function AdjustmentDetailPage({
         }
         actions={
           <>
-            <ActionButton
-              variant="outline" size="sm" className="h-8"
-              feedback="Sent to printer"
-              detail={`${adjustment.number} is queued on the default printer.`}
-            >
-              <Printer className="size-3.5" aria-hidden />
-              Print
-            </ActionButton>
-            {can(role, "adjustments", "export") && (
-              <ActionButton
-                variant="outline" size="sm" className="h-8"
-                feedback="Export started"
-                detail={`A PDF copy of ${adjustment.number} downloads once it is rendered.`}
-              >
-                <Download className="size-3.5" aria-hidden />
-                Export
-              </ActionButton>
-            )}
             {can(role, "adjustments", "edit") && adjustment.status === "draft" && (
               <Button variant="outline" size="sm" className="h-8" render={<Link href={`/inventory/adjustments/${adjustment.id}/edit`} />}>
                 <Pencil className="size-3.5" aria-hidden />

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { Download, FileText, Mail, PackageCheck, Paperclip, Printer, Truck } from "lucide-react";
+import { FileText, Mail, PackageCheck, Paperclip, Truck } from "lucide-react";
 
 import { RecordHeader, StatStrip } from "@/components/record/record-header";
 import { DetailTabs } from "@/components/record/detail-tabs";
@@ -29,7 +29,6 @@ import { can } from "@/lib/auth/permissions";
 import { date, dateTime, deliveryLabel, money, percent, plural, qty } from "@/lib/format";
 import { humanize } from "@/lib/status";
 import type { StatusTone } from "@/lib/types";
-import { ActionButton } from "@/components/actions/action-button";
 
 export async function generateMetadata({
   params,
@@ -348,16 +347,6 @@ export default async function PurchaseOrderDetailPage({
                       {a.sizeKb} KB · uploaded {date(a.uploadedAt)}
                     </span>
                   </span>
-                  <ActionButton
-                    variant="ghost"
-                    size="icon"
-                    className="size-7"
-                    aria-label={`Download ${a.name}`}
-                    feedback="Download started"
-                    detail={`${a.name} · ${a.sizeKb} KB`}
-                  >
-                    <Download className="size-3.5" aria-hidden />
-                  </ActionButton>
                 </li>
               ))}
             </ul>
@@ -457,24 +446,6 @@ export default async function PurchaseOrderDetailPage({
         }
         actions={
           <>
-            <ActionButton
-              variant="outline" size="sm" className="h-8"
-              feedback="Sent to printer"
-              detail={`${po.number} is queued on the default printer.`}
-            >
-              <Printer className="size-3.5" aria-hidden />
-              Print
-            </ActionButton>
-            {can(role, "purchase-orders", "export") && (
-              <ActionButton
-                variant="outline" size="sm" className="h-8"
-                feedback="Export started"
-                detail={`A PDF copy of ${po.number} downloads once it is rendered.`}
-              >
-                <Download className="size-3.5" aria-hidden />
-                Export
-              </ActionButton>
-            )}
             {awaitingDecision && canApprove && (
               <ApprovalActions
                 recordLabel={po.number}

@@ -1,6 +1,5 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Download } from "lucide-react";
 
 import { PageHeader } from "@/components/shell/page-header";
 import { PermissionDenied } from "@/components/states";
@@ -21,7 +20,6 @@ import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { compact, money, percent, plural, qty, relative } from "@/lib/format";
 import { statusMeta } from "@/lib/status";
-import { ActionButton } from "@/components/actions/action-button";
 
 export const metadata: Metadata = {
   title: "Inventory analytics",
@@ -66,18 +64,6 @@ export default async function InventoryAnalyticsPage() {
         crumbs={[{ label: "Analytics", href: "/analytics/inventory" }, { label: "Inventory" }]}
         title="Inventory analytics"
         description="Stock is capital sitting still. These are the four questions worth asking of it: how much, where, how fast it moves, and how much has stopped."
-        actions={
-          can(role, "analytics", "export") && (
-            <ActionButton
-              variant="outline" size="sm" className="h-8"
-              feedback="Export started"
-              detail="Every figure on this page, at the period selected, as CSV."
-            >
-              <Download className="size-3.5" aria-hidden />
-              Export
-            </ActionButton>
-          )
-        }
       >
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
           <StatTile label="Inventory value" value={money(headline.value)} />

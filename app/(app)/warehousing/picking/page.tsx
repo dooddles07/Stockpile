@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { ClipboardList, Printer } from "lucide-react";
+import { ClipboardList } from "lucide-react";
 
 import { PageHeader } from "@/components/shell/page-header";
 import { EmptyState, PermissionDenied } from "@/components/states";
@@ -15,7 +15,6 @@ import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { dueLabel, money, qty } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { ActionButton } from "@/components/actions/action-button";
 import { FulfilmentActionButton } from "@/app/(app)/sales/orders/[id]/fulfilment-actions";
 
 export const metadata: Metadata = {
@@ -63,16 +62,6 @@ export default async function PickingPage() {
         crumbs={[{ label: "Warehousing", href: "/warehousing/warehouses" }, { label: "Picking" }]}
         title="Picking"
         description="Orders with stock reserved against them, waiting to be walked. The queue is ordered by promised date, so the most urgent job is always at the top."
-        actions={
-          <ActionButton
-            variant="outline" size="sm" className="h-8"
-            feedback="Sent to printer"
-            detail="Every job in the queue prints as one walk sheet, in pick order."
-          >
-            <Printer className="size-3.5" aria-hidden />
-            Print pick list
-          </ActionButton>
-        }
       >
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatTile label="In the queue" value={qty(queue.length)} />

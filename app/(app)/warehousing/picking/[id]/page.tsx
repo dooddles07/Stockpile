@@ -1,9 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { ClipboardList, MapPin, Printer, TriangleAlert } from "lucide-react";
+import { ClipboardList, MapPin, TriangleAlert } from "lucide-react";
 
-import { ActionButton } from "@/components/actions/action-button";
 import { RecordHeader } from "@/components/record/record-header";
 import { Section, StatTile } from "@/components/record/field-grid";
 import { SimpleTable } from "@/components/record/simple-table";
@@ -227,21 +226,9 @@ export default async function PickListPage({ params }: { params: Promise<{ id: s
           </span>
         }
         actions={
-          <>
-            <ActionButton
-              variant="outline"
-              size="sm"
-              className="h-8"
-              feedback="Sent to printer"
-              detail={`The walk sheet for ${order.number} is queued in pick order at ${warehouse?.code ?? "the site"}.`}
-            >
-              <Printer className="size-3.5" aria-hidden />
-              Print
-            </ActionButton>
-            <Button size="sm" className="h-8" render={<Link href={`/sales/orders/${order.id}`} />}>
-              Open order
-            </Button>
-          </>
+          <Button size="sm" className="h-8" render={<Link href={`/sales/orders/${order.id}`} />}>
+            Open order
+          </Button>
         }
       >
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">

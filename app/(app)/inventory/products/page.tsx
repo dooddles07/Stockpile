@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Download, Plus, Upload } from "lucide-react";
+import { Plus, Upload } from "lucide-react";
 
 import { PageHeader } from "@/components/shell/page-header";
 import { PermissionDenied } from "@/components/states";
@@ -11,7 +11,7 @@ import { categories as allCategories, suppliers as allSuppliers } from "@/lib/re
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { money, qty } from "@/lib/format";
-import { ActionButton } from "@/components/actions/action-button";
+import { ExportButton } from "@/components/actions/export-button";
 
 export const metadata: Metadata = {
   title: "Products",
@@ -60,14 +60,31 @@ export default async function ProductsPage() {
         actions={
           <>
             {can(role, "products", "export") && (
-              <ActionButton
-                variant="outline" size="sm" className="h-8"
-                feedback="Export started"
-                detail="The whole catalogue, not only the rows the table is filtered to, as CSV."
-              >
-                <Download className="size-3.5" aria-hidden />
-                Export
-              </ActionButton>
+              <ExportButton
+                variant="outline"
+                size="sm"
+                className="h-8"
+                filename="products"
+                rows={rows.map((r) => ({
+                  SKU: r.sku,
+                  Name: r.name,
+                  Category: r.category,
+                  Brand: r.brand,
+                  Supplier: r.supplier,
+                  Status: r.status,
+                  Health: r.health,
+                  Available: r.available,
+                  Reserved: r.reserved,
+                  Incoming: r.incoming,
+                  "On hand": r.onHand,
+                  "Reorder point": r.reorderPoint,
+                  "Unit cost": r.unitCost,
+                  "Sell price": r.sellPrice,
+                  "Stock value": r.stockValue,
+                  Sites: r.sites,
+                  Updated: r.updatedAt,
+                }))}
+              />
             )}
             {can(role, "products", "create") && (
               <>

@@ -1,6 +1,5 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Download } from "lucide-react";
 
 import { PageHeader } from "@/components/shell/page-header";
 import { PermissionDenied } from "@/components/states";
@@ -15,7 +14,6 @@ import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { money, percent, plural, qty } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { ActionButton } from "@/components/actions/action-button";
 
 export const metadata: Metadata = {
   title: "Warehouse performance",
@@ -54,18 +52,6 @@ export default async function WarehouseAnalyticsPage() {
         crumbs={[{ label: "Analytics", href: "/analytics/inventory" }, { label: "Warehouse" }]}
         title="Warehouse performance"
         description="Four things decide whether a site is healthy: is it full, is the recorded stock true, does work leave on time, and how much walks out unaccounted for."
-        actions={
-          can(role, "analytics", "export") && (
-            <ActionButton
-              variant="outline" size="sm" className="h-8"
-              feedback="Export started"
-              detail="Every figure on this page, at the period selected, as CSV."
-            >
-              <Download className="size-3.5" aria-hidden />
-              Export
-            </ActionButton>
-          )
-        }
       >
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
           <StatTile label="Sites" value={qty(sites.length)} />
