@@ -43,6 +43,8 @@ import { hydrateRoles } from "@/lib/auth/permissions";
 import * as schema from "@/lib/db/schema";
 import {
   runAutomation,
+  setRuleEnabled,
+  AutomationRuleError,
   REORDER_RULE_ID,
   CANARY_FAIL_RULE_ID,
 } from "@/lib/domain/automation";
@@ -335,6 +337,59 @@ async function failingRuleIsIsolated(db: Db): Promise<void> {
   }
 }
 
+/** (4) `setRuleEnabled` is permission-gated, and `runAutomation` honours the
+ *  flag: a disabled rule does not evaluate, even on a matching Event. */
+async function disablingARuleStopsItEvaluating(db: Db): Promise<void> {
+  const admin = await actorForRole(db, "super-admin");
+  const staff = await actorForRole(db, "warehouse-staff");
+
+  // A role without `automation` access is refused below the UI, and writes nothing.
+  await assert.rejects(
+    () => setRuleEnabled(staff, { ruleId: REORDER_RULE_ID, enabled: false }, db),
+    (err: unknown) => err instanceof AutomationRuleError && err.code === "forbidden",
+    "warehouse-staff must not be able to toggle an automation rule",
+  );
+  const [stillOn] = await db
+    .select({ enabled: schema.automationRules.enabled })
+    .from(schema.automationRules)
+    .where(eq(schema.automationRules.id, REORDER_RULE_ID));
+  assert.equal(stillOn.enabled, true, "the refused toggle must not have written the column");
+
+  const holding = await pickCrossingHolding(db);
+  const decrease = holding.onHand - holding.reorderPoint + 1;
+  const beforeRunSeq = (await latestRunFor(db, REORDER_RULE_ID))?.seq ?? 0;
+  try {
+    await setRuleEnabled(admin, { ruleId: REORDER_RULE_ID, enabled: false }, db);
+
+    const applied = await applyStockChange(
+      staff,
+      {
+        productId: holding.productId,
+        warehouseId: holding.warehouseId,
+        locationId: holding.locationId,
+        lotNumber: null,
+        movementType: "adjustment",
+        onHandDelta: -decrease,
+        reason: "automation check: crossing with the rule disabled",
+        permission: { module: "adjustments", action: "create" },
+      },
+      db,
+    );
+    const summary = await runAutomation(db, [applied.eventSeq]);
+    assert.equal(summary.recorded, 0, "a disabled rule must not evaluate on a matching Event");
+    assert.equal(
+      (await latestRunFor(db, REORDER_RULE_ID))?.seq ?? 0,
+      beforeRunSeq,
+      "no run row should have been written while the rule was disabled",
+    );
+    console.log("  disabled rule: matching Event, no evaluation, no run");
+  } finally {
+    await setRuleEnabled(admin, { ruleId: REORDER_RULE_ID, enabled: true }, db);
+    await setOnHand(db, holding.rowSeq, holding.onHand);
+    await deleteRunsAfter(db, REORDER_RULE_ID, beforeRunSeq);
+  }
+}
+
 async function main() {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) throw new Error("DATABASE_URL is not set");
@@ -349,6 +404,7 @@ async function main() {
     await matchingRuleIsRecordedAfterCommit(db);
     await rolledBackOperationTriggersNothing(db);
     await failingRuleIsIsolated(db);
+    await disablingARuleStopsItEvaluating(db);
     console.log("ok");
   } finally {
     await pool.end();

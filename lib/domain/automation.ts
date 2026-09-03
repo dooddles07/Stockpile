@@ -60,8 +60,9 @@
 import { asc, eq, inArray } from "drizzle-orm";
 import type { NeonDatabase } from "drizzle-orm/neon-serverless";
 
+import { can } from "@/lib/auth/permissions";
 import * as schema from "@/lib/db/schema";
-import { SYSTEM_ACTOR } from "@/lib/domain/stock";
+import { SYSTEM_ACTOR, type Actor } from "@/lib/domain/stock";
 import type { AutomationRun } from "@/lib/types";
 
 type Db = NeonDatabase<typeof schema>;
@@ -175,6 +176,53 @@ export async function runAutomation(db: Db, eventSeqs: number[]): Promise<Automa
     console.error("[automation] runAutomation failed:", err);
     return { recorded: 0 };
   }
+}
+
+export type AutomationRuleErrorCode = "forbidden" | "not-found";
+
+export class AutomationRuleError extends Error {
+  constructor(
+    message: string,
+    readonly code: AutomationRuleErrorCode,
+  ) {
+    super(message);
+    this.name = "AutomationRuleError";
+  }
+}
+
+/**
+ * Enable or disable one Automation Rule. This is the whole write behind the
+ * toggle on the rule screen: one boolean column, checked once for permission.
+ * `runAutomation` already filters on `enabled = true` (see the query above), so
+ * a disabled rule stops evaluating on the next Event with no other change.
+ *
+ * No Event, no Movement — automation configuration is Reference Data (ADR-0002),
+ * not part of the event-sourced stream. Throws `AutomationRuleError` and writes
+ * nothing when the Actor's Role cannot manage automation or the rule is gone.
+ * Idempotent: setting a rule to the state it is already in returns the row.
+ */
+export async function setRuleEnabled(
+  actor: Actor,
+  input: { ruleId: string; enabled: boolean },
+  db: Db,
+): Promise<{ id: string; enabled: boolean }> {
+  if (!can(actor.role, "automation", "manage")) {
+    throw new AutomationRuleError(
+      `Your role (${actor.role}) is not allowed to enable or disable automation rules.`,
+      "forbidden",
+    );
+  }
+
+  const [row] = await db
+    .update(schema.automationRules)
+    .set({ enabled: input.enabled })
+    .where(eq(schema.automationRules.id, input.ruleId))
+    .returning({ id: schema.automationRules.id, enabled: schema.automationRules.enabled });
+
+  if (!row) {
+    throw new AutomationRuleError("That automation rule could not be found.", "not-found");
+  }
+  return row;
 }
 
 async function recordRun(

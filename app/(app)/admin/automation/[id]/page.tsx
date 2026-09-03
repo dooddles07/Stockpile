@@ -1,7 +1,6 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { ArrowRight, CircleCheck, CircleX, Pencil, SkipForward, Zap } from "lucide-react";
+import { ArrowRight, CircleCheck, CircleX, SkipForward, Zap } from "lucide-react";
 
 import { RecordHeader, StatStrip } from "@/components/record/record-header";
 import { FieldGrid, Section, StatTile } from "@/components/record/field-grid";
@@ -9,7 +8,7 @@ import { SimpleTable } from "@/components/record/simple-table";
 import { StatusBadge } from "@/components/status/status-badge";
 import { MeterBar } from "@/components/status/meter-bar";
 import { EmptyState, PermissionDenied } from "@/components/states";
-import { Button } from "@/components/ui/button";
+import { RuleEnabledToggle } from "./rule-enabled-toggle";
 import { automationRules, automationRuns } from "@/lib/repo/ops";
 import { userById } from "@/lib/repo/inventory";
 import { getRole } from "@/lib/auth/session";
@@ -100,10 +99,7 @@ export default async function AutomationRulePage({
         }
         actions={
           can(role, "automation", "manage") && (
-            <Button size="sm" className="h-8" render={<Link href={`/admin/automation/${rule.id}/edit`} />}>
-              <Pencil className="size-3.5" aria-hidden />
-              Edit rule
-            </Button>
+            <RuleEnabledToggle ruleId={rule.id} enabled={rule.enabled} />
           )
         }
       >

@@ -1,13 +1,12 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { ArrowRight, Plus, Workflow, Zap } from "lucide-react";
+import { ArrowRight, Workflow, Zap } from "lucide-react";
 
 import { PageHeader } from "@/components/shell/page-header";
 import { EmptyState, PermissionDenied } from "@/components/states";
 import { StatTile } from "@/components/record/field-grid";
 import { StatusBadge } from "@/components/status/status-badge";
 import { MeterBar } from "@/components/status/meter-bar";
-import { Button } from "@/components/ui/button";
 import { automationRules as allRules, automationRuns as allRuns } from "@/lib/repo/ops";
 import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
@@ -42,14 +41,6 @@ export default async function AutomationPage() {
         crumbs={[{ label: "Administration", href: "/admin/users" }, { label: "Automation" }]}
         title="Automation"
         description="Every rule is a trigger, a set of conditions and a set of actions. They run whether or not anyone is watching, which is the point — and why the run history matters as much as the rule."
-        actions={
-          can(role, "automation", "create") && (
-            <Button size="sm" className="h-8" render={<Link href="/admin/automation/new" />}>
-              <Plus className="size-3.5" aria-hidden />
-              New rule
-            </Button>
-          )
-        }
       >
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatTile
