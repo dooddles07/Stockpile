@@ -10,13 +10,13 @@ The data lives in Postgres (Neon) — reads and writes both hit the database. St
 
 | Area | Screens |
 |---|---|
-| **Overview** | Dashboard (KPIs, charts, operational widgets), approvals queue, tasks, notifications |
+| **Overview** | Dashboard (KPIs, charts, operational widgets), approvals queue, notifications |
 | **Inventory** | Products with a 7-tab record, categories, stock levels with saved views, movement ledger, adjustments, stock counts |
 | **Warehousing** | Warehouses, zone→aisle→rack→bin locations, transfers, receiving, picking with walk-order sheets, packing |
 | **Purchasing** | Purchase orders with approval and goods receipt, suppliers with performance scorecards, purchase returns |
 | **Sales** | Sales orders, reservation → picking → packing → shipment, customers with credit limits, sales returns |
 | **Analytics** | Inventory, valuation (FIFO/AVCO), sales, purchasing, warehouse performance, saved reports |
-| **Administration** | Users, role permission matrix, audit log investigator, automation rule builder, integrations, settings |
+| **Administration** | Users, role permission matrix, audit log investigator, automation rules with run history, company settings |
 | **Handheld** | A separate operator surface for lookup, scanning, receiving and approvals on a phone |
 
 ## The parts worth looking at
