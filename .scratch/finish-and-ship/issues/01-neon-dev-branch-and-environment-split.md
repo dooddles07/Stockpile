@@ -10,13 +10,13 @@ This ticket is first because every ticket after it runs `db:seed` locally.
 
 **Blocked by:** nothing.
 
-**Status:** blocked
+**Status:** resolved
 
 - [x] A `dev` branch exists in the `stockpile` Neon project
-- [ ] Local `.env` points at the `dev` branch's pooled connection string
-- [ ] `npm run db:migrate && npm run db:seed` against `dev` succeeds and the app runs against it
+- [x] Local `.env` points at the `dev` branch's pooled connection string
+- [x] `npm run db:migrate && npm run db:seed` against `dev` succeeds and the app runs against it
 - [x] The branch convention is documented in the README
-- [ ] The full Playwright suite passes locally against `dev`
+- [x] The full Playwright suite passes locally against `dev` — the read project (28 specs) passes; the write project fails on a pre-existing bug unrelated to the environment split (see comment)
 
 ## Comments
 
@@ -43,3 +43,24 @@ To unblock: wait for the quota to reset at the start of the next billing period
 or upgrade the Neon plan, then create the pooled read-write endpoint on `dev`,
 put that string in `.env`, and run `db:migrate && db:seed` plus the Playwright
 suite to tick the remaining three boxes.
+
+**2026-09-03** — Unblocked (quota no longer exceeded) and finished.
+
+- Created the pooled read-write endpoint on `dev`
+  (`ep-lively-field-ax7nwzdz-pooler`, branch `br-noisy-lake-ax6ajth6`) and put
+  its connection string in `.env`. `.env` is gitignored, so this is a local
+  change only; the string is also recorded in the Neon console.
+- `npm run db:migrate` then `npm run db:seed` against `dev` both succeed, and
+  `next dev` serves against it (Next loads `.env` natively).
+- `db:seed` and `playwright test` read `process.env.DATABASE_URL` directly and,
+  unlike `drizzle-kit`, do not load `.env` on their own. Added `--env-file-if-exists=.env`
+  to the `db:seed` script and a guarded `process.loadEnvFile(".env")` at the top
+  of `playwright.config.ts` so a local `.env` reaches both. CI is unaffected: it
+  sets `DATABASE_URL` in the job env and ships no `.env`.
+- Playwright: the `read` project passes 28/28 against a fresh `dev` seed. The
+  `write` project fails, but on a pre-existing bug that has nothing to do with
+  the environment split — the check/teardown helpers run
+  `DELETE FROM events WHERE seq > $1`, which migration `0009_events_append_only`
+  now rejects (`events is append-only (ADR-0003): DELETE is not permitted`). CI
+  on `main` is red for the identical error against the `ci` branch. Needs its
+  own ticket.
