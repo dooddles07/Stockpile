@@ -39,7 +39,7 @@ export function WidgetCard({
   const Heading = `h${headingLevel}` as const;
 
   return (
-    <Card className={cn("gap-0 overflow-hidden py-0 shadow-xs", className)}>
+    <Card className={cn("gap-0 overflow-hidden py-0", className)}>
       <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0 border-b px-4 py-3">
         <div className="flex min-w-0 items-center gap-2">
           <Heading className="text-card-title truncate">{title}</Heading>

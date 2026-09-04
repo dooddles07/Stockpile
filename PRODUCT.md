@@ -52,11 +52,11 @@ Three reinforcing differentiators:
 ## Brand Commitments
 
 - **Name:** Stockpile
-- **Design system:** "Industrial Slate" — semantic tokens only, no gradients, two elevation levels, status conveyed via dot-glyph + text (never color alone).
-- **Type:** Inter (body), Plus Jakarta Sans (headings), JetBrains Mono (identifiers: SKU, lot, serial, PO/SO/TR numbers).
-- **Palette:** Slate base, emerald green brand accent (#047857 light / #34d399 dark). Six status tones (neutral, info, success, warning, danger, purple). Six chart colors.
+- **Design system:** Neutral-based category standard at Stripe + Vercel craft level — semantic tokens only, no gradients, border-defined containers (not shadows), status conveyed via dot-glyph + text (never color alone).
+- **Type:** Inter (all text), JetBrains Mono (identifiers: SKU, lot, serial, PO/SO/TR numbers).
+- **Palette:** Neutral base, emerald green brand accent (#047857 light / #34d399 dark). Six status tones (neutral, info, success, warning, danger, purple). Six chart colors.
 - **Radius:** restrained — max 8px, no pills.
-- **Elevation:** exactly two levels (xs and md shadows).
+- **Elevation:** flat at rest (borders as container signal), shadows reserved for floating layers only.
 - **Identity:** the Package icon in primary color is the app mark.
 
 ## Evidence on Hand

@@ -29,7 +29,7 @@ export function Sparkline({
   const fillCoords = [...coords, `${w},${h}`, `0,${h}`];
 
   const stroke = {
-    muted: "stroke-muted-foreground/40",
+    muted: "stroke-muted-foreground/30",
     success: "stroke-status-success",
     warning: "stroke-status-warning",
     danger: "stroke-status-danger",
@@ -91,22 +91,6 @@ export function KpiCard({
 }: KpiCardProps) {
   const good = direction === "flat" ? null : (direction === "up") === (goodWhen === "up");
   const DeltaIcon = direction === "up" ? TrendingUp : direction === "down" ? TrendingDown : Minus;
-
-  const deltaClass =
-    good === null
-      ? "text-muted-foreground"
-      : good
-        ? "text-status-success"
-        : "text-status-danger";
-
-  const accentBg =
-    tone === "danger"
-      ? "bg-status-danger-bg/40"
-      : tone === "warning"
-        ? "bg-status-warning-bg/40"
-        : tone === "success"
-          ? "bg-status-success-bg/40"
-          : "";
 
   const body = (
     <>
@@ -173,8 +157,7 @@ export function KpiCard({
   );
 
   const shell = cn(
-    "group/kpi relative overflow-hidden rounded-lg border bg-surface p-4 shadow-xs transition-colors",
-    accentBg,
+    "group/kpi relative overflow-hidden rounded-lg border bg-surface p-4 transition-colors",
     href && "hover:border-border-strong hover:bg-surface-hover",
     className,
   );

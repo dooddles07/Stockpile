@@ -11,8 +11,6 @@ import {
   Warehouse,
 } from "lucide-react";
 
-import { HeroMetric } from "@/components/dashboard/hero-metric";
-import { AnimatedGroup } from "@/components/dashboard/animated-group";
 import { KpiCard } from "@/components/kpi/kpi-card";
 import { WidgetCard, WidgetList, WidgetRow } from "@/components/widgets/widget-card";
 import { CustomizableGrid, type GridPanel } from "@/components/widgets/customizable-grid";
@@ -63,15 +61,6 @@ function kpiValue(key: string, raw: number): string {
   }
 }
 
-const QUEUE_ACCENTS: Record<string, string> = {
-  approvals: "border-t-2 border-t-status-warning",
-  "low-stock": "border-t-2 border-t-status-danger",
-  transfers: "border-t-2 border-t-status-info",
-  receipts: "border-t-2 border-t-status-success",
-  expiring: "border-t-2 border-t-status-purple",
-  activity: "border-t-2 border-t-status-neutral",
-};
-
 export default async function DashboardPage() {
   const role = await getRole();
   const [
@@ -115,9 +104,6 @@ export default async function DashboardPage() {
   );
   const lowStockTotal = allLowStock.length;
 
-  const heroKpi = kpis.find((k) => k.key === "inventory-value");
-  const secondaryKpis = kpis.filter((k) => k.key !== "inventory-value");
-
   const panels: GridPanel[] = [];
 
   if (can(role, "approvals")) {
@@ -131,7 +117,6 @@ export default async function DashboardPage() {
           count={approvals.length}
           href="/approvals"
           description="Purchase orders, transfers, adjustments and counts waiting on a decision."
-          className={QUEUE_ACCENTS.approvals}
         >
           {approvals.length === 0 ? (
             <EmptyState
@@ -170,7 +155,6 @@ export default async function DashboardPage() {
           count={lowStockTotal}
           href="/inventory/stock-levels?view=low-stock"
           description="Ranked by how much it costs to be out — reorder value first."
-          className={QUEUE_ACCENTS["low-stock"]}
         >
           {lowStock.length === 0 ? (
             <EmptyState
@@ -208,7 +192,6 @@ export default async function DashboardPage() {
           count={inTransit.length}
           href="/warehousing/transfers"
           description="Stock that has left one site and not yet landed at the other."
-          className={QUEUE_ACCENTS.transfers}
         >
           {inTransit.length === 0 ? (
             <EmptyState
@@ -246,7 +229,6 @@ export default async function DashboardPage() {
           title="Recently received"
           href="/warehousing/receiving"
           description="Goods booked in against a purchase order."
-          className={QUEUE_ACCENTS.receipts}
         >
           <WidgetList>
             {receipts.map((po) => (
@@ -277,7 +259,6 @@ export default async function DashboardPage() {
           count={expiring.length}
           href="/inventory/stock-levels?view=expiring"
           description="Lots reaching their expiry date within 30 days."
-          className={QUEUE_ACCENTS.expiring}
         >
           {expiring.length === 0 ? (
             <EmptyState
@@ -323,7 +304,6 @@ export default async function DashboardPage() {
           href="/inventory/movements"
           hrefLabel="Open the ledger"
           description="Every stock change, newest first. The ledger is the source of truth for any number on this page."
-          className={QUEUE_ACCENTS.activity}
         >
           <WidgetList>
             {activity.map((m) => (
@@ -381,7 +361,6 @@ export default async function DashboardPage() {
 
   return (
     <>
-      {/* ── Header ─────────────────────────────────────── */}
       <div className="border-b bg-surface px-4 py-4 sm:px-6">
         <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
           <div className="min-w-0">
@@ -411,24 +390,9 @@ export default async function DashboardPage() {
       </div>
 
       <div className="space-y-6 p-4 sm:p-6">
-        {/* ── KPI Metrics ──────────────────────────────── */}
         <section aria-label="Key metrics">
-          <AnimatedGroup className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4" stagger={0.06}>
-            {heroKpi ? (
-              <HeroMetric
-                label={heroKpi.label}
-                value={kpiValue(heroKpi.key, heroKpi.raw)}
-                deltaPct={heroKpi.deltaPct}
-                deltaLabel={heroKpi.deltaLabel}
-                direction={heroKpi.direction}
-                goodWhen={heroKpi.goodWhen}
-                href={heroKpi.href}
-                hint={heroKpi.hint}
-                spark={heroKpi.spark}
-                className="sm:col-span-2 xl:col-span-1"
-              />
-            ) : null}
-            {secondaryKpis.map((kpi) => (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {kpis.map((kpi) => (
               <KpiCard
                 key={kpi.key}
                 label={kpi.label}
@@ -440,15 +404,13 @@ export default async function DashboardPage() {
                 tone={kpi.tone}
                 href={kpi.href}
                 hint={kpi.hint}
-                spark={kpi.spark}
               />
             ))}
-          </AnimatedGroup>
+          </div>
         </section>
 
-        {/* ── Trend Charts ─────────────────────────────── */}
         <section aria-label="Trends">
-          <AnimatedGroup className="grid grid-cols-1 gap-4 lg:grid-cols-3" stagger={0.08}>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             <TrendAreaChart
               className="lg:col-span-2"
               title="Inventory value"
@@ -468,12 +430,11 @@ export default async function DashboardPage() {
                 { key: "damaged", label: "Damaged", color: "var(--chart-4)" },
               ]}
             />
-          </AnimatedGroup>
+          </div>
         </section>
 
-        {/* ── Flow Charts ──────────────────────────────── */}
         <section aria-label="Flow">
-          <AnimatedGroup className="grid grid-cols-1 gap-4 lg:grid-cols-3" stagger={0.08}>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             <GroupedBarChart
               title="Units in vs units out"
               description="Weekly receipts and despatches."
@@ -498,10 +459,9 @@ export default async function DashboardPage() {
               dataKey="value"
               label="Value"
             />
-          </AnimatedGroup>
+          </div>
         </section>
 
-        {/* ── Operational Queues ────────────────────────── */}
         <CustomizableGrid panels={panels} />
       </div>
     </>

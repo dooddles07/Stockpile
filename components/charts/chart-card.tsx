@@ -61,7 +61,7 @@ export function ChartCard({
   const Heading = `h${headingLevel}` as const;
 
   return (
-    <Card className={cn("gap-0 overflow-hidden py-0 shadow-xs", className)}>
+    <Card className={cn("gap-0 overflow-hidden py-0", className)}>
       <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0 border-b px-4 py-3">
         <div className="min-w-0">
           <Heading className="text-card-title">{title}</Heading>
