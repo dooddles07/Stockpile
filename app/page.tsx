@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { cache } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -13,21 +12,17 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { getDb } from "@/lib/db/client";
-import { companySettings } from "@/lib/domain/settings";
 import { cn } from "@/lib/utils";
 import { HeroHeading } from "@/components/landing/hero-heading";
 import { AnimatedMetrics } from "@/components/landing/animated-metrics";
 import { FadeIn } from "@/components/landing/fade-in";
 
-export const dynamic = "force-dynamic";
+const COMPANY_NAME = "Stockpile";
 
-const loadCompany = cache(() => companySettings(getDb()));
-
-export async function generateMetadata(): Promise<Metadata> {
-  const { companyName } = await loadCompany();
-  return { title: companyName, openGraph: { title: companyName, siteName: companyName } };
-}
+export const metadata: Metadata = {
+  title: COMPANY_NAME,
+  openGraph: { title: COMPANY_NAME, siteName: COMPANY_NAME },
+};
 
 const LEDGER: { ts: string; sku: string; type: string; site: string; qty: string; pos: boolean }[] = [
   { ts: "moments ago", sku: "BCL-SCN-104", type: "Receipt",    site: "SEA-01", qty: "+240", pos: true  },
@@ -115,8 +110,8 @@ const PRINCIPLES = [
   },
 ];
 
-export default async function LandingPage() {
-  const { companyName } = await loadCompany();
+export default function LandingPage() {
+  const companyName = COMPANY_NAME;
 
   return (
     <div className="min-h-screen bg-background text-foreground">
