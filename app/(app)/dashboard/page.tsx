@@ -3,13 +3,16 @@ import type { Metadata } from "next";
 import {
   AlertTriangle,
   ArrowLeftRight,
+  CalendarClock,
   ClipboardCheck,
   Clock,
   PackageCheck,
   Plus,
+  Warehouse,
 } from "lucide-react";
 
-import { PageHeader } from "@/components/shell/page-header";
+import { HeroMetric } from "@/components/dashboard/hero-metric";
+import { AnimatedGroup } from "@/components/dashboard/animated-group";
 import { KpiCard } from "@/components/kpi/kpi-card";
 import { WidgetCard, WidgetList, WidgetRow } from "@/components/widgets/widget-card";
 import { CustomizableGrid, type GridPanel } from "@/components/widgets/customizable-grid";
@@ -43,6 +46,7 @@ import { getRole } from "@/lib/auth/session";
 import { can } from "@/lib/auth/permissions";
 import { dueLabel, money, moneyCompact, percent, plural, qty, relative, signed } from "@/lib/format";
 import { humanize } from "@/lib/status";
+
 export const metadata: Metadata = {
   title: "Dashboard",
   description: "What is happening across every warehouse right now.",
@@ -58,6 +62,15 @@ function kpiValue(key: string, raw: number): string {
       return qty(raw);
   }
 }
+
+const QUEUE_ACCENTS: Record<string, string> = {
+  approvals: "border-t-2 border-t-status-warning",
+  "low-stock": "border-t-2 border-t-status-danger",
+  transfers: "border-t-2 border-t-status-info",
+  receipts: "border-t-2 border-t-status-success",
+  expiring: "border-t-2 border-t-status-purple",
+  activity: "border-t-2 border-t-status-neutral",
+};
 
 export default async function DashboardPage() {
   const role = await getRole();
@@ -102,6 +115,9 @@ export default async function DashboardPage() {
   );
   const lowStockTotal = allLowStock.length;
 
+  const heroKpi = kpis.find((k) => k.key === "inventory-value");
+  const secondaryKpis = kpis.filter((k) => k.key !== "inventory-value");
+
   const panels: GridPanel[] = [];
 
   if (can(role, "approvals")) {
@@ -115,6 +131,7 @@ export default async function DashboardPage() {
           count={approvals.length}
           href="/approvals"
           description="Purchase orders, transfers, adjustments and counts waiting on a decision."
+          className={QUEUE_ACCENTS.approvals}
         >
           {approvals.length === 0 ? (
             <EmptyState
@@ -153,6 +170,7 @@ export default async function DashboardPage() {
           count={lowStockTotal}
           href="/inventory/stock-levels?view=low-stock"
           description="Ranked by how much it costs to be out — reorder value first."
+          className={QUEUE_ACCENTS["low-stock"]}
         >
           {lowStock.length === 0 ? (
             <EmptyState
@@ -190,6 +208,7 @@ export default async function DashboardPage() {
           count={inTransit.length}
           href="/warehousing/transfers"
           description="Stock that has left one site and not yet landed at the other."
+          className={QUEUE_ACCENTS.transfers}
         >
           {inTransit.length === 0 ? (
             <EmptyState
@@ -227,6 +246,7 @@ export default async function DashboardPage() {
           title="Recently received"
           href="/warehousing/receiving"
           description="Goods booked in against a purchase order."
+          className={QUEUE_ACCENTS.receipts}
         >
           <WidgetList>
             {receipts.map((po) => (
@@ -257,6 +277,7 @@ export default async function DashboardPage() {
           count={expiring.length}
           href="/inventory/stock-levels?view=expiring"
           description="Lots reaching their expiry date within 30 days."
+          className={QUEUE_ACCENTS.expiring}
         >
           {expiring.length === 0 ? (
             <EmptyState
@@ -302,6 +323,7 @@ export default async function DashboardPage() {
           href="/inventory/movements"
           hrefLabel="Open the ledger"
           description="Every stock change, newest first. The ledger is the source of truth for any number on this page."
+          className={QUEUE_ACCENTS.activity}
         >
           <WidgetList>
             {activity.map((m) => (
@@ -332,13 +354,51 @@ export default async function DashboardPage() {
     });
   }
 
+  const summaryPills = [
+    { icon: Warehouse, label: `${warehouseById.size} sites`, tone: "neutral" as const },
+    approvals.length > 0 && {
+      icon: ClipboardCheck,
+      label: `${approvals.length} pending`,
+      tone: "warning" as const,
+    },
+    lowStockTotal > 0 && {
+      icon: AlertTriangle,
+      label: `${lowStockTotal} low stock`,
+      tone: "danger" as const,
+    },
+    expiring.length > 0 && {
+      icon: CalendarClock,
+      label: `${expiring.length} expiring`,
+      tone: "warning" as const,
+    },
+  ].filter(Boolean) as { icon: React.ComponentType<{ className?: string }>; label: string; tone: "neutral" | "warning" | "danger" }[];
+
+  const pillTone = {
+    neutral: "bg-muted text-muted-foreground",
+    warning: "bg-status-warning-bg text-status-warning border border-status-warning-border",
+    danger: "bg-status-danger-bg text-status-danger border border-status-danger-border",
+  };
+
   return (
     <>
-      <PageHeader
-        title="Operations overview"
-        description="Stock position, open commitments and the work waiting on a person, across all six sites."
-        actions={
-          <>
+      {/* ── Header ─────────────────────────────────────── */}
+      <div className="border-b bg-surface px-4 py-4 sm:px-6">
+        <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+          <div className="min-w-0">
+            <h1 className="text-page-title">Operations overview</h1>
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              {summaryPills.map((pill) => (
+                <span
+                  key={pill.label}
+                  className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${pillTone[pill.tone]}`}
+                >
+                  <pill.icon className="size-3" aria-hidden />
+                  {pill.label}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
             <PeriodSelect />
             {can(role, "purchase-orders", "create") && (
               <Button size="sm" className="h-8" render={<Link href="/purchasing/purchase-orders/new" />}>
@@ -346,14 +406,29 @@ export default async function DashboardPage() {
                 New purchase order
               </Button>
             )}
-          </>
-        }
-      />
+          </div>
+        </div>
+      </div>
 
       <div className="space-y-6 p-4 sm:p-6">
+        {/* ── KPI Metrics ──────────────────────────────── */}
         <section aria-label="Key metrics">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {kpis.map((kpi) => (
+          <AnimatedGroup className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4" stagger={0.06}>
+            {heroKpi ? (
+              <HeroMetric
+                label={heroKpi.label}
+                value={kpiValue(heroKpi.key, heroKpi.raw)}
+                deltaPct={heroKpi.deltaPct}
+                deltaLabel={heroKpi.deltaLabel}
+                direction={heroKpi.direction}
+                goodWhen={heroKpi.goodWhen}
+                href={heroKpi.href}
+                hint={heroKpi.hint}
+                spark={heroKpi.spark}
+                className="sm:col-span-2 xl:col-span-1"
+              />
+            ) : null}
+            {secondaryKpis.map((kpi) => (
               <KpiCard
                 key={kpi.key}
                 label={kpi.label}
@@ -368,61 +443,67 @@ export default async function DashboardPage() {
                 spark={kpi.spark}
               />
             ))}
-          </div>
+          </AnimatedGroup>
         </section>
 
-        <section aria-label="Trends" className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <TrendAreaChart
-            className="lg:col-span-2"
-            title="Inventory value"
-            description="On-hand value across all warehouses, reconstructed from the movement ledger."
-            data={valueTrend}
-            dataKey="value"
-            label="Inventory value"
-          />
-          <StackedBarChart
-            title="Stock composition by site"
-            description="Available, reserved, damaged and in transit."
-            data={composition}
-            series={[
-              { key: "available", label: "Available", color: "var(--chart-2)" },
-              { key: "reserved", label: "Reserved", color: "var(--chart-5)" },
-              { key: "inTransit", label: "In transit", color: "var(--chart-3)" },
-              { key: "damaged", label: "Damaged", color: "var(--chart-4)" },
-            ]}
-          />
+        {/* ── Trend Charts ─────────────────────────────── */}
+        <section aria-label="Trends">
+          <AnimatedGroup className="grid grid-cols-1 gap-4 lg:grid-cols-3" stagger={0.08}>
+            <TrendAreaChart
+              className="lg:col-span-2"
+              title="Inventory value"
+              description="On-hand value across all warehouses, reconstructed from the movement ledger."
+              data={valueTrend}
+              dataKey="value"
+              label="Inventory value"
+            />
+            <StackedBarChart
+              title="Stock composition by site"
+              description="Available, reserved, damaged and in transit."
+              data={composition}
+              series={[
+                { key: "available", label: "Available", color: "var(--chart-2)" },
+                { key: "reserved", label: "Reserved", color: "var(--chart-5)" },
+                { key: "inTransit", label: "In transit", color: "var(--chart-3)" },
+                { key: "damaged", label: "Damaged", color: "var(--chart-4)" },
+              ]}
+            />
+          </AnimatedGroup>
         </section>
 
-        <section aria-label="Flow" className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <GroupedBarChart
-            title="Units in vs units out"
-            description="Weekly receipts and despatches."
-            data={flowTrend}
-            series={[
-              { key: "inbound", label: "Received", color: "var(--chart-2)" },
-              { key: "outbound", label: "Shipped", color: "var(--chart-4)" },
-            ]}
-            format="compact"
-          />
-          <ComparisonLineChart
-            title="Purchases vs sales"
-            description="Committed spend against booked revenue, by month."
-            data={purchasesSales}
-            seriesA={{ key: "purchases", label: "Purchases" }}
-            seriesB={{ key: "sales", label: "Sales" }}
-          />
-          <RankedBarChart
-            title="Inventory value by category"
-            description="Where the capital is sitting."
-            data={valueByCat.map((c) => ({ label: c.name, value: c.value }))}
-            dataKey="value"
-            label="Value"
-          />
+        {/* ── Flow Charts ──────────────────────────────── */}
+        <section aria-label="Flow">
+          <AnimatedGroup className="grid grid-cols-1 gap-4 lg:grid-cols-3" stagger={0.08}>
+            <GroupedBarChart
+              title="Units in vs units out"
+              description="Weekly receipts and despatches."
+              data={flowTrend}
+              series={[
+                { key: "inbound", label: "Received", color: "var(--chart-2)" },
+                { key: "outbound", label: "Shipped", color: "var(--chart-4)" },
+              ]}
+              format="compact"
+            />
+            <ComparisonLineChart
+              title="Purchases vs sales"
+              description="Committed spend against booked revenue, by month."
+              data={purchasesSales}
+              seriesA={{ key: "purchases", label: "Purchases" }}
+              seriesB={{ key: "sales", label: "Sales" }}
+            />
+            <RankedBarChart
+              title="Inventory value by category"
+              description="Where the capital is sitting."
+              data={valueByCat.map((c) => ({ label: c.name, value: c.value }))}
+              dataKey="value"
+              label="Value"
+            />
+          </AnimatedGroup>
         </section>
 
+        {/* ── Operational Queues ────────────────────────── */}
         <CustomizableGrid panels={panels} />
       </div>
     </>
   );
 }
-

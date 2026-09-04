@@ -4,7 +4,6 @@ import { ArrowRight, Minus, TrendingDown, TrendingUp } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
-/** 12-point trend line. Inline SVG — a chart library for a 40px sparkline is waste. */
 export function Sparkline({
   points,
   className,
@@ -18,30 +17,40 @@ export function Sparkline({
   const min = Math.min(...points);
   const max = Math.max(...points);
   const span = max - min || 1;
-  const w = 96;
-  const h = 28;
+  const w = 120;
+  const h = 32;
 
   const coords = points.map((p, i) => {
     const x = (i / (points.length - 1)) * w;
-    const y = h - ((p - min) / span) * (h - 4) - 2;
+    const y = h - ((p - min) / span) * (h - 6) - 3;
     return `${x.toFixed(2)},${y.toFixed(2)}`;
   });
 
+  const fillCoords = [...coords, `${w},${h}`, `0,${h}`];
+
   const stroke = {
-    muted: "stroke-muted-foreground/60",
+    muted: "stroke-muted-foreground/40",
     success: "stroke-status-success",
     warning: "stroke-status-warning",
     danger: "stroke-status-danger",
   }[tone];
 
+  const fill = {
+    muted: "fill-muted-foreground/5",
+    success: "fill-status-success/8",
+    warning: "fill-status-warning/8",
+    danger: "fill-status-danger/8",
+  }[tone];
+
   return (
     <svg
       viewBox={`0 0 ${w} ${h}`}
-      className={cn("h-7 w-24 overflow-visible", className)}
+      className={cn("h-8 w-full overflow-visible", className)}
       fill="none"
       aria-hidden
       focusable="false"
     >
+      <polygon points={fillCoords.join(" ")} className={fill} />
       <polyline
         points={coords.join(" ")}
         className={stroke}
@@ -56,11 +65,9 @@ export function Sparkline({
 export interface KpiCardProps {
   label: string;
   value: string;
-  /** Signed change against the comparison period. */
   deltaPct?: number | null;
   deltaLabel?: string;
   direction?: "up" | "down" | "flat";
-  /** Whether an increase is good news — decides the delta's colour. */
   goodWhen?: "up" | "down";
   tone?: "neutral" | "success" | "warning" | "danger";
   href?: string;
@@ -94,12 +101,12 @@ export function KpiCard({
 
   const accent =
     tone === "danger"
-      ? "before:bg-status-danger"
+      ? "border-l-status-danger"
       : tone === "warning"
-        ? "before:bg-status-warning"
+        ? "border-l-status-warning"
         : tone === "success"
-          ? "before:bg-status-success"
-          : "before:bg-transparent";
+          ? "border-l-status-success"
+          : "";
 
   const body = (
     <>
@@ -108,7 +115,7 @@ export function KpiCard({
           <Tooltip>
             <TooltipTrigger
               render={
-                <span className="cursor-help text-label text-muted-foreground underline decoration-dotted decoration-from-font underline-offset-4" />
+                <span className="cursor-help text-[12px] font-medium uppercase tracking-wide text-muted-foreground" />
               }
             >
               {label}
@@ -116,7 +123,7 @@ export function KpiCard({
             <TooltipContent className="max-w-xs">{hint}</TooltipContent>
           </Tooltip>
         ) : (
-          <span className="text-label text-muted-foreground">{label}</span>
+          <span className="text-[12px] font-medium uppercase tracking-wide text-muted-foreground">{label}</span>
         )}
         {href && (
           <ArrowRight
@@ -126,35 +133,49 @@ export function KpiCard({
         )}
       </div>
 
-      <div className="mt-2 flex items-end justify-between gap-3">
+      <div className="mt-1.5 flex items-end justify-between gap-3">
         <span className="text-metric">{value}</span>
-        {spark && spark.length > 1 && (
+
+        {(deltaPct !== undefined || deltaLabel) && (
+          <div className="mb-1 flex items-center gap-1 text-[12px]">
+            {deltaPct !== null && deltaPct !== undefined && (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 font-medium tabular",
+                  good === null && "bg-muted text-muted-foreground",
+                  good === true && "bg-status-success-bg text-status-success",
+                  good === false && "bg-status-danger-bg text-status-danger",
+                )}
+                data-numeric
+              >
+                <DeltaIcon className="size-3" aria-hidden />
+                {deltaPct > 0 ? "+" : ""}
+                {(deltaPct * 100).toFixed(1)}%
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {deltaLabel && (
+        <p className="mt-0.5 text-[11px] text-muted-foreground">{deltaLabel}</p>
+      )}
+
+      {spark && spark.length > 1 && (
+        <div className="mt-2">
           <Sparkline
             points={spark}
             tone={tone === "neutral" ? "muted" : tone === "success" ? "success" : tone}
           />
-        )}
-      </div>
-
-      {(deltaPct !== undefined || deltaLabel) && (
-        <div className="mt-2 flex items-center gap-1.5 text-caption">
-          {deltaPct !== null && deltaPct !== undefined && (
-            <span className={cn("flex items-center gap-0.5 font-medium tabular", deltaClass)} data-numeric>
-              <DeltaIcon className="size-3.5" aria-hidden />
-              {deltaPct > 0 ? "+" : ""}
-              {(deltaPct * 100).toFixed(1)}%
-            </span>
-          )}
-          {deltaLabel && <span className="text-muted-foreground">{deltaLabel}</span>}
         </div>
       )}
     </>
   );
 
   const shell = cn(
-    "group/kpi relative overflow-hidden rounded-lg border bg-surface p-4 shadow-xs transition-colors",
-    "before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:content-['']",
+    "group/kpi relative overflow-hidden rounded-lg border border-l-2 bg-surface p-4 shadow-xs transition-colors",
     accent,
+    !accent && "border-l-transparent",
     href && "hover:border-border-strong hover:bg-surface-hover",
     className,
   );
