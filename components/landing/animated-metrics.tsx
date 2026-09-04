@@ -58,7 +58,8 @@ function MetricCell({
 
 export function AnimatedMetrics() {
   return (
-    <section className="border-y bg-surface-sunken">
+    <section aria-labelledby="metrics-heading" className="border-y bg-surface-sunken">
+      <h2 id="metrics-heading" className="sr-only">Key metrics</h2>
       <div className="mx-auto grid max-w-6xl grid-cols-2 sm:grid-cols-4">
         {METRICS.map((m, i) => (
           <MetricCell key={m.label} metric={m} index={i} />

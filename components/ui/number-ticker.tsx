@@ -12,6 +12,7 @@ import {
   type AnimationPlaybackControls,
   motion,
   useMotionValue,
+  useReducedMotion,
   useTransform,
   type ValueAnimationTransition,
 } from "motion/react";
@@ -46,6 +47,7 @@ const NumberTicker = forwardRef<NumberTickerRef, NumberTickerProps>(
     },
     ref,
   ) => {
+    const shouldReduceMotion = useReducedMotion();
     const count = useMotionValue(from);
     const rounded = useTransform(count, (latest) => Math.round(latest));
     const [controls, setControls] = useState<AnimationPlaybackControls | null>(
@@ -53,6 +55,11 @@ const NumberTicker = forwardRef<NumberTickerRef, NumberTickerProps>(
     );
 
     const startAnimation = useCallback(() => {
+      if (shouldReduceMotion) {
+        count.set(target);
+        onComplete?.();
+        return;
+      }
       if (controls) controls.stop();
       onStart?.();
       count.set(from);
@@ -61,7 +68,7 @@ const NumberTicker = forwardRef<NumberTickerRef, NumberTickerProps>(
         onComplete: () => onComplete?.(),
       });
       setControls(newControls);
-    }, []);
+    }, [shouldReduceMotion]);
 
     useImperativeHandle(ref, () => ({ startAnimation }));
 
