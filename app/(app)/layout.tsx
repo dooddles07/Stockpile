@@ -45,9 +45,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <SidebarInset className="min-w-0 bg-background">
           <TopBar notifications={notifications} unreadCount={unread} />
           <OfflineBanner />
-          <main id="main" className="min-w-0 flex-1">
+          <div id="main" className="min-w-0 flex-1">
             {children}
-          </main>
+          </div>
         </SidebarInset>
       </SidebarProvider>
     </AppProviders>
