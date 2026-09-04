@@ -49,6 +49,11 @@ next-env.d.ts
 .playwright-mcp/
 *.local.png
 
+# impeccable ephemeral artifacts
+.impeccable/review/
+.impeccable/questions/
+.impeccable/mocks/
+
 # agent scaffolding (local only)
 .claude/
 CLAUDE.md
