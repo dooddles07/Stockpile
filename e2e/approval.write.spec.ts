@@ -145,7 +145,11 @@ test.describe("approve and reject", () => {
 
     // --- approve from the queue ----------------------------------------
     await page.goto("/approvals");
-    const row = main.locator("div").filter({ hasText: number }).last();
+    const row = main
+      .locator("div")
+      .filter({ hasText: number })
+      .filter({ has: page.getByRole("button", { name: "Approve" }) })
+      .last();
     await expect(row).toBeVisible();
     await row.getByRole("button", { name: "Approve" }).click();
 
