@@ -123,7 +123,7 @@ export interface Product {
   unitCost: number;
   sellPrice: number;
   status: ProductStatus;
-  primarySupplierId: string;
+  primarySupplierId: string | null;
   supplierIds: string[];
   reorderPoint: number;
   reorderQty: number;

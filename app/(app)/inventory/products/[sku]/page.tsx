@@ -113,7 +113,7 @@ export default async function ProductDetailPage({
   const warehouseById = await indexById(allWarehouses);
   const locationById = await indexById(allLocations);
   const userById = await indexById(allUsers);
-  const primarySupplier = supplierById.get(product.primarySupplierId);
+  const primarySupplier = product.primarySupplierId ? supplierById.get(product.primarySupplierId) : undefined;
   const canEdit = can(role, "products", "edit");
   const showCost = can(role, "valuation") || can(role, "products");
 

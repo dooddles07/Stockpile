@@ -251,7 +251,7 @@ export const productRows = cache(async (): Promise<ProductRow[]> => {
     return {
       ...product,
       categoryName,
-      supplierName: supplierById.get(product.primarySupplierId)?.name ?? "—",
+      supplierName: (product.primarySupplierId && supplierById.get(product.primarySupplierId)?.name) ?? "—",
       stock: {
         productId: product.id,
         onHand,

@@ -445,7 +445,7 @@ function productColumns(input: ProductInput) {
     unit: input.unit,
     unitCost: input.unitCost,
     sellPrice: input.sellPrice,
-    primarySupplierId: input.supplierId,
+    primarySupplierId: input.supplierId || null,
     reorderPoint: input.reorderPoint,
     reorderQty: input.reorderQty,
     leadTimeDays: input.leadTimeDays,
@@ -465,7 +465,7 @@ export async function createProduct(actor: Actor, input: ProductInput, db: Db): 
       id,
       ...productColumns(input),
       status: "active",
-      supplierIds: [input.supplierId],
+      supplierIds: input.supplierId ? [input.supplierId] : [],
       // Details a slim form does not ask for; filled in on the record screen later.
       weightKg: 0,
       dimensionsCm: "",

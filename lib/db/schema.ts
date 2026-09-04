@@ -124,9 +124,9 @@ export const products = pgTable("products", {
   unitCost: numeric("unit_cost", { mode: "number" }).notNull(),
   sellPrice: numeric("sell_price", { mode: "number" }).notNull(),
   status: text("status").$type<ProductStatus>().notNull(),
-  primarySupplierId: text("primary_supplier_id")
-    .notNull()
-    .references((): AnyPgColumn => suppliers.id),
+  primarySupplierId: text("primary_supplier_id").references(
+    (): AnyPgColumn => suppliers.id,
+  ),
   supplierIds: jsonb("supplier_ids").$type<string[]>().notNull(),
   reorderPoint: integer("reorder_point").notNull(),
   reorderQty: integer("reorder_qty").notNull(),

@@ -89,7 +89,7 @@ async function forbiddenRoleIsRefused(db: Db): Promise<void> {
           name: someProduct.name,
           categoryId: someProduct.categoryId,
           brand: someProduct.brand,
-          supplierId: someProduct.primarySupplierId,
+          supplierId: someProduct.primarySupplierId ?? "",
           unit: someProduct.unit,
           barcode: someProduct.barcode,
           description: someProduct.description,
