@@ -335,7 +335,7 @@ export default function LandingPage() {
                   Under the hood
                 </h2>
                 <p className="mt-2 text-[14px] leading-relaxed text-muted-foreground sm:text-[15px]">
-                  The decisions worth reading if you're in the source.
+                  The decisions worth reading if you&apos;re in the source.
                 </p>
               </div>
             </FadeIn>
