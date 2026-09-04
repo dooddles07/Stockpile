@@ -10,8 +10,14 @@ export async function GET() {
     const result = await db.execute(sql`SELECT 1 AS ok`);
     return NextResponse.json({ status: "ok", result });
   } catch (err) {
+    const e = err instanceof Error ? err : new Error(String(err));
     return NextResponse.json(
-      { status: "error", message: err instanceof Error ? err.message : String(err) },
+      {
+        status: "error",
+        message: e.message,
+        cause: e.cause instanceof Error ? e.cause.message : String(e.cause ?? ""),
+        stack: e.stack?.split("\n").slice(0, 5).join("\n"),
+      },
       { status: 500 },
     );
   }
