@@ -99,13 +99,13 @@ export function KpiCard({
         ? "text-status-success"
         : "text-status-danger";
 
-  const accent =
+  const accentBg =
     tone === "danger"
-      ? "border-l-status-danger"
+      ? "bg-status-danger-bg/40"
       : tone === "warning"
-        ? "border-l-status-warning"
+        ? "bg-status-warning-bg/40"
         : tone === "success"
-          ? "border-l-status-success"
+          ? "bg-status-success-bg/40"
           : "";
 
   const body = (
@@ -173,9 +173,8 @@ export function KpiCard({
   );
 
   const shell = cn(
-    "group/kpi relative overflow-hidden rounded-lg border border-l-2 bg-surface p-4 shadow-xs transition-colors",
-    accent,
-    !accent && "border-l-transparent",
+    "group/kpi relative overflow-hidden rounded-lg border bg-surface p-4 shadow-xs transition-colors",
+    accentBg,
     href && "hover:border-border-strong hover:bg-surface-hover",
     className,
   );
