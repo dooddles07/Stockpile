@@ -21,6 +21,7 @@ export default function GlobalError({
 
   return (
     <html lang="en">
+      <style>{`@media(prefers-color-scheme:dark){body{background:#0a0f1a!important;color:#e2e8f0!important}.ge-sub{color:#94a3b8!important}.ge-ref{color:#64748b!important}.ge-btn{background:#e2e8f0!important;color:#0f172a!important}}`}</style>
       <body
         style={{
           margin: 0,
@@ -39,12 +40,13 @@ export default function GlobalError({
           <h1 style={{ fontSize: "1.5rem", fontWeight: 600, margin: "0 0 0.5rem" }}>
             Stockpile could not start
           </h1>
-          <p style={{ fontSize: "0.875rem", lineHeight: 1.6, color: "#475569", margin: "0 0 1rem" }}>
+          <p className="ge-sub" style={{ fontSize: "0.875rem", lineHeight: 1.6, color: "#475569", margin: "0 0 1rem" }}>
             The application shell failed to load. Nothing you were working on was saved or changed.
             Reloading is safe.
           </p>
           {error.digest && (
             <p
+              className="ge-ref"
               style={{
                 fontSize: "0.75rem",
                 fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
@@ -57,6 +59,7 @@ export default function GlobalError({
           )}
           <button
             type="button"
+            className="ge-btn"
             onClick={reset}
             style={{
               appearance: "none",

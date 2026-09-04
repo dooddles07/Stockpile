@@ -202,7 +202,7 @@ export function ImportWizard({
                 <span
                   className={cn(
                     "flex size-4 shrink-0 items-center justify-center rounded-full border text-[10px] leading-none",
-                    done && "border-status-success bg-status-success text-white",
+                    done && "border-status-success bg-status-success text-status-success-fg",
                     current && "border-primary-foreground/70 bg-primary-foreground/15",
                     !done && !current && "border-border-strong",
                   )}

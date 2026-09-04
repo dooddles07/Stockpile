@@ -280,6 +280,7 @@ export function DataTable<TData>({
                           onDoubleClick={() => header.column.resetSize()}
                           role="separator"
                           aria-orientation="vertical"
+                          aria-label={`Resize ${(header.column.columnDef.meta as { label?: string } | undefined)?.label ?? header.column.id} column`}
                           className={cn(
                             "absolute right-0 top-0 h-full w-1 cursor-col-resize touch-none select-none bg-transparent transition-colors hover:bg-border-strong",
                             header.column.getIsResizing() && "bg-primary",
@@ -330,10 +331,11 @@ export function DataTable<TData>({
                   <TableRow
                     key={row.id}
                     data-state={row.getIsSelected() ? "selected" : undefined}
+                    tabIndex={href ? 0 : undefined}
                     className={cn(
                       ROW_HEIGHT[density],
                       "group/row border-b transition-colors",
-                      href && "cursor-pointer",
+                      href && "cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring",
                     )}
                     onClick={
                       href
@@ -341,6 +343,17 @@ export function DataTable<TData>({
                             const target = e.target as HTMLElement;
                             // Never hijack a click on a control inside the row.
                             if (target.closest("button, a, input, [role='checkbox'], [role='menu']")) return;
+                            router.push(href);
+                          }
+                        : undefined
+                    }
+                    onKeyDown={
+                      href
+                        ? (e) => {
+                            if (e.key !== "Enter" && e.key !== " ") return;
+                            const target = e.target as HTMLElement;
+                            if (target.closest("button, a, input, [role='checkbox'], [role='menu']")) return;
+                            e.preventDefault();
                             router.push(href);
                           }
                         : undefined

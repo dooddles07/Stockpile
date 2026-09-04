@@ -67,6 +67,7 @@ export function TopBar({
         type="button"
         ref={searchTriggerRef}
         onClick={() => setPaletteOpen(true)}
+        aria-label="Search products, orders, suppliers"
         className="group flex h-8 w-full min-w-0 max-w-md items-center gap-2 rounded-md border bg-surface-sunken px-2.5 text-left text-[13px] text-muted-foreground transition-colors hover:border-border-strong hover:bg-surface"
       >
         <Search className="size-4 shrink-0" aria-hidden />

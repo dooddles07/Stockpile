@@ -45,7 +45,7 @@ export function OperatorTabs({
                 <span className="relative">
                   <tab.icon className={cn("size-5", active && "stroke-[2.25]")} aria-hidden />
                   {count > 0 && (
-                    <span className="absolute -right-2.5 -top-1.5 min-w-4 rounded-full bg-status-danger px-1 text-center text-[10px] font-semibold leading-4 text-white">
+                    <span className="absolute -right-2.5 -top-1.5 min-w-4 rounded-full bg-status-danger px-1 text-center text-[10px] font-semibold leading-4 text-status-danger-fg">
                       {count > 99 ? "99+" : count}
                     </span>
                   )}
