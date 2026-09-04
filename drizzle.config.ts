@@ -5,6 +5,10 @@
  */
 
 import { defineConfig } from "drizzle-kit";
+import { neonConfig } from "@neondatabase/serverless";
+import ws from "ws";
+
+neonConfig.webSocketConstructor = ws;
 
 export default defineConfig({
   schema: "./lib/db/schema.ts",
