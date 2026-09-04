@@ -43,7 +43,6 @@ export default async function NewSalesReturnPage({
   const orders: ReturnableOrder[] = (await allSalesOrders())
     .filter((o) => o.shippedAt && o.lines.some((l) => l.fulfilled > 0))
     .sort((a, b) => (b.shippedAt ?? "").localeCompare(a.shippedAt ?? ""))
-    .slice(0, 60)
     .map((o) => ({
       id: o.id,
       number: o.number,
