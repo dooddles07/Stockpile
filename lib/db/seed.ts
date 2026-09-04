@@ -90,11 +90,9 @@ export async function seed() {
     );
 
     // FK order: roles -> users (warehouseId null) -> categories -> warehouses
-    // -> locations -> products -> stock_rows, then back-fill users.warehouseId.
-    // Circular FK: warehouses.managerId -> users, users.warehouseId -> warehouses.
-    // One multi-row INSERT per table; chunk .values() if the dataset ever
-    // approaches Postgres's 65535-parameter limit (~2k product rows, or ~5k
-    // order lines at 12 columns).
+    // -> locations -> suppliers -> products -> stock_rows, then back-fill
+    // users.warehouseId. Circular FK: warehouses.managerId -> users,
+    // users.warehouseId -> warehouses. products.primarySupplierId -> suppliers.
     await db.insert(roles).values(dataset.roles);
     await db.insert(users).values(
       dataset.users.map(({ warehouseId: _, ...u }) => ({ ...u, warehouseId: null })),
@@ -102,12 +100,9 @@ export async function seed() {
     await db.insert(categories).values(dataset.categories);
     await db.insert(warehouses).values(dataset.warehouses);
     await db.insert(locations).values(dataset.locations);
-    await db.insert(products).values(dataset.products);
-    // stock_rows.seq is generated; insert in array order so ORDER BY seq later
-    // reproduces the generator's iteration order.
-    await db.insert(stockRows).values(dataset.stockRows);
-
     await db.insert(suppliers).values(dataset.suppliers);
+    await db.insert(products).values(dataset.products);
+    await db.insert(stockRows).values(dataset.stockRows);
     // Lines are separate tables; strip the nested arrays off the parent row and
     // re-key each line to its parent. Insert in array order — `seq` is
     // generated, so ORDER BY seq reproduces the generator's order.
