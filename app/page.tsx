@@ -1,7 +1,16 @@
 import type { Metadata } from "next";
 import { cache } from "react";
 import Link from "next/link";
-import { ArrowRight, Code2, Package } from "lucide-react";
+import {
+  ArrowRight,
+  ArrowLeftRight,
+  BarChart3,
+  ClipboardCheck,
+  Code2,
+  Package,
+  ShieldCheck,
+  Warehouse,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { getDb } from "@/lib/db/client";
@@ -17,7 +26,6 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: companyName, openGraph: { title: companyName, siteName: companyName } };
 }
 
-// Representative movement data — the same shape the real ledger holds
 const LEDGER: { ts: string; sku: string; type: string; site: string; qty: string; pos: boolean }[] = [
   { ts: "moments ago", sku: "BCL-SCN-104", type: "Receipt",    site: "SEA-01", qty: "+240", pos: true  },
   { ts: "4m ago",      sku: "TRK-HDL-207", type: "Shipment",   site: "LAX-02", qty: "−85",  pos: false },
@@ -29,45 +37,85 @@ const LEDGER: { ts: string; sku: string; type: string; site: string; qty: string
   { ts: "1h 12m ago",  sku: "SHF-RCK-088", type: "Return",     site: "ORD-03", qty: "+14",  pos: true  },
 ];
 
+const METRICS = [
+  { value: "6", label: "Warehouse sites" },
+  { value: "2,400+", label: "SKUs tracked" },
+  { value: "50k+", label: "Movements/month" },
+  { value: "7", label: "Role-based views" },
+];
+
+const CAPABILITIES: { icon: typeof Package; title: string; detail: string }[] = [
+  {
+    icon: Package,
+    title: "Full lifecycle tracking",
+    detail: "Purchase order through receipt, storage, pick, pack, and shipment. Every state change is an auditable event.",
+  },
+  {
+    icon: ArrowLeftRight,
+    title: "Multi-site transfers",
+    detail: "Move stock between warehouses with automatic quantity reconciliation. Both sides settle in the same transaction.",
+  },
+  {
+    icon: ClipboardCheck,
+    title: "Cycle counts and adjustments",
+    detail: "Count stock against expected quantities. Discrepancies post as signed adjustments with full audit context.",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Role-enforced permissions",
+    detail: "Seven roles drive server-side checks on every write. The UI adapts, but the guard is below it.",
+  },
+  {
+    icon: BarChart3,
+    title: "Operational analytics",
+    detail: "Inventory valuation, turnover rates, supplier performance, and fulfilment metrics. All derived from the movement stream.",
+  },
+  {
+    icon: Warehouse,
+    title: "Location-level granularity",
+    detail: "Zones, aisles, racks, and bins. Stock is never just \"in the warehouse\" — it has an address.",
+  },
+];
+
 const EXPLORE = [
   {
+    step: "01",
     title: "Raise a purchase order, then receive it",
-    detail: "New purchase order → save → Receive tab. The stock level and the movement ledger both update in the same transaction. This is the real write path, not a stub.",
+    detail: "New purchase order, save, Receive tab. Stock level and movement ledger both update in the same transaction.",
     href: "/purchasing/purchase-orders/new",
   },
   {
+    step: "02",
     title: "Watch the ledger reconcile",
-    detail: "Every stock change is an append-only movement. The on-hand total is rebuilt from that stream, so it cannot disagree with the history.",
+    detail: "Every stock change is append-only. The on-hand total is rebuilt from the stream, so it cannot disagree with history.",
     href: "/inventory/movements",
   },
   {
+    step: "03",
     title: "Switch role to Auditor",
-    detail: "The role switcher lives in the top bar. As Auditor, every write route disappears — enforced below the UI, not toggled with CSS.",
+    detail: "The role switcher lives in the top bar. As Auditor, every write route disappears — enforced server-side.",
     href: "/dashboard",
   },
   {
+    step: "04",
     title: "Open the handheld surface",
-    detail: "A purpose-built operator shell for lookup, scanning and receiving. Same permission engine, designed for one-handed use in a warehouse.",
+    detail: "A purpose-built operator shell for lookup, scanning, and receiving. Same permission engine, designed for warehouse use.",
     href: "/operator",
   },
 ];
 
-const NOTES = [
-  {
-    label: "Roles are real",
-    detail: "Seven roles drive a can(role, module, action) check that every write route runs server-side. Switching roles in the UI shows exactly what that person can see and do — no extra config.",
-  },
+const PRINCIPLES = [
   {
     label: "One choke point",
-    detail: "Every stock change — receipt, shipment, transfer, adjustment, count, return — commits through one function that locks the row, appends the event, and updates the projection atomically.",
+    detail: "Every stock change commits through one function that locks the row, appends the event, and updates the projection atomically.",
   },
   {
     label: "Automation after commit",
-    detail: "Rules evaluate in-process when an event lands. No scheduler. Every run is attributable and can fail without rolling back the write that triggered it.",
+    detail: "Rules evaluate in-process when an event lands. No scheduler. Every run is attributable and can fail without rolling back the triggering write.",
   },
   {
     label: "Zero recurring cost",
-    detail: "Neon Postgres and Vercel's free tiers, no paid scheduler or queue — the constraint that shaped most of the architecture.",
+    detail: "Neon Postgres and Vercel free tiers, no paid scheduler or queue — the constraint that shaped most of the architecture.",
   },
 ];
 
@@ -76,7 +124,7 @@ export default async function LandingPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      {/* Nav */}
+      {/* ── Nav ── */}
       <nav className="sticky top-0 z-20 border-b bg-surface/95 backdrop-blur-sm">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-3">
           <div className="flex items-center gap-2.5">
@@ -103,19 +151,19 @@ export default async function LandingPage() {
       </nav>
 
       <main>
-        {/* Hero */}
-        <section className="mx-auto max-w-6xl px-6 pb-14 pt-16 sm:pb-20 sm:pt-24">
-          <div className="grid items-start gap-12 lg:grid-cols-[1fr_460px] lg:gap-14">
-            {/* Copy */}
+        {/* ── Hero ── */}
+        <section className="mx-auto max-w-6xl px-6 pb-10 pt-16 sm:pb-16 sm:pt-24">
+          <div className="grid items-start gap-12 lg:grid-cols-[1fr_480px] lg:gap-16">
             <div className="max-w-xl">
               <p className="mb-5 inline-flex items-center gap-2 rounded-full border bg-surface px-3 py-1 text-[12px] font-medium text-muted-foreground">
                 <span className="size-1.5 rounded-full bg-status-info" aria-hidden />
                 Public demo · resets daily
               </p>
-              <h1 className="font-heading text-[44px] font-extrabold leading-[1.03] tracking-[-0.03em] sm:text-[62px]">
-                Stock numbers<br />you can defend.
+              <h1 className="font-heading text-[40px] font-extrabold leading-[1.05] tracking-[-0.03em] sm:text-[56px]">
+                Stock numbers{" "}
+                <span className="text-brand">you can defend.</span>
               </h1>
-              <p className="mt-5 text-[16px] leading-relaxed text-muted-foreground sm:text-[18px]">
+              <p className="mt-5 text-[16px] leading-relaxed text-muted-foreground sm:text-[17px]">
                 Purchase order to shelf to shipment — one movement ledger,
                 role-based permissions, and a full audit trail across every site.
               </p>
@@ -144,15 +192,15 @@ export default async function LandingPage() {
               </p>
             </div>
 
-            {/* Movement ledger — the core artifact of the system, shown on arrival */}
-            <div className="hidden lg:block">
-              <div className="overflow-hidden rounded-lg border bg-surface shadow-md">
-                <div className="flex items-center justify-between border-b bg-surface-sunken px-3 py-2.5">
-                  <span className="text-[12px] font-semibold text-muted-foreground">
-                    Movement ledger
-                  </span>
-                  <span className="text-[11px] text-muted-foreground">6 sites · live</span>
-                </div>
+            {/* Ledger preview */}
+            <div className="w-full overflow-hidden rounded-lg border bg-surface shadow-md">
+              <div className="flex items-center justify-between border-b bg-surface-sunken px-3 py-2.5">
+                <span className="text-[12px] font-semibold text-muted-foreground">
+                  Movement ledger
+                </span>
+                <span className="text-[11px] text-muted-foreground">6 sites · live</span>
+              </div>
+              <div className="overflow-x-auto">
                 <table
                   className="w-full text-[12px]"
                   aria-label="Sample movement ledger"
@@ -164,8 +212,7 @@ export default async function LandingPage() {
                         <th
                           key={h}
                           scope="col"
-                          className="px-3 py-1.5 text-left text-[10px] font-semibold text-muted-foreground"
-                          style={{ textTransform: "uppercase", letterSpacing: "0.05em" }}
+                          className="px-3 py-1.5 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
                         >
                           {h}
                         </th>
@@ -175,13 +222,13 @@ export default async function LandingPage() {
                   <tbody>
                     {LEDGER.map((row, i) => (
                       <tr key={i} className="border-b last:border-0">
-                        <td className="px-3 py-2 font-mono text-[11px] text-muted-foreground">{row.ts}</td>
-                        <td className="px-3 py-2 font-mono text-[11px] text-foreground">{row.sku}</td>
-                        <td className="px-3 py-2 text-[11px] text-muted-foreground">{row.type}</td>
-                        <td className="px-3 py-2 font-mono text-[11px] text-muted-foreground">{row.site}</td>
+                        <td className="whitespace-nowrap px-3 py-2 font-mono text-[11px] text-muted-foreground">{row.ts}</td>
+                        <td className="whitespace-nowrap px-3 py-2 font-mono text-[11px] text-foreground">{row.sku}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-[11px] text-muted-foreground">{row.type}</td>
+                        <td className="whitespace-nowrap px-3 py-2 font-mono text-[11px] text-muted-foreground">{row.site}</td>
                         <td
                           className={cn(
-                            "px-3 py-2 font-mono text-[11px] font-semibold",
+                            "whitespace-nowrap px-3 py-2 font-mono text-[11px] font-semibold",
                             row.pos ? "text-status-success" : "text-status-danger",
                           )}
                         >
@@ -191,77 +238,157 @@ export default async function LandingPage() {
                     ))}
                   </tbody>
                 </table>
-                <div className="border-t bg-surface-sunken px-3 py-2">
-                  <Link
-                    href="/inventory/movements"
-                    className="text-[11px] font-medium text-brand transition-colors hover:text-brand/80"
-                  >
-                    Open the full ledger
-                  </Link>
-                </div>
+              </div>
+              <div className="border-t bg-surface-sunken px-3 py-2">
+                <Link
+                  href="/inventory/movements"
+                  className="text-[11px] font-medium text-brand transition-colors hover:text-brand/80"
+                >
+                  Open the full ledger
+                </Link>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Explore */}
-        <section className="border-t">
-          <div className="mx-auto max-w-6xl px-6 py-14 sm:py-20">
+        {/* ── Metrics strip ── */}
+        <section className="border-y bg-surface-sunken">
+          <div className="mx-auto grid max-w-6xl grid-cols-2 sm:grid-cols-4">
+            {METRICS.map((m, i) => (
+              <div
+                key={m.label}
+                className={cn(
+                  "px-6 py-6 text-center sm:py-8",
+                  i > 0 && "border-l",
+                  i >= 2 && "border-t sm:border-t-0",
+                )}
+              >
+                <p className="font-heading text-[28px] font-bold tracking-tight text-foreground sm:text-[32px]">
+                  {m.value}
+                </p>
+                <p className="mt-1 text-[12px] font-medium text-muted-foreground">{m.label}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* ── Capabilities ── */}
+        <section className="mx-auto max-w-6xl px-6 py-16 sm:py-24">
+          <div className="max-w-xl">
+            <h2 className="font-heading text-[24px] font-bold tracking-tight sm:text-[28px]">
+              Everything an operations team needs
+            </h2>
+            <p className="mt-2 text-[14px] leading-relaxed text-muted-foreground sm:text-[15px]">
+              One system for procurement, warehousing, fulfilment, and audit — no integrations, no sync jobs.
+            </p>
+          </div>
+          <div className="mt-12 grid gap-x-10 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
+            {CAPABILITIES.map((cap) => (
+              <div key={cap.title} className="group">
+                <div className="mb-3 flex size-10 items-center justify-center rounded-lg bg-brand-subtle text-brand">
+                  <cap.icon className="size-5" aria-hidden />
+                </div>
+                <p className="text-[15px] font-semibold text-foreground">{cap.title}</p>
+                <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">{cap.detail}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* ── Explore ── */}
+        <section className="border-t bg-surface">
+          <div className="mx-auto max-w-6xl px-6 py-16 sm:py-24">
             <div className="max-w-xl">
-              <h2 className="font-heading text-[24px] font-bold tracking-tight">
+              <h2 className="font-heading text-[24px] font-bold tracking-tight sm:text-[28px]">
                 What to explore
               </h2>
-              <p className="mt-2 text-[14px] text-muted-foreground">
+              <p className="mt-2 text-[14px] leading-relaxed text-muted-foreground sm:text-[15px]">
                 Four paths into the system, each exercising a different design principle.
               </p>
             </div>
-            <div className="mt-10 grid sm:grid-cols-2">
+            <div className="mt-12 grid gap-4 sm:grid-cols-2">
               {EXPLORE.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className="group grid content-start gap-2.5 border-t py-7 pr-8 transition-colors sm:even:border-l sm:even:pl-8 sm:even:pr-0"
+                  className="group flex gap-4 rounded-lg border bg-background p-5 transition-colors hover:border-brand/30 hover:bg-background"
                 >
-                  <p className="text-[15px] font-semibold leading-snug text-foreground transition-colors group-hover:text-brand">
-                    {item.title}
-                  </p>
-                  <p className="text-[13px] leading-relaxed text-muted-foreground">{item.detail}</p>
-                  <span className="mt-0.5 flex items-center gap-1 text-[13px] font-medium text-brand">
-                    Go
-                    <ArrowRight
-                      className="size-3.5 transition-transform group-hover:translate-x-0.5 motion-reduce:transition-none"
-                      aria-hidden
-                    />
+                  <span className="shrink-0 font-heading text-[28px] font-bold leading-none text-border-strong transition-colors group-hover:text-brand/40">
+                    {item.step}
                   </span>
+                  <div className="min-w-0">
+                    <p className="text-[14px] font-semibold leading-snug text-foreground transition-colors group-hover:text-brand">
+                      {item.title}
+                    </p>
+                    <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">{item.detail}</p>
+                    <span className="mt-3 inline-flex items-center gap-1 text-[13px] font-medium text-brand">
+                      Go
+                      <ArrowRight
+                        className="size-3.5 transition-transform group-hover:translate-x-0.5 motion-reduce:transition-none"
+                        aria-hidden
+                      />
+                    </span>
+                  </div>
                 </Link>
               ))}
             </div>
           </div>
         </section>
 
-        {/* Architecture notes */}
-        <section className="border-t bg-surface">
-          <div className="mx-auto max-w-6xl px-6 py-14 sm:py-20">
+        {/* ── Architecture principles ── */}
+        <section className="border-t">
+          <div className="mx-auto max-w-6xl px-6 py-16 sm:py-24">
             <div className="max-w-xl">
-              <h2 className="font-heading text-[24px] font-bold tracking-tight">
+              <h2 className="font-heading text-[24px] font-bold tracking-tight sm:text-[28px]">
                 Under the hood
               </h2>
-              <p className="mt-2 text-[14px] text-muted-foreground">
+              <p className="mt-2 text-[14px] leading-relaxed text-muted-foreground sm:text-[15px]">
                 The decisions worth reading if you're in the source.
               </p>
             </div>
-            <div className="mt-10 grid gap-6 sm:grid-cols-2">
-              {NOTES.map((note) => (
-                <div key={note.label} className="border-l-2 border-brand pl-4">
+            <div className="mt-12 grid gap-6 sm:grid-cols-3">
+              {PRINCIPLES.map((note) => (
+                <div key={note.label} className="rounded-lg border bg-surface p-5">
                   <p className="text-[14px] font-semibold text-foreground">{note.label}</p>
-                  <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">{note.detail}</p>
+                  <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">{note.detail}</p>
                 </div>
               ))}
             </div>
           </div>
         </section>
 
-        {/* Footer */}
+        {/* ── Bottom CTA ── */}
+        <section className="border-t bg-surface-sunken">
+          <div className="mx-auto max-w-6xl px-6 py-16 text-center sm:py-20">
+            <h2 className="font-heading text-[24px] font-bold tracking-tight sm:text-[32px]">
+              See the whole system working
+            </h2>
+            <p className="mx-auto mt-3 max-w-lg text-[15px] leading-relaxed text-muted-foreground">
+              The demo is fully writable. Create purchase orders, receive stock, ship orders, and watch the ledger reconcile in real time.
+            </p>
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+              <Button
+                size="lg"
+                className="h-11 px-6 text-[15px]"
+                render={<Link href="/dashboard" />}
+              >
+                Enter the app
+                <ArrowRight className="size-4" aria-hidden />
+              </Button>
+              <Button
+                variant="outline"
+                size="lg"
+                className="h-11 px-6 text-[15px]"
+                render={<Link href="https://github.com/dooddles07/Stockpile" target="_blank" rel="noreferrer" />}
+              >
+                <Code2 className="size-4" aria-hidden />
+                View source
+              </Button>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Footer ── */}
         <footer className="border-t">
           <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-6 py-6 text-[13px] text-muted-foreground">
             <span>Built with Next.js, Drizzle, and Neon Postgres.</span>
