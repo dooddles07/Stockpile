@@ -112,8 +112,8 @@ test.describe("placing a sales order", () => {
       "Confirmed",
     );
 
-    // Reserved moved; stock did not.
-    await page.goto(url);
+    // Reserved moved; stock did not. Navigate to overview tab where the timeline lives.
+    await page.goto(`${url}?tab=overview`);
     await expect(main.getByText(/Stock reserved at/)).toBeVisible();
     expect(await ledgerRowsFor(page, number)).toBe(0);
   });
