@@ -1,0 +1,146 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-04T00:00:00Z",
+  "title": "Design System: Stockpile",
+  "extensions": {
+    "colorMeta": {
+      "background": { "role": "neutral", "displayName": "Page Canvas", "canonical": "#fafafa", "tonalRamp": ["#171717", "#262626", "#404040", "#636363", "#a3a3a3", "#d4d4d4", "#e5e5e5", "#fafafa"] },
+      "foreground": { "role": "neutral", "displayName": "Foreground Ink", "canonical": "#171717", "tonalRamp": ["#0a0a0a", "#171717", "#262626", "#404040", "#636363", "#a3a3a3", "#d4d4d4", "#ededed"] },
+      "surface": { "role": "neutral", "displayName": "Surface White", "canonical": "#ffffff", "tonalRamp": ["#171717", "#262626", "#404040", "#737373", "#a3a3a3", "#d4d4d4", "#f5f5f5", "#ffffff"] },
+      "brand": { "role": "primary", "displayName": "Emerald Brand", "canonical": "#047857", "tonalRamp": ["#022c22", "#052e23", "#065f46", "#047857", "#059669", "#10b981", "#34d399", "#6ee7b7"] },
+      "brand-subtle": { "role": "primary", "displayName": "Emerald Tint", "canonical": "#ecfdf5", "tonalRamp": ["#052e23", "#065f46", "#047857", "#10b981", "#6ee7b7", "#a7f3d0", "#d1fae5", "#ecfdf5"] },
+      "destructive": { "role": "neutral", "displayName": "Destructive Red", "canonical": "#dc2626", "tonalRamp": ["#450a0a", "#7f1d1d", "#991b1b", "#b91c1c", "#dc2626", "#ef4444", "#f87171", "#fca5a5"] },
+      "status-success": { "role": "neutral", "displayName": "Success Green", "canonical": "#047857", "tonalRamp": ["#022c22", "#065f46", "#047857", "#059669", "#10b981", "#34d399", "#a7f3d0", "#ecfdf5"] },
+      "status-warning": { "role": "neutral", "displayName": "Warning Amber", "canonical": "#b45309", "tonalRamp": ["#451a03", "#78350f", "#92400e", "#b45309", "#d97706", "#f59e0b", "#fbbf24", "#fde68a"] },
+      "status-danger": { "role": "neutral", "displayName": "Danger Red", "canonical": "#b91c1c", "tonalRamp": ["#450a0a", "#7f1d1d", "#991b1b", "#b91c1c", "#dc2626", "#ef4444", "#fca5a5", "#fef2f2"] },
+      "status-info": { "role": "neutral", "displayName": "Info Blue", "canonical": "#1d4ed8", "tonalRamp": ["#1e1b4b", "#1e3a8a", "#1e40af", "#1d4ed8", "#2563eb", "#3b82f6", "#60a5fa", "#bfdbfe"] },
+      "status-purple": { "role": "neutral", "displayName": "Purple Accent", "canonical": "#6d28d9", "tonalRamp": ["#2e1065", "#4c1d95", "#5b21b6", "#6d28d9", "#7c3aed", "#8b5cf6", "#a78bfa", "#ddd6fe"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Dashboard metric values and page-level display headings." },
+      "page-title": { "displayName": "Page Title", "purpose": "Top-level page headings." },
+      "section": { "displayName": "Section", "purpose": "Section headings within a page." },
+      "body": { "displayName": "Body", "purpose": "Default text, descriptions, widget row content." },
+      "label": { "displayName": "Label", "purpose": "Table cell text, form labels, widget row titles." },
+      "caption": { "displayName": "Caption", "purpose": "Timestamps, secondary metadata, helper text." },
+      "overline": { "displayName": "Overline", "purpose": "KPI labels, table column headers, uppercase section markers." },
+      "code": { "displayName": "Code", "purpose": "Inline code, reference numbers, SKU displays." }
+    },
+    "shadows": [
+      { "name": "xs", "value": "0 1px 2px 0 rgb(0 0 0 / 0.04)", "purpose": "Subtle edge definition on small overlays." },
+      { "name": "md", "value": "0 4px 12px -4px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.04)", "purpose": "Dropdown menus and popovers." },
+      { "name": "xl", "value": "0 8px 24px -6px rgb(0 0 0 / 0.12), 0 4px 8px -4px rgb(0 0 0 / 0.06)", "purpose": "Command palette and sheet overlays." }
+    ],
+    "motion": [
+      { "name": "ease-out-quart", "value": "cubic-bezier(0.25, 1, 0.5, 1)", "purpose": "Default easing for interactive state transitions." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Default action button. Dark fill, white text, compact 32px height.",
+      "html": "<button class=\"ds-btn-primary\">New purchase order</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 10px; background: #171717; color: #ffffff; font-family: Inter, sans-serif; font-size: 14px; font-weight: 500; line-height: 1; white-space: nowrap; border: 1px solid transparent; border-radius: 8px; cursor: pointer; transition: background 0.15s; } .ds-btn-primary:hover { background: rgba(23, 23, 23, 0.8); } .ds-btn-primary:focus-visible { border-color: #171717; box-shadow: 0 0 0 3px rgba(23, 23, 23, 0.5); outline: none; }"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Secondary action button with visible border.",
+      "html": "<button class=\"ds-btn-outline\">View all</button>",
+      "css": ".ds-btn-outline { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 10px; background: #ffffff; color: #171717; font-family: Inter, sans-serif; font-size: 14px; font-weight: 500; line-height: 1; white-space: nowrap; border: 1px solid #e5e5e5; border-radius: 8px; cursor: pointer; transition: background 0.15s, border-color 0.15s; } .ds-btn-outline:hover { background: #f5f5f5; color: #171717; } .ds-btn-outline:focus-visible { border-color: #171717; box-shadow: 0 0 0 3px rgba(23, 23, 23, 0.5); outline: none; }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Borderless button for toolbar actions and icon buttons.",
+      "html": "<button class=\"ds-btn-ghost\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"11\" cy=\"11\" r=\"8\"/><path d=\"m21 21-4.3-4.3\"/></svg></button>",
+      "css": ".ds-btn-ghost { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; background: transparent; color: #171717; border: 1px solid transparent; border-radius: 8px; cursor: pointer; transition: background 0.15s; } .ds-btn-ghost:hover { background: #f5f5f5; } .ds-btn-ghost:focus-visible { border-color: #171717; box-shadow: 0 0 0 3px rgba(23, 23, 23, 0.5); outline: none; }"
+    },
+    {
+      "name": "KPI Card",
+      "kind": "card",
+      "refersTo": "kpi-card",
+      "description": "Metric card showing a KPI value with optional delta badge and sparkline.",
+      "html": "<div class=\"ds-kpi-card\"><span class=\"ds-kpi-label\">TOTAL SKUS</span><div class=\"ds-kpi-row\"><span class=\"ds-kpi-value\">2,847</span><span class=\"ds-kpi-delta ds-kpi-delta--up\"><svg width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><polyline points=\"22 7 13.5 15.5 8.5 10.5 2 17\"/><polyline points=\"16 7 22 7 22 13\"/></svg>+3.2%</span></div></div>",
+      "css": ".ds-kpi-card { padding: 16px; background: #ffffff; border: 1px solid #e5e5e5; border-radius: 8px; font-family: Inter, sans-serif; } .ds-kpi-label { display: block; font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; color: #636363; } .ds-kpi-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-top: 6px; } .ds-kpi-value { font-size: 24px; font-weight: 600; line-height: 32px; letter-spacing: -0.02em; color: #171717; font-variant-numeric: tabular-nums; } .ds-kpi-delta { display: inline-flex; align-items: center; gap: 2px; padding: 2px 6px; border-radius: 9999px; font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; } .ds-kpi-delta--up { background: #ecfdf5; color: #047857; } .ds-kpi-delta--down { background: #fef2f2; color: #b91c1c; }"
+    },
+    {
+      "name": "Status Badge",
+      "kind": "chip",
+      "refersTo": "status-badge",
+      "description": "Status indicator with dot glyph, text label, and triplet coloring. Never color alone.",
+      "html": "<span class=\"ds-status-badge ds-status-badge--success\"><span class=\"ds-status-dot\" aria-hidden=\"true\"></span>Healthy</span>",
+      "css": ".ds-status-badge { display: inline-flex; align-items: center; gap: 6px; height: 20px; padding: 0 6px; border-radius: 4px; border: 1px solid; font-family: Inter, sans-serif; font-size: 11px; font-weight: 500; line-height: 1; white-space: nowrap; } .ds-status-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; } .ds-status-badge--success { background: #ecfdf5; color: #047857; border-color: #a7f3d0; } .ds-status-badge--success .ds-status-dot { background: #047857; } .ds-status-badge--warning { background: #fffbeb; color: #b45309; border-color: #fde68a; } .ds-status-badge--warning .ds-status-dot { background: #b45309; } .ds-status-badge--danger { background: #fef2f2; color: #b91c1c; border-color: #fecaca; } .ds-status-badge--danger .ds-status-dot { background: #b91c1c; } .ds-status-badge--neutral { background: #f5f5f5; color: #525252; border-color: #d4d4d4; } .ds-status-badge--neutral .ds-status-dot { background: #525252; }"
+    },
+    {
+      "name": "Widget Card",
+      "kind": "card",
+      "refersTo": "card-default",
+      "description": "Dashboard widget with header (title + count badge + link), optional description bar, and list content.",
+      "html": "<div class=\"ds-widget-card\"><div class=\"ds-widget-header\"><div class=\"ds-widget-title-row\"><h2 class=\"ds-widget-title\">Low stock</h2><span class=\"ds-widget-count\">12</span></div><a href=\"#\" class=\"ds-widget-link\">View all <svg width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 12h14\"/><path d=\"m12 5 7 7-7 7\"/></svg></a></div><div class=\"ds-widget-row\"><span class=\"ds-widget-row-title\">Widget Motor Assembly</span><span class=\"ds-widget-row-trailing\"><span class=\"ds-status-badge ds-status-badge--danger\"><span class=\"ds-status-dot\" aria-hidden=\"true\"></span>Critical</span></span></div></div>",
+      "css": ".ds-widget-card { background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 0 0 1px rgba(23, 23, 23, 0.1); font-family: Inter, sans-serif; } .ds-widget-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #e5e5e5; } .ds-widget-title-row { display: flex; align-items: center; gap: 8px; min-width: 0; } .ds-widget-title { font-size: 14px; font-weight: 600; line-height: 20px; color: #171717; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .ds-widget-count { padding: 2px 6px; background: #f5f5f5; border-radius: 4px; font-size: 11px; font-weight: 600; color: #636363; font-variant-numeric: tabular-nums; } .ds-widget-link { display: flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 500; color: #636363; text-decoration: none; white-space: nowrap; transition: color 0.15s; } .ds-widget-link:hover { color: #171717; } .ds-widget-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 16px; border-bottom: 1px solid #e5e5e5; } .ds-widget-row:last-child { border-bottom: none; } .ds-widget-row-title { font-size: 13px; font-weight: 500; color: #171717; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .ds-widget-row-trailing { flex-shrink: 0; } .ds-status-badge { display: inline-flex; align-items: center; gap: 6px; height: 20px; padding: 0 6px; border-radius: 4px; border: 1px solid; font-size: 11px; font-weight: 500; line-height: 1; white-space: nowrap; } .ds-status-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; } .ds-status-badge--danger { background: #fef2f2; color: #b91c1c; border-color: #fecaca; } .ds-status-badge--danger .ds-status-dot { background: #b91c1c; }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input-default",
+      "description": "Standard text input with border stroke, transparent background, 32px height.",
+      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"Search products...\" />",
+      "css": ".ds-input { display: block; width: 100%; height: 32px; padding: 4px 10px; background: transparent; color: #171717; font-family: Inter, sans-serif; font-size: 14px; line-height: 20px; border: 1px solid #d4d4d4; border-radius: 8px; outline: none; transition: border-color 0.15s, box-shadow 0.15s; } .ds-input::placeholder { color: #636363; } .ds-input:focus-visible { border-color: #171717; box-shadow: 0 0 0 3px rgba(23, 23, 23, 0.5); } .ds-input:disabled { opacity: 0.5; pointer-events: none; cursor: not-allowed; background: rgba(212, 212, 212, 0.5); }"
+    },
+    {
+      "name": "Search Trigger",
+      "kind": "input",
+      "refersTo": "input-default",
+      "description": "Faux search input in the top bar that opens the command palette.",
+      "html": "<button class=\"ds-search-trigger\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"11\" cy=\"11\" r=\"8\"/><path d=\"m21 21-4.3-4.3\"/></svg><span>Search products, orders, suppliers...</span><kbd class=\"ds-kbd\"><span style=\"font-size:13px;line-height:1\">&#8984;</span>K</kbd></button>",
+      "css": ".ds-search-trigger { display: flex; align-items: center; gap: 8px; width: 100%; max-width: 448px; height: 32px; padding: 0 10px; background: #f5f5f5; color: #636363; font-family: Inter, sans-serif; font-size: 13px; text-align: left; border: 1px solid #e5e5e5; border-radius: 6px; cursor: pointer; transition: border-color 0.15s, background 0.15s; } .ds-search-trigger:hover { border-color: #d4d4d4; background: #ffffff; } .ds-kbd { display: inline-flex; align-items: center; gap: 2px; padding: 0 6px; background: #ffffff; border: 1px solid #e5e5e5; border-radius: 4px; font-family: Inter, sans-serif; font-size: 11px; font-weight: 500; color: #636363; margin-left: auto; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Precision Instrument",
+    "overview": "Stockpile is a data-dense operational tool that earns trust through typographic clarity, consistent density, and absolute restraint. Every screen uses the same visual vocabulary: white surfaces separated by fine gray borders, a single emerald accent reserved for brand actions and positive status, and a type hierarchy built entirely from Inter at a tight 14px base. The interface disappears into the task because nothing on screen exists to decorate -- every element carries data or receives input.\n\nThe system is structurally light-first with a fully resolved dark mode that inverts the neutral scale while preserving the same spatial relationships and accent roles. Depth is communicated almost entirely through border containment rather than shadow; the shadow vocabulary exists but is held to near-imperceptible opacity, used only on elevated overlays (popovers, dropdowns) rather than resting surfaces.\n\nDensity is high by design. The base body size is 14px, table and label text drop to 13px, captions to 12px, and overlines to 11px. Row height is fixed at 44px. Padding is compact (16px card padding, 10px widget rows). This is a tool for people who process hundreds of line items daily -- visual economy is a feature.",
+    "keyCharacteristics": [
+      "Single typeface (Inter) across all roles; JetBrains Mono for code only",
+      "Emerald green (#047857) as the sole brand accent, used sparingly",
+      "Border-defined containers with no resting shadows",
+      "Six semantic status tones (neutral, info, success, warning, danger, purple) each with text + background + border triplet",
+      "Status always communicated as dot + text label, never color alone",
+      "Tabular numerals on all data surfaces",
+      "Structurally equal light and dark modes"
+    ],
+    "rules": [
+      { "name": "The One Accent Rule", "body": "Emerald is the only chromatic accent in the neutral palette. Every other hue is a semantic status tone earned by data state, never applied for visual variety.", "section": "colors" },
+      { "name": "The Triplet Rule", "body": "Every status color ships as three tokens (text, background, border). A status badge or pill always uses all three. Using a status hue without its triplet is a bug.", "section": "colors" },
+      { "name": "The No Second Face Rule", "body": "Inter is the only display and body typeface. JetBrains Mono appears exclusively in code contexts. No other font is loaded or referenced.", "section": "typography" },
+      { "name": "The Tabular Numbers Rule", "body": "Every numeric data surface — tables, KPI values, delta badges, monetary amounts — uses font-variant-numeric: tabular-nums. Numbers must column-align without monospace.", "section": "typography" },
+      { "name": "The Flat-at-Rest Rule", "body": "Surfaces are flat by default. Shadows appear only on overlays that float above the page plane (popovers, dropdowns, sheets). A card on the page grid never has a shadow.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do use the status triplet (text + bg + border) whenever showing a status indicator. Dot + label is mandatory.",
+      "Do apply tabular-nums on every numeric data surface: tables, KPI cards, delta badges, monetary values.",
+      "Do use border/ring as the primary container signal. Cards use ring-1 ring-foreground/10.",
+      "Do keep the emerald brand accent under 10% of any viewport. It marks primary actions and positive status only.",
+      "Do provide a text-accessible alternative for every visual indicator (sparklines are aria-hidden, icons carry labels or are decorative).",
+      "Do respect prefers-reduced-motion -- the build disables all animation and transition when the preference is set."
+    ],
+    "donts": [
+      "Don't add box-shadows to resting cards or surfaces. Shadows are reserved for floating overlays (popovers, dropdowns, sheets, command palette).",
+      "Don't introduce a second typeface for display or heading use. Inter is the only non-monospace font.",
+      "Don't use color alone to communicate status. Every status needs a dot glyph and a text label alongside its color.",
+      "Don't use entrance animations on data load. Data appears immediately; animation is reserved for state transitions (hover, focus, expand/collapse).",
+      "Don't exceed 8px border-radius on any surface. The radius scale is intentionally capped.",
+      "Don't use status colors decoratively. Each status hue is earned by a data state (healthy, warning, critical, etc.), never applied for visual variety."
+    ]
+  }
+}
