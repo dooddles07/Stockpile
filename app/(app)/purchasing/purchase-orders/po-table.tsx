@@ -247,7 +247,7 @@ export function PoTable({
       canExport={can("purchase-orders", "export")}
       totalLabel="purchase orders"
       rowHref={(row) => `/purchasing/purchase-orders/${row.id}`}
-      defaultSort={[{ id: "createdAt", desc: true }]}
+      defaultSort={[{ id: "number", desc: false }]}
       defaultVisibility={{ paymentTerms: false, approvedBy: false, orderedAt: false }}
       facets={[
         { columnId: "status", title: "Status", options: STATUS_OPTIONS },
